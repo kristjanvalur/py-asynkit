@@ -94,8 +94,8 @@ async def start(coro, *, loop=None, name=None):
         loop.rotate_ready(1)
         # sleep, placing us at the second place
         await sleep_insert(1)
-    except AttributeError
-        # event loop doesn´t support it.  Just sleep and return the task
+    except AttributeError:
+        # event loop doesn't support it.  Just sleep and return the task
         await asyncio.sleep(0)
     return task
 
