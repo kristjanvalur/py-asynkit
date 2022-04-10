@@ -15,6 +15,12 @@ async def two_requests(result="two_request", log=[], delay=0.01):
     r2 = request(result="r2", log=log, delay=0.02)
 
 
+async def test_nostart():
+    future = await async_df.nostart(request())
+    r = await(future)
+    assert r == "request"
+
+
 async def test_normal_simple():
     log = []
     future = request(log=log)

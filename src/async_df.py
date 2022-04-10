@@ -118,3 +118,11 @@ async def start(coro, *, loop=None, name=None):
     task = _start_task(coro, loop, name)
     await asyncio.sleep(0)
     return task
+
+
+async def nostart(coro):
+    """Same signature as `start` and `descend` but does
+    nothing.  Useful do invoke default behaviour.
+    """
+    return coro
+    
