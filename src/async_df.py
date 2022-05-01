@@ -1,4 +1,5 @@
 import sys
+import types
 import asyncio
 from asyncio import events
 
@@ -125,4 +126,35 @@ async def nostart(coro):
     nothing.  Useful do invoke default behaviour.
     """
     return coro
+    
+
+def eager_task(a):
+    # emulate yield from in two steps.  The initial awakening
+    # and the running of the rest from a Task
+    try:
+        c = a.send(None)
+    except StopIteration as e:
+        # wrap the value into an awaitable and return it
+        async def return_value(value):
+            return value
+        return return_value(e.value)
+
+    # otherwise, return a Task that runs the coroutine to completion
+    @types.coroutine
+    def run_rest():
+        # yield up the initial value, and do the proper exception handling
+        try:    
+            v = yield c
+        except GeneratorExit:
+            a.close()
+            raise
+        except BaseException as e:
+            try:
+                a.throw(e)
+            except StopIteration as e:
+                return e.value
+        # continue execution.  Unfortunately, there is no way
+        # to pass the 'v' value into the 'yield from'
+        return (yield from a)
+    return asyncio.create_task(run_rest())
     

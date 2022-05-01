@@ -36,3 +36,12 @@ async def test_start_simple():
     log.append(1)
     await future
     assert log == ["request", 1, "request"]
+
+
+async def test_start_eager():
+    log = []
+    future = request(log=log)
+    future = async_df.eager_task(future)
+    log.append(1)
+    await future
+    assert log == ["request", 1, "request"]
