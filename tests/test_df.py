@@ -1,47 +1,117 @@
 import asyncio
 import async_df
+import pytest
 
 
-async def request(result="request", log=[], delay=0.01):
-    log.append(result)
-    await asyncio.sleep(delay)
-    log.append(result)
-    return result
+@pytest.mark.parametrize("method", ["nostart", "start", "eager"])
+class TestDepthFirst:
 
+    delay = 0.01
+    error = False
 
-async def two_requests(result="two_request", log=[], delay=0.01):
-    log.append(result)
-    r1 = request(result="r1", log=log)
-    r2 = request(result="r2", log=log, delay=0.02)
+    # three async methods to "start" the coroutine in various ways
+    async def nostart(self, coro):
+        return coro
 
+    async def start(self, coro):
+        return await async_df.start(coro)
 
-async def test_nostart():
-    future = await async_df.nostart(request())
-    r = await(future)
-    assert r == "request"
+    async def eager(self, coro):
+        return async_df.eager_task(coro)
 
+    def setup(self, method):
+        if method == "nostart":
+            self.convert = self.nostart
+            self.getlog = self.normal_log
+        elif method == "start":
+            self.convert = self.start
+            self.getlog = self.df_log
+        elif method == "eager":
+            self.convert = self.eager
+            self.getlog = self.df_log
 
-async def test_normal_simple():
-    log = []
-    future = request(log=log)
-    log.append(1)
-    await future
-    assert log == [1, "request", "request"]
+    # generate logs based on normal, and depth-first behaviour
+    def normal_log(self, max_depth, log, depth=0, label="0"):
+        """
+        The log as it would appear if the tasks are just awaited
+        normally and no Tasks created.
+        """
+        log.append(label + "a")
+        if depth == max_depth:
+            log.append(label + "B")
+            log.append(label + "c")
+        else:
+            log.append(label + "b")
+            self.normal_log(max_depth, log, depth + 1, label + ":0")
+            self.normal_log(max_depth, log, depth + 1, label + ":1")
+            log.append(label + "c")
 
+    def df_log(self, max_depth, log, depth=0, label="0", part=0):
+        if part == 0:
+            log.append(label + "a")
+            if depth == max_depth:
+                log.append(label + "B")
+            else:
+                self.df_log(max_depth, log, depth + 1, label + ":0")
+                self.df_log(max_depth, log, depth + 1, label + ":1")
+                log.append(label + "b")
+        if part == 1:
+            log.append(label + "c")
+        if depth == 0:
+            self.df_log(max_depth, log, depth + 1, label + ":1", part=1)
+            self.df_log(max_depth, log, depth + 1, label + ":0", part=1)
+            log.append(label + "c")
 
-async def test_start_simple():
-    log = []
-    future = request(log=log)
-    future = await async_df.start(future)
-    log.append(1)
-    await future
-    assert log == ["request", 1, "request"]
+    def splitlog(self, log):
+        """
+        return just the first part of log, down to the part
+        where the top level starts awating for low levels.
+        this avoids testing the latter part of the logs which
+        is subject to scheduling randomness.
+        """
+        return log[0 : log.index("0b") + 1]
 
+    async def recursive(self, max_depth, log, depth=0, label="0"):
+        """
+        A faux task, recursively creating two new tasks, converting them
+        and waiting for them.  At the bottom, the tasks sleep for a bit.
+        They append their execution order to a log.
+        """
+        log.append(label + "a")
+        try:
+            if depth == max_depth:
+                log.append(label + "B")
+                await asyncio.sleep(self.delay)
+                if self.error:
+                    1 / 0
+                else:
+                    return [label]
+            else:
+                # create two child requests and "convert" them
+                a = self.recursive(max_depth, log, depth + 1, label + f":0")
+                a = await self.convert(a)
+                b = self.recursive(max_depth, log, depth + 1, label + f":1")
+                b = await self.convert(b)
 
-async def test_start_eager():
-    log = []
-    future = request(log=log)
-    future = async_df.eager_task(future)
-    log.append(1)
-    await future
-    assert log == ["request", 1, "request"]
+                # we don't use gather here, because the use case is to do processing
+                # and use the results from a or b only when actually needed.
+                log.append(label + "b")
+                return await a + await b
+        finally:
+            log.append(label + "c")
+
+    async def test_okay_one(self, method):
+        self.setup(method)
+        log = []
+        r = await self.recursive(1, log)
+        log2 = []
+        self.getlog(1, log2)
+        assert self.splitlog(log) == self.splitlog(log2)
+
+    async def test_okay_two(self, method):
+        self.setup(method)
+        log = []
+        r = await self.recursive(2, log)
+        log2 = []
+        self.getlog(2, log2)
+        assert self.splitlog(log) == self.splitlog(log2)
