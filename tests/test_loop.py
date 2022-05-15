@@ -4,10 +4,10 @@ import pytest
 import asynkit
 
 
-class TestRotateReady:
+class TestReadyRotate:
     """
     Test that tasks, ready to execute, can be rotated in the ready queue
-    using the rotate_ready() loop method
+    using the ready_rotate() loop method
     """
 
     async def simple(self, arg):
@@ -33,13 +33,13 @@ class TestRotateReady:
 
     async def test_two_shift_one(self):
         log0 = self.tasks()
-        asyncio.get_running_loop().rotate_ready(1)
+        asyncio.get_running_loop().ready_rotate(1)
         assert await self.gather() == self.rotate(log0, 1)
 
     @pytest.mark.parametrize("shift", [-3, -2, -1, 0, 1, 2, 3])
     async def test_five_multi(self, shift):
         log0 = self.tasks(5)
-        asyncio.get_running_loop().rotate_ready(shift)
+        asyncio.get_running_loop().ready_rotate(shift)
         assert await self.gather() == self.rotate(log0, shift)
 
 
@@ -132,7 +132,7 @@ async def test_sleep_insert():
     assert log == expect
 
 
-class TestPopInsertReady:
+class TestReadyPopInsert:
     """
     Test popping from and inserting into the ready queue
     """

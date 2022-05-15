@@ -15,7 +15,7 @@ class SchedulingMixin:
         """Get the length of the runnable queue"""
         return len(self._ready)
 
-    def rotate_ready(self, n: int):
+    def ready_rotate(self, n: int):
         """Rotate the ready queue.
 
         The leftmost part of the ready queue is the callback called next.
@@ -137,7 +137,7 @@ async def create_task_descend(
     loop = loop or asyncio.get_event_loop()
     task = asyncio.create_task(coro, name=name)
     # the task was previously at the end.  Make it the next runnable task
-    loop.rotate_ready(1)
+    loop.ready_rotate(1)
     # sleep, placing us at the second place, to be resumed when the task blocks.
     await sleep_insert(1)
     return task
