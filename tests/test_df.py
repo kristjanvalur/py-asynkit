@@ -1,7 +1,13 @@
 import asyncio
-import async_df
 import pytest
 
+import asynkit
+
+@pytest.fixture
+def event_loop():
+    loop = asynkit.DefaultSchedulingEventLoop()
+    yield loop
+    loop.close()
 
 @pytest.mark.parametrize("method", ["nostart", "start", "eager"])
 class TestDepthFirst:
