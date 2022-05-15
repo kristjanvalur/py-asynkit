@@ -5,6 +5,14 @@ import types
 from asyncio import events, AbstractEventLoop
 from typing import Optional
 
+_ver = sys.version_info[:2]
+
+if _ver >= (3, 8):
+    _create_task = asyncio.create_task
+else:
+    def _create_task(coro, name):
+        return asyncio.create_task(coro)
+    
 
 class SchedulingMixin:
     """
@@ -135,7 +143,7 @@ async def create_task_descend(
     """
 
     loop = loop or asyncio.get_event_loop()
-    task = asyncio.create_task(coro, name=name)
+    task = _create_task(coro, name=name)
     # the task was previously at the end.  Make it the next runnable task
     loop.ready_rotate(1)
     # sleep, placing us at the second place, to be resumed when the task blocks.
@@ -150,6 +158,6 @@ async def create_task_start(
     The current task is paused for one round of the event loop, giving the new task a chance
     to eventually run, before control is returned. The new task is returned.
     """
-    task = asyncio.create_task(coro, name=name)
+    task = _create_task(coro, name=name)
     await asyncio.sleep(0)
     return task

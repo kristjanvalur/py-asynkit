@@ -20,10 +20,10 @@ class TestDepthFirst:
         return coro
 
     async def start(self, coro):
-        return await async_df.start(coro)
+        return await asynkit.create_task_start(coro)
 
     async def eager(self, coro):
-        return async_df.eager_task(coro)
+        return asynkit.eager_task(coro)
 
     def setup(self, method):
         if method == "nostart":
