@@ -18,12 +18,27 @@ class SchedulingMixin:
     def rotate_ready(self, n: int):
         """Rotate the ready queue.
 
-        The leftmost part of the ready queue is the callback called nex.
+        The leftmost part of the ready queue is the callback called next.
 
         A negative value will rotate the queue to the left, placing the next entry at the end.
         A Positive values will move callbacks from the end to the front, making them next in line.
         """
         self._ready.rotate(n)
+
+    def ready_pop(self, pos=-1):
+        """Pop an element off the ready list at the given position."""
+        if pos == -1:
+            return self._ready.pop()
+        # move the element to the head
+        self._ready.rotate(-pos)
+        r = self._ready.popleft()
+        self._ready.rotate(pos)
+        return r
+
+    def ready_insert(self, pos, element):
+        """Insert a previously popped `element` back into the
+        ready queue at `pos`"""
+        self._ready.insert(pos, element)
 
     def call_insert(self, position, callback, *args, context=None):
         """Arrange for a callback to be inserted at `position` in the queue to be
@@ -90,14 +105,18 @@ async def sleep_insert(pos, result=None):
     try:
         call_insert = loop.call_insert
     except AttributeError:
-        return await asyncio.sleep(0, result)
+        pass
+    else:
 
-    future = loop.create_future()
-    h = call_insert(pos, asyncio.futures._set_result_unless_cancelled, future, result)
-    try:
-        return await future
-    finally:
-        h.cancel()
+        def post_sleep():
+            # move the task wakeup, currently at the end of list
+            # to the right place
+            loop.ready_insert(pos, loop.ready_pop())
+
+        # make the callback execute right after the current task goes to sleep
+        call_insert(0, post_sleep)
+
+    return await asyncio.sleep(0, result)
 
 
 async def create_task_descend(

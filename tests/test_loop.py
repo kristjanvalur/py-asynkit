@@ -112,7 +112,6 @@ async def test_num_ready(count):
     assert asyncio.get_running_loop().num_ready() == 0
 
 
-@pytest.mark.xfail
 async def test_sleep_insert():
     log = []
     for i in range(6):
