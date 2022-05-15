@@ -30,9 +30,15 @@ class SchedulingMixin:
         if pos == -1:
             return self._ready.pop()
         # move the element to the head
-        self._ready.rotate(-pos)
-        r = self._ready.popleft()
-        self._ready.rotate(pos)
+        if pos >= 0:
+            self._ready.rotate(-pos)
+            r = self._ready.popleft()
+            self._ready.rotate(pos)
+        else:
+            self._ready.rotate(-(pos + 1))
+            r = self._ready.pop()
+            self._ready.rotate(pos + 1)
+
         return r
 
     def ready_insert(self, pos, element):

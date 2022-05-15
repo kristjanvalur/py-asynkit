@@ -130,3 +130,35 @@ async def test_sleep_insert():
     expect = list(range(6))
     expect.insert(3, "me")
     assert log == expect
+
+
+class TestPopInsertReady:
+    """
+    Test popping from and inserting into the ready queue
+    """
+
+    async def simple(self, arg):
+        self.log.append(arg)
+
+    def tasks(self, n=3):
+        self.log = []
+        self.tasks = [asyncio.create_task(self.simple(k)) for k in range(n)]
+        return list(range(n))
+
+    async def gather(self):
+        await asyncio.gather(*self.tasks)
+        return self.log
+
+    @pytest.mark.parametrize("source,destination", [(0, 4), (-1, 2), (3, 3), (-2, 2)])
+    async def test_pop_insert(self, source, destination):
+        log0 = self.tasks(5)
+        loop = asyncio.get_running_loop()
+        len = loop.num_ready()
+        tmp = loop.ready_pop(source)
+        assert loop.num_ready() == len - 1
+        loop.ready_insert(destination, tmp)
+        assert loop.num_ready() == len
+
+        # manually manipulate our reference list
+        log0.insert(destination, log0.pop(source))
+        assert await self.gather() == log0
