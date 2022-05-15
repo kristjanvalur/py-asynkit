@@ -1,10 +1,9 @@
 [tool.poetry]
-name = "async_df"
+name = "asynkit"
 version = "0.1.0"
-description = "Tools to get depth-first async behaviour"
+description = "Async toolkit for advanced scheduling"
 authors = ["Kristján Valur Jónsson <sweskman@gmail.com>"]
 license = "MIT"
-
 
 [tool.poetry.dependencies]
 python = "^3.7"
