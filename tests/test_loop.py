@@ -13,7 +13,10 @@ class TestReadyRotate:
     async def simple(self, arg):
         self.log.append(arg)
 
-    def tasks(self, n=3):
+    async def tasks(self, n=3):
+        await asyncio.sleep(0)
+        assert asyncio.get_running_loop().num_ready() == 0
+
         self.log = []
         self.tasks = [asyncio.create_task(self.simple(k)) for k in range(n)]
         return list(range(n))
@@ -28,17 +31,17 @@ class TestReadyRotate:
         return list(d)
 
     async def test_three_normal(self):
-        log0 = self.tasks()
+        log0 = await self.tasks()
         assert await self.gather() == log0
 
     async def test_two_shift_one(self):
-        log0 = self.tasks()
+        log0 = await self.tasks()
         asyncio.get_running_loop().ready_rotate(1)
         assert await self.gather() == self.rotate(log0, 1)
 
     @pytest.mark.parametrize("shift", [-3, -2, -1, 0, 1, 2, 3])
     async def test_five_multi(self, shift):
-        log0 = self.tasks(5)
+        log0 = await self.tasks(5)
         asyncio.get_running_loop().ready_rotate(shift)
         assert await self.gather() == self.rotate(log0, shift)
 
@@ -74,6 +77,9 @@ class TestCallInsertReady:
 
     @pytest.mark.parametrize("count", [2, 6])
     async def test_reverse(self, count):
+        await asyncio.sleep(0)
+        assert asyncio.get_running_loop().num_ready() == 0
+
         self.log = []
         expect = []
         perm = list(range(count))
@@ -86,6 +92,8 @@ class TestCallInsertReady:
 
     @pytest.mark.parametrize("count", [2, 6])
     async def test_cut(self, count):
+        await asyncio.sleep(0)
+        assert asyncio.get_running_loop().num_ready() == 0
         self.log = []
         expect = []
         perm = list(range(count))
@@ -100,6 +108,11 @@ class TestCallInsertReady:
 
 @pytest.mark.parametrize("count", [2, 6])
 async def test_num_ready(count):
+    # proactor loop may start out with a propactor task in place.
+    # flush it.
+    await asyncio.sleep(0)
+    assert asyncio.get_running_loop().num_ready() == 0
+
     for i in range(count):
 
         async def foo():
@@ -114,6 +127,8 @@ async def test_num_ready(count):
 
 @pytest.mark.parametrize("pos", [0, 1, 3])
 async def test_sleep_insert(pos):
+    await asyncio.sleep(0)
+    assert asyncio.get_running_loop().num_ready() == 0
     log = []
     for i in range(6):
 
@@ -141,7 +156,10 @@ class TestReadyPopInsert:
     async def simple(self, arg):
         self.log.append(arg)
 
-    def tasks(self, n=3):
+    async def tasks(self, n=3):
+        await asyncio.sleep(0)
+        assert asyncio.get_running_loop().num_ready() == 0
+
         self.log = []
         self.tasks = [asyncio.create_task(self.simple(k)) for k in range(n)]
         return list(range(n))
@@ -152,7 +170,7 @@ class TestReadyPopInsert:
 
     @pytest.mark.parametrize("source,destination", [(0, 4), (-1, 2), (3, 3), (-2, 2)])
     async def test_pop_insert(self, source, destination):
-        log0 = self.tasks(5)
+        log0 = await self.tasks(5)
         loop = asyncio.get_running_loop()
         len = loop.num_ready()
         tmp = loop.ready_pop(source)
