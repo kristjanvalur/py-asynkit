@@ -112,7 +112,8 @@ async def test_num_ready(count):
     assert asyncio.get_running_loop().num_ready() == 0
 
 
-async def test_sleep_insert():
+@pytest.mark.parametrize("pos", [0, 1, 3])
+async def test_sleep_insert(pos):
     log = []
     for i in range(6):
 
@@ -122,13 +123,13 @@ async def test_sleep_insert():
         asyncio.create_task(foo(i))
 
     assert asyncio.get_running_loop().num_ready() == 6
-    await asynkit.sleep_insert(3)
-    assert asyncio.get_running_loop().num_ready() == 3
+    await asynkit.sleep_insert(pos)
+    assert asyncio.get_running_loop().num_ready() == 6 - pos
     log.append("me")
     await asyncio.sleep(0)
 
     expect = list(range(6))
-    expect.insert(3, "me")
+    expect.insert(pos, "me")
     assert log == expect
 
 
