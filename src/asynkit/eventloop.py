@@ -5,6 +5,8 @@ import types
 from asyncio import events, AbstractEventLoop
 from typing import Optional
 
+from .tools import deque_pop
+
 _ver = sys.version_info[:2]
 
 if _ver >= (3, 8):
@@ -35,19 +37,7 @@ class SchedulingMixin:
 
     def ready_pop(self, pos=-1):
         """Pop an element off the ready list at the given position."""
-        if pos == -1:
-            return self._ready.pop()
-        # move the element to the head
-        if pos >= 0:
-            self._ready.rotate(-pos)
-            r = self._ready.popleft()
-            self._ready.rotate(pos)
-        else:
-            self._ready.rotate(-(pos + 1))
-            r = self._ready.pop()
-            self._ready.rotate(pos + 1)
-
-        return r
+        return deque_pop(self._ready, pos)
 
     def ready_insert(self, pos, element):
         """Insert a previously popped `element` back into the
