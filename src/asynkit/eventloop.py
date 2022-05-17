@@ -7,14 +7,27 @@ from typing import Optional
 
 from .tools import deque_pop
 
+__all__ = [
+    "SchedulingMixin",
+    "SchedulingSelectorEventLoop",
+    "SchedulingEventLoopPolicy",
+    "DefaultSchedulingEventLoop",
+    "event_loop_policy",
+    "sleep_insert",
+    "create_task_start",
+    "create_task_descend",
+]
+
+
 _ver = sys.version_info[:2]
 
 if _ver >= (3, 8):
     _create_task = asyncio.create_task
 else:
+
     def _create_task(coro, name):
         return asyncio.create_task(coro)
-    
+
 
 class SchedulingMixin:
     """
@@ -74,6 +87,8 @@ if hasattr(asyncio, "ProactorEventLoop"):
     class SchedulingProactorEventLoop(asyncio.ProactorEventLoop, SchedulingMixin):
         pass
 
+    __all__.append("SchedulingProactorEventLoop")
+
 
 if sys.platform == "win32" and globals().get("SchedulingProactorEventLoop"):
     DefaultSchedulingEventLoop = SchedulingProactorEventLoop
@@ -89,8 +104,9 @@ class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 @contextlib.contextmanager
 def event_loop_policy(policy=SchedulingEventLoopPolicy):
     previous = asyncio.get_event_loop_policy()
+    asyncio.set_event_loop_policy(policy)
     try:
-        asyncio.set_event_loop_policy(policy)
+        yield policy
     finally:
         asyncio.set_event_loop_policy(previous)
 
@@ -127,17 +143,19 @@ async def create_task_descend(
     coro: types.coroutine, *, name: Optional[str] = None
 ) -> asyncio.Task:
     """Creates a task for the coroutine and starts it immediately.
-    The current task is paused, to be resumed immediately when the new coroutine
+    The current task is paused, to be resumed next when the new task
     initially blocks.  The new task is returned.
     This facilitates a depth-first task execution pattern.
     """
-
-    loop = loop or asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     task = _create_task(coro, name=name)
-    # the task was previously at the end.  Make it the next runnable task
-    loop.ready_rotate(1)
-    # sleep, placing us at the second place, to be resumed when the task blocks.
-    await sleep_insert(1)
+    try:
+        # the task was previously at the end.  Make it the next runnable task
+        loop.ready_rotate(1)
+        # sleep, placing us at the second place, to be resumed when the task blocks.
+        await sleep_insert(1)
+    except AttributeError:
+        await asyncio.sleep(0)
     return task
 
 

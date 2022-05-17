@@ -2,6 +2,14 @@ import asyncio
 import functools
 import types
 
+__all__ = [
+    "coro_start",
+    "coro_is_blocked",
+    "coro_continue",
+    "coro_await",
+    "eager_task",
+    "make_eager",
+]
 
 """
 Tools and utilities for advanced management of coroutines
@@ -97,14 +105,14 @@ def eager_task(coro):
         return asyncio.create_task(coro_continue(coro_state))
 
 
-def make_eager(coro):
+def make_eager(func):
     """
-    Decorator to ensure that the decorated coroutine is always started
+    Decorator to ensure that the decorated coroutine function is always started
     eagerly and wrapped in a Task if it blocks.
     """
 
     @functools.wraps
     async def wrapper(*args, **kwargs):
-        return eager_task(coro(*args, **kwargs))
+        return eager_task(func(*args, **kwargs))
 
     return wrapper
