@@ -1,3 +1,16 @@
+import asyncio
+import sys
+
+_ver = sys.version_info[:2]
+
+if _ver >= (3, 8):
+    create_task = asyncio.create_task
+else:
+
+    def create_task(coro, name):
+        return asyncio.create_task(coro)
+
+
 def deque_pop(d, pos=-1):
     if pos == -1:
         return d.pop()

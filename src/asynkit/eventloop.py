@@ -5,7 +5,7 @@ import types
 from asyncio import events, AbstractEventLoop
 from typing import Optional
 
-from .tools import deque_pop
+from .tools import deque_pop, create_task
 
 __all__ = [
     "SchedulingMixin",
@@ -17,16 +17,6 @@ __all__ = [
     "create_task_start",
     "create_task_descend",
 ]
-
-
-_ver = sys.version_info[:2]
-
-if _ver >= (3, 8):
-    _create_task = asyncio.create_task
-else:
-
-    def _create_task(coro, name):
-        return asyncio.create_task(coro)
 
 
 class SchedulingMixin:
@@ -148,7 +138,7 @@ async def create_task_descend(
     This facilitates a depth-first task execution pattern.
     """
     loop = asyncio.get_running_loop()
-    task = _create_task(coro, name=name)
+    task = create_task(coro, name=name)
     try:
         # the task was previously at the end.  Make it the next runnable task
         loop.ready_rotate(1)
@@ -166,6 +156,6 @@ async def create_task_start(
     The current task is paused for one round of the event loop, giving the new task a chance
     to eventually run, before control is returned. The new task is returned.
     """
-    task = _create_task(coro, name=name)
+    task = create_task(coro, name=name)
     await asyncio.sleep(0)
     return task

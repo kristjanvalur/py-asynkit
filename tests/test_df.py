@@ -121,3 +121,40 @@ class TestDepthFirst:
         log2 = []
         self.getlog(2, log2)
         assert self.splitlog(log) == self.splitlog(log2)
+
+
+
+class TestEager:
+
+    async def coro1(self, log):
+        log.append(1)
+        await asyncio.sleep(0)
+        log.append(2)
+
+    @asynkit.make_eager
+    async def coro2(self, log):
+        log.append(1)
+        await asyncio.sleep(0)
+        log.append(2)
+
+    async def test_no_eager(self):
+        log = []
+        future = self.coro1(log)
+        log.append("a")
+        await future
+        assert log == ["a", 1, 2]
+
+
+    async def test_eager(self):
+        log = []
+        future = asynkit.eager_task(self.coro1(log))
+        log.append("a")
+        await future
+        assert log == [1, "a", 2]
+
+    async def test_make_eager(self):
+        log = []
+        future = self.coro2(log)
+        log.append("a")
+        await future
+        assert log == [1, "a", 2]

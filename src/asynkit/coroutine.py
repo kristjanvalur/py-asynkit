@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import types
+from .tools import create_task
 
 __all__ = [
     "coro_start",
@@ -102,7 +103,7 @@ def eager_task(coro):
         return coro_continue(coro_state)
     else:
         # otherwise, return a Task that runs the coroutine to completion
-        return asyncio.create_task(coro_continue(coro_state))
+        return create_task(coro_continue(coro_state))
 
 
 def make_eager(func):
@@ -111,8 +112,8 @@ def make_eager(func):
     eagerly and wrapped in a Task if it blocks.
     """
 
-    @functools.wraps
-    async def wrapper(*args, **kwargs):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
         return eager_task(func(*args, **kwargs))
 
     return wrapper
