@@ -3,11 +3,13 @@ import pytest
 
 import asynkit
 
+
 @pytest.fixture
 def event_loop():
     loop = asynkit.DefaultSchedulingEventLoop()
     yield loop
     loop.close()
+
 
 @pytest.mark.parametrize("method", ["nostart", "start", "eager"])
 class TestDepthFirst:
@@ -23,7 +25,7 @@ class TestDepthFirst:
         return await asynkit.create_task_start(coro)
 
     async def eager(self, coro):
-        return asynkit.eager_task(coro)
+        return asynkit.coro_eager(coro)
 
     def setup(self, method):
         if method == "nostart":
@@ -123,18 +125,26 @@ class TestDepthFirst:
         assert self.splitlog(log) == self.splitlog(log2)
 
 
-
 class TestEager:
-
     async def coro1(self, log):
         log.append(1)
         await asyncio.sleep(0)
         log.append(2)
 
-    @asynkit.make_eager
+    @asynkit.func_eager
     async def coro2(self, log):
         log.append(1)
         await asyncio.sleep(0)
+        log.append(2)
+
+    @asynkit.eager
+    async def coro3(self, log):
+        log.append(1)
+        await asyncio.sleep(0)
+        log.append(2)
+
+    async def coro4(self, log):
+        log.append(1)
         log.append(2)
 
     async def test_no_eager(self):
@@ -144,17 +154,37 @@ class TestEager:
         await future
         assert log == ["a", 1, 2]
 
-
-    async def test_eager(self):
+    async def test_coro_eager(self):
         log = []
-        future = asynkit.eager_task(self.coro1(log))
+        future = asynkit.coro_eager(self.coro1(log))
         log.append("a")
         await future
         assert log == [1, "a", 2]
 
-    async def test_make_eager(self):
+    async def test_func_eager(self):
         log = []
         future = self.coro2(log)
         log.append("a")
         await future
         assert log == [1, "a", 2]
+
+    async def test_eager(self):
+        """Test the `coro` helper, used both as wrapper and decorator"""
+        log = []
+        future = asynkit.eager(self.coro1(log))
+        log.append("a")
+        await future
+        assert log == [1, "a", 2]
+        log = []
+        future = self.coro3(log)
+        log.append("a")
+        await future
+        assert log == [1, "a", 2]
+
+    async def test_eager_noblock(self):
+        """Test `eager` when coroutine does not block"""
+        log = []
+        future = asynkit.eager(self.coro4(log))
+        log.append("a")
+        await future
+        assert log == [1, 2, "a"]
