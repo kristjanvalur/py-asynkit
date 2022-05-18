@@ -1,9 +1,17 @@
 [tool.poetry]
 name = "asynkit"
-version = "0.1.0"
+version = "0.1.1"
 description = "Async toolkit for advanced scheduling"
 authors = ["Kristján Valur Jónsson <sweskman@gmail.com>"]
+repository = "https://github.com/kristjanvalur/py-asynkit"
+readme = "README.md"
+keywords = ["asyncio", "eventloop"]
 license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Framework :: AsyncIO"
+]
 
 [tool.poetry.dependencies]
 python = "^3.7"
