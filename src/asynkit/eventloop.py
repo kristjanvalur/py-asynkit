@@ -1,9 +1,7 @@
 import asyncio
 import contextlib
 import sys
-import types
 from asyncio import events, AbstractEventLoop
-from typing import Optional
 
 from .tools import deque_pop, create_task
 
@@ -87,7 +85,7 @@ else:
 
 
 class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
-    def new_event_loop(self) -> AbstractEventLoop:
+    def new_event_loop(self):
         return DefaultSchedulingEventLoop()
 
 
@@ -129,9 +127,7 @@ async def sleep_insert(pos, result=None):
     return await asyncio.sleep(0, result)
 
 
-async def create_task_descend(
-    coro: types.coroutine, *, name: Optional[str] = None
-) -> asyncio.Task:
+async def create_task_descend(coro, *, name=None):
     """Creates a task for the coroutine and starts it immediately.
     The current task is paused, to be resumed next when the new task
     initially blocks.  The new task is returned.
@@ -149,9 +145,7 @@ async def create_task_descend(
     return task
 
 
-async def create_task_start(
-    coro: types.coroutine, *, name: Optional[str] = None
-) -> asyncio.Task:
+async def create_task_start(coro, *, name=None):
     """Creates a task for the coroutine and starts it soon.
     The current task is paused for one round of the event loop, giving the new task a chance
     to eventually run, before control is returned. The new task is returned.
