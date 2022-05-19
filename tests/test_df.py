@@ -11,8 +11,8 @@ def event_loop():
     loop.close()
 
 
-@pytest.mark.parametrize("method", ["nostart", "start", "eager"])
-class TestDepthFirst:
+@pytest.mark.parametrize("method", ["nostart", "start", "descend", "eager"])
+class TestCreateTask:
 
     delay = 0.01
     error = False
@@ -24,15 +24,22 @@ class TestDepthFirst:
     async def start(self, coro):
         return await asynkit.create_task_start(coro)
 
+    async def descend(self, coro):
+        return await asynkit.create_task_descend(coro)
+
     async def eager(self, coro):
         return asynkit.coro_eager(coro)
 
     def setup(self, method):
+        self.method = method
         if method == "nostart":
             self.convert = self.nostart
             self.getlog = self.normal_log
         elif method == "start":
             self.convert = self.start
+            self.getlog = self.df_log
+        elif method == "descend":
+            self.convert = self.descend
             self.getlog = self.df_log
         elif method == "eager":
             self.convert = self.eager
@@ -122,7 +129,14 @@ class TestDepthFirst:
         r = await self.recursive(2, log)
         log2 = []
         self.getlog(2, log2)
-        assert self.splitlog(log) == self.splitlog(log2)
+        if method != "start":
+            assert self.splitlog(log) == self.splitlog(log2)
+        else:
+            # for start, the log order is neither 'normal' nor 'depth-first'
+            log2 = []
+            assert self.splitlog(log) != self.normal_log(2, log2)
+            log2 = []
+            assert self.splitlog(log) != self.df_log(2, log2)
 
 
 class TestEager:

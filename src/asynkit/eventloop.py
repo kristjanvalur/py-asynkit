@@ -12,6 +12,7 @@ __all__ = [
     "DefaultSchedulingEventLoop",
     "event_loop_policy",
     "sleep_insert",
+    "task_reinsert",
     "create_task_start",
     "create_task_descend",
 ]
@@ -127,6 +128,26 @@ async def sleep_insert(pos, result=None):
     return await asyncio.sleep(0, result)
 
 
+def task_reinsert(pos):
+    """Place a just-created task at position 'pos' in the runnable queue."""
+    loop = asyncio.get_running_loop()
+    try:
+        if pos == 0:
+            # simply rotate it from the endo to the beginning
+            loop.ready_rotate(1)
+        else:
+            task = loop.ready_pop()
+            try:
+                loop.ready_insert(pos, task)
+            except:
+                # in case of error, put it back where it was
+                loop.ready_insert(loop.num_ready(), task)
+                raise
+    except AttributeError:
+        # soft fail in case of error.
+        pass
+
+
 async def create_task_descend(coro, *, name=None):
     """Creates a task for the coroutine and starts it immediately.
     The current task is paused, to be resumed next when the new task
@@ -137,7 +158,7 @@ async def create_task_descend(coro, *, name=None):
     task = create_task(coro, name=name)
     try:
         # the task was previously at the end.  Make it the next runnable task
-        loop.ready_rotate(1)
+        task_reinsert(0)
         # sleep, placing us at the second place, to be resumed when the task blocks.
         await sleep_insert(1)
     except AttributeError:

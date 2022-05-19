@@ -148,6 +148,27 @@ async def test_sleep_insert(pos):
     assert log == expect
 
 
+@pytest.mark.parametrize("pos", [0, 1, 6])
+async def test_task_reinsert(pos):
+    await asyncio.sleep(0)
+    assert asyncio.get_running_loop().num_ready() == 0
+    log = []
+    for i in range(6):
+
+        async def foo(n):
+            log.append(n)
+
+        asyncio.create_task(foo(i))
+
+    asynkit.task_reinsert(pos)
+    await asyncio.sleep(0)
+
+    expect = list(range(6))
+    p = expect.pop(-1)
+    expect.insert(pos, p)
+    assert log == expect
+
+
 class TestReadyPopInsert:
     """
     Test popping from and inserting into the ready queue
