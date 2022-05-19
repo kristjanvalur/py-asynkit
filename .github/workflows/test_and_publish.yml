@@ -4,21 +4,22 @@ on: [push, workflow_dispatch]
 
 jobs:
   tests:
-    name: run unittests
-    runs-on: ubuntu-18.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.7', '3.10', '3.11']
+        exclude:
+          - os: windows-latest
+            python-version: ['3.7', '3.10']
+    name: Run unittests on Python ${{ matrix.python-version }}
     steps:
-    - uses: actions/checkout@master
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v1
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v3
       with:
-        python-version: 3.9
-
-    - name: Install poetry
-      run: >-
-        python -m
-        pip install
-        poetry
-        --user
+        python-version: ${{ matrix.python-version }}
+        cache: 'poetry'
 
     - name: Install dev dependencies
       run: poetry install
@@ -33,18 +34,12 @@ jobs:
     needs: tests
 
     steps:
-    - uses: actions/checkout@master
+    - uses: actions/checkout@v3
     - name: Set up Python 3.9
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v3
       with:
         python-version: 3.9
-
-    - name: Install poetry
-      run: >-
-        python -m
-        pip install
-        poetry
-        --user
+        cache: 'poetry'
 
     - name: Build a binary wheel and a source tarball
       run: poetry build
