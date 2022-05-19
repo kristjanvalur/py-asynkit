@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 import sys
-from asyncio import events, AbstractEventLoop
+from asyncio import events
 
 from .tools import deque_pop, create_task
 

@@ -2,7 +2,7 @@ import pytest
 import asynkit
 
 SelectorLoop = asynkit.SchedulingSelectorEventLoop
-SchedulingLoop = getattr(asynkit, "SchedulingProactorEventLoop")
+SchedulingLoop = getattr(asynkit, "SchedulingProactorEventLoop", None)
 
 
 def pytest_addoption(parser):

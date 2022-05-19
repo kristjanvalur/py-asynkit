@@ -202,3 +202,38 @@ class TestReadyPopInsert:
         # manually manipulate our reference list
         log0.insert(destination, log0.pop(source))
         assert await self.gather() == log0
+
+
+class TestRegularLoop:
+    """
+    Test that we get AttributeErrors when using scheduling functions on an eventloop that does
+    not support scheduling
+    """
+
+    @pytest.fixture
+    def event_loop(request):
+        loop = asyncio.SelectorEventLoop()
+        try:
+            yield loop
+        finally:
+            loop.close()
+
+    async def test_sleep_insert(self):
+        with pytest.raises(AttributeError):
+            await asynkit.sleep_insert(0)
+
+    async def test_task_reinsert(self):
+        async def foo():
+            return None
+
+        with pytest.raises(AttributeError):
+            task = asyncio.create_task(foo())
+            asynkit.task_reinsert(0)
+            await task
+
+    async def test_create_task_descend(self):
+        async def foo():
+            return None
+
+        with pytest.raises(AttributeError):
+            await asynkit.create_task_descend(foo())
