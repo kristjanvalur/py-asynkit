@@ -12,11 +12,12 @@ jobs:
         exclude:
           - os: windows-latest
             python-version: ['3.7', '3.10']
-    name: Run unittests on Python ${{ matrix.python-version }}
+    name: Run unittests on Python ${{ matrix.python-version }} on ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python
-      uses: actions/setup-python@v3
+    - name: Install poetry
+      run: pipx install poetry
+    - uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'poetry'
@@ -35,6 +36,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install poetry
+      run: pipx install poetry
     - name: Set up Python 3.9
       uses: actions/setup-python@v3
       with:
