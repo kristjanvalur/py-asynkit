@@ -1,19 +1,24 @@
 name: Publish Python 🐍 distributions 📦 to PyPI and TestPyPI
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches:
+      - master
+      - "release/**"
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   tests:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [windows-latest]
         python-version: ['3.7', '3.10', '3.11-dev']
-        exclude:
-          - os: windows-latest
-            python-version: '3.7'
-          - os: windows-latest
-            python-version: '3.11-dev'
+        include:
+          - os: ubuntu-latest
+            python-version: '3.10'
+            
     name: Run unittests on Python ${{ matrix.python-version }} on ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
