@@ -76,8 +76,10 @@ assert log == ["a", 1, "b", "c", 2]
 `coro_eager()` is the magic coroutine wrapper providing the __eager__ behaviour:
 
 1. It runs `coro_start()` on the coroutine.
-2. If `coro_is_blocked()` returns `False`, it returns `coro_continue()`
-3. Otherwise, it creates a `Task` and invokes `coro_contine()` in the task.  Returns the task _awaitable_.
+2. If `coro_is_blocked()` returns `False`, it returns `coro_as_future()`
+3. Otherwise, it creates a `Task` and invokes `coro_contine()` in the task.
+
+The result is an _awaitable_, either a `Future` or a `Task`.
 
 `async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
@@ -88,6 +90,7 @@ These methods are helpers to perform coroutine execution and are what what power
 - `coro_start()` runs the coroutine until it either blocks, returns, or raises an exception.  It returns a special tuple reflecting the coroutine's
   state.
 - `coro_is_blocked()` returns true if the coroutine is in a blocked state
+- `coro_as_future()` creates a future with the coroutine's result in case it didn't block
 - `coro_continue()` is an async function which continues the execution of the coroutine from the initial state.
 
 ## Event loop tools

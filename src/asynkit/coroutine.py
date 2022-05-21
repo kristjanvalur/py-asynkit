@@ -22,7 +22,7 @@ def coro_start(coro):
     """
     Start the coroutine execution.  It runs te coroutine to its first blocking point
     or until it raises an exception or returns a value, whichever comes first.
-    returns a tuple, (future, exception), where either is always `None`.
+    returns a tuple, (coro, future, exception), where one of future/exception is always `None`.
     The tuple can be passed to `coro_continue` to continue execution, or if
     `exception is not none` it can be processed right away.
     If the exception is a `StopIteration` the `exception.value` can be returned,
@@ -43,6 +43,19 @@ def coro_is_blocked(coro_state):
     False, if it returned a value or raised an exception
     """
     return coro_state[2] is None
+
+
+def coro_as_future(coro_state):
+    """
+    Convert a non-blocked (i.e. finished) coroutine_state into a future.
+    """
+    future = asyncio.Future()
+    exception = coro_state[2]
+    if isinstance(exception, StopIteration):
+        future.set_result(exception.value)
+    else:
+        future.set_exception(exception)
+    return future
 
 
 @types.coroutine
@@ -100,8 +113,10 @@ def coro_eager(coro):
     coro_state = coro_start(coro)
     if not coro_is_blocked(coro_state):
         # The coroutine didn't block, a result or exception is ready.
-        # No need to create a Task.
-        return coro_continue(coro_state)
+        # We could simply `return coro_continue(coro_state)` but we
+        # reate a future, so that methods like `asyncio.gather`
+        # don't unnecessarily wrap it into a task.
+        return coro_as_future(coro_state)
     else:
         # otherwise, return a Task that runs the coroutine to completion
         return create_task(coro_continue(coro_state))
