@@ -1,4 +1,4 @@
-name: Publish Python 🐍 distributions 📦 to PyPI and TestPyPI
+name: Test and publish
 
 on:
   push:
@@ -32,9 +32,14 @@ jobs:
     - name: Install dev dependencies
       run: poetry install
 
-    - name: Run the tests for regular and proactor loops
-      run: poetry run pytest && poetry run pytest --proactor
+    - name: Run the tests for selector loop
+      run: poetry run pytest
     
+    - name: Run the tests for proactor loop
+      if: ${{ matrix.os == 'windows-latest' }}
+      run: poetry run pytest --proactor
+    
+
   build-n-publish:
     name: Build and publish Python 🐍 distributions 📦 to PyPI and TestPyPI
     runs-on: ubuntu-18.04
