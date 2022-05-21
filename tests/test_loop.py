@@ -15,7 +15,7 @@ class TestReadyRotate:
 
     async def tasks(self, n=3):
         await asyncio.sleep(0)
-        assert asyncio.get_running_loop().num_ready() == 0
+        assert asyncio.get_running_loop().ready_len() == 0
 
         self.log = []
         self.tasks = [asyncio.create_task(self.simple(k)) for k in range(n)]
@@ -78,7 +78,7 @@ class TestCallInsertReady:
     @pytest.mark.parametrize("count", [2, 6])
     async def test_reverse(self, count):
         await asyncio.sleep(0)
-        assert asyncio.get_running_loop().num_ready() == 0
+        assert asyncio.get_running_loop().ready_len() == 0
 
         self.log = []
         expect = []
@@ -93,7 +93,7 @@ class TestCallInsertReady:
     @pytest.mark.parametrize("count", [2, 6])
     async def test_cut(self, count):
         await asyncio.sleep(0)
-        assert asyncio.get_running_loop().num_ready() == 0
+        assert asyncio.get_running_loop().ready_len() == 0
         self.log = []
         expect = []
         perm = list(range(count))
@@ -107,11 +107,11 @@ class TestCallInsertReady:
 
 
 @pytest.mark.parametrize("count", [2, 6])
-async def test_num_ready(count):
+async def test_ready_len(count):
     # proactor loop may start out with a propactor task in place.
     # flush it.
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().num_ready() == 0
+    assert asyncio.get_running_loop().ready_len() == 0
 
     for i in range(count):
 
@@ -120,15 +120,15 @@ async def test_num_ready(count):
 
         asyncio.create_task(foo())
 
-    assert asyncio.get_running_loop().num_ready() == count
+    assert asyncio.get_running_loop().ready_len() == count
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().num_ready() == 0
+    assert asyncio.get_running_loop().ready_len() == 0
 
 
 @pytest.mark.parametrize("pos", [0, 1, 3])
 async def test_sleep_insert(pos):
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().num_ready() == 0
+    assert asyncio.get_running_loop().ready_len() == 0
     log = []
     for i in range(6):
 
@@ -137,9 +137,9 @@ async def test_sleep_insert(pos):
 
         asyncio.create_task(foo(i))
 
-    assert asyncio.get_running_loop().num_ready() == 6
+    assert asyncio.get_running_loop().ready_len() == 6
     await asynkit.sleep_insert(pos)
-    assert asyncio.get_running_loop().num_ready() == 6 - pos
+    assert asyncio.get_running_loop().ready_len() == 6 - pos
     log.append("me")
     await asyncio.sleep(0)
 
@@ -151,7 +151,7 @@ async def test_sleep_insert(pos):
 @pytest.mark.parametrize("pos", [0, 1, 6])
 async def test_task_reinsert(pos):
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().num_ready() == 0
+    assert asyncio.get_running_loop().ready_len() == 0
     log = []
     for i in range(6):
 
@@ -179,7 +179,7 @@ class TestReadyPopInsert:
 
     async def tasks(self, n=3):
         await asyncio.sleep(0)
-        assert asyncio.get_running_loop().num_ready() == 0
+        assert asyncio.get_running_loop().ready_len() == 0
 
         self.log = []
         self.tasks = [asyncio.create_task(self.simple(k)) for k in range(n)]
@@ -193,11 +193,11 @@ class TestReadyPopInsert:
     async def test_pop_insert(self, source, destination):
         log0 = await self.tasks(5)
         loop = asyncio.get_running_loop()
-        len = loop.num_ready()
+        len = loop.ready_len()
         tmp = loop.ready_pop(source)
-        assert loop.num_ready() == len - 1
+        assert loop.ready_len() == len - 1
         loop.ready_insert(destination, tmp)
-        assert loop.num_ready() == len
+        assert loop.ready_len() == len
 
         # manually manipulate our reference list
         log0.insert(destination, log0.pop(source))

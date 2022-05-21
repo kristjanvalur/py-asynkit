@@ -28,7 +28,7 @@ async def my_complex_thing():
     return compute_result(intermediate_result, await future)
 ```
 
-By decorating your function with `asynkit.eager`, the _coroutine_ will start executing __right away__ and
+By decorating your function with `asynkit.eager`, the coroutine will start executing __right away__ and
 control will return to the calling function as soon as it _blocks_, or returns a result or raises
 an exception.  In case it blocks, a _Task_ is created and returned. 
 
@@ -39,7 +39,7 @@ calling order is maintained as much as possible.  We call this _depth-first-exec
 This allows you to prepare and dispatch long running operations __as soon as possible__ while
 still being able to asynchronously wait for the result.
 
-`asynckit.eager` can also be used directly on the returned _coroutine_:
+`asynckit.eager` can also be used directly on the returned coroutine:
 ```python
 log = []
 async def test():
@@ -79,20 +79,84 @@ assert log == ["a", 1, "b", "c", 2]
 2. If `coro_is_blocked()` returns `False`, it returns `coro_continue()`
 3. Otherwise, it creates a `Task` and invokes `coro_contine()` in the task.  Returns the task _awaitable_.
 
-`async_eager()` is a decorator which automatically applies `coro_eager()` to the _coroutine_ returned by an async function.
+`async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
 ### `coro_start()`, `coro_is_blocked()`, `coro_continue()`
 
-These methods are helpers to perform coroutine execution and are what what power the `eager()` method.
+These methods are helpers to perform coroutine execution and are what what power the `coro_eager()` function.
 
 - `coro_start()` runs the coroutine until it either blocks, returns, or raises an exception.  It returns a special tuple reflecting the coroutine's
   state.
 - `coro_is_blocked()` returns true if the coroutine is in a blocked state
 - `coro_continue()` is an async function which continues the execution of the coroutine from the initial state.
 
-These functions are what allow `coro_eager()` to do its job.
-
 ## Event loop tools
 
 Also provided is a mixin for the built-in event loop implementations in python, providing some primitives for advanced
 scheduling of tasks.
+
+### `SchedulingMixin` mixin class
+
+This class adds some handy scheduling functions to the event loop.  They primarily
+work with the _ready queue_, a queue of callbacks representing tasks ready
+to be executed.
+
+- `ready_len(self)` - returns the length of the ready queue
+- `ready_pop(self, pos=-1)` - pops an entry off the queue
+- `ready_insert(self, pos, element)` - inserts a previously popped element into the queue
+- `ready_rotate(self, n)` - rotates the queue
+- `call_insert(self, pos, ...)` - schedules a callback at position `pos` in the queue
+
+### Concrete event loop classes
+
+Concrete subclasses of Python's built-in event loop classes are provided.
+
+- `SchedulingSelectorEventLoop` is a subclass of `asyncio.SelectorEventLoop` with the `SchedulingMixin`
+- `SchedulingProactorEventLoop` is a subclass of `asyncio.ProactorEventLoop` with the `SchedulingMixin` on those platforms that support it.
+
+### Event Loop Policy
+
+A policy class is provided to automatically create the appropriate event loops.
+
+- `SchedulingEventLoopPolicy` is a subclass of `asyncio.DefaultEventLoopPolicy` which instantiates either of the above event loop classes as appropriate.
+
+Use this either directly:
+
+```python
+asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy)
+asyncio.run(myprogram())
+```
+
+or with a context manager:
+
+```python
+with asynkit.event_loop_policy():
+    asyncio.run(myprogram())
+```
+
+### Scheduling functions
+
+A couple of functions are provided making use of these scheduling features.
+
+### `sleep_insert(pos)`
+
+Similar to `asyncio.sleep()` but sleeps only for `pos` places in the runnable queue.
+Whereas `asyncio.sleep(0)` will place the executing task at the end of the queue, which is
+appropriate for fair scheduling, in some advanced cases you want to wake sooner than that, perhaps
+after a specific task.
+
+### `task_reinsert(pos)`
+
+Takes a task which has just been created (with `asyncio.create_task()` or similar) and
+reinserts it at a given position in the queue.  It assumes the task is already at
+the end of the queue.  Similarly as for `sleep_insert()` this can be useful to achieve
+certain goals.
+
+### `create_task_descend(coro)`
+
+Implements depth-first task scheduling.
+
+Similar to `asyncio.create_task()` this creates a task but starts it running right away, and positions the caller to be woken
+up right after it blcks.  The effect is similar to using `asynkit.eager()` but
+it achieves its goals solely by modifying the runnable queue.  A `Task` is always
+created, unlike `eager`, which only creates a task if the target blocks.

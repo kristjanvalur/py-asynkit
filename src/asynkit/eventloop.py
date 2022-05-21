@@ -23,7 +23,7 @@ class SchedulingMixin:
     A mixin class adding features to the base event loop.
     """
 
-    def num_ready(self):
+    def ready_len(self):
         """Get the length of the runnable queue"""
         return len(self._ready)
 
@@ -134,7 +134,7 @@ def task_reinsert(pos):
             loop.ready_insert(pos, task)
         except:
             # in case of error, put it back where it was
-            loop.ready_insert(loop.num_ready(), task)
+            loop.ready_insert(loop.ready_len(), task)
             raise
 
 

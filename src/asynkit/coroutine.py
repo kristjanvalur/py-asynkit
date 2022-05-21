@@ -119,6 +119,7 @@ def func_eager(func):
 
     return wrapper
 
+
 def eager(arg):
     """
     Convenience function invoking either `coro_eager` or `func_eager`
