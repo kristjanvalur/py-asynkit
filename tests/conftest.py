@@ -2,7 +2,7 @@ import pytest
 import asynkit
 
 SelectorLoop = asynkit.SchedulingSelectorEventLoop
-SchedulingLoop = getattr(asynkit, "SchedulingProactorEventLoop", None)
+ProactorLoop = getattr(asynkit, "SchedulingProactorEventLoop", None)
 
 
 def pytest_addoption(parser):
@@ -12,8 +12,8 @@ def pytest_addoption(parser):
 @pytest.fixture
 def event_loop(request):
     loop_type = SelectorLoop
-    if SchedulingLoop and request.config.getoption("proactor"):
-        loop_type = SchedulingLoop
+    if ProactorLoop and request.config.getoption("proactor"):
+        loop_type = ProactorLoop
     loop = loop_type()
     try:
         yield loop
