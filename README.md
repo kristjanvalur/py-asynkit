@@ -5,6 +5,12 @@
 This module provides some handy tools for those wishing to have better control over the
 way Python's `asyncio` module does things
 
+## Installation
+
+```bash
+$ pip install asynkit
+```
+
 ## Coroutine Tools
 
 ### `eager()` - lower latency IO
