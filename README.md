@@ -1,5 +1,6 @@
-# asynkit
-A toolkit for asyncio
+# asynkit: a toolkit for asyncio
+
+[![Test and publish](https://github.com/kristjanvalur/py-asynkit/actions/workflows/test_and_publish.yml/badge.svg)](https://github.com/kristjanvalur/py-asynkit/actions/workflows/test_and_publish.yml)
 
 This module provides some handy tools for those wishing to have better control over the
 way Python's `asyncio` module does things
