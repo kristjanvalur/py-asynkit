@@ -1,4 +1,4 @@
-name: Test and publish
+name: CI
 
 on:
   push:
@@ -44,7 +44,7 @@ jobs:
   build-n-publish:
     name: Build and publish Python 🐍 distributions 📦 to PyPI and TestPyPI
     runs-on: ubuntu-18.04
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags') 
     needs: tests
 
     steps:
