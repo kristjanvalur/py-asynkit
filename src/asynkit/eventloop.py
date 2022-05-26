@@ -3,7 +3,7 @@ import contextlib
 import sys
 from asyncio import events
 
-from .tools import deque_pop, create_task
+from .tools import deque_pop, create_task, task_from_handle
 
 __all__ = [
     "SchedulingMixin",
@@ -15,6 +15,8 @@ __all__ = [
     "task_reinsert",
     "create_task_start",
     "create_task_descend",
+    "runnable_tasks",
+    "blocked_tasks",
 ]
 
 
@@ -69,6 +71,29 @@ class SchedulingMixin:
             del handle._source_traceback[-1]
         self._ready.insert(position, handle)
         return handle
+
+    def ready_find_task(self, task):
+        """
+        Look for a runnable task in the ready queue.  Return its index if found,
+        else -1
+        """
+        for i, handle in enumerate(self._ready):
+            task = task_from_handle(handle)
+            if task:
+                return i
+        return -1
+
+    def ready_get_tasks(self):
+        """
+        Find all runnable tasks in the ready queue.  Return a list of
+        (task, index) tuples.
+        """
+        result = []
+        for i, handle in enumerate(self._ready):
+            task = task_from_handle(handle)
+            if task:
+                result.append((task, i))
+        return result
 
 
 class SchedulingSelectorEventLoop(asyncio.SelectorEventLoop, SchedulingMixin):
@@ -165,3 +190,21 @@ async def create_task_start(coro, *, name=None):
     task = create_task(coro, name=name)
     await asyncio.sleep(0)
     return task
+
+
+def runnable_tasks(loop=None):
+    """Return a set of the runnable tasks for the loop."""
+    if loop is None:
+        loop = events.get_running_loop()
+    tasks = loop.ready_get_tasks()
+    return set(t for (t, _) in tasks)
+
+
+def blocked_tasks(loop=None):
+    """Return a set of the blocked tasks for the loop."""
+    if loop is None:
+        loop = events.get_running_loop()
+    result = asyncio.all_tasks(loop) - runnable_tasks(loop)
+    # the current task is not blocked
+    result.discard(asyncio.current_task(loop))
+    return result

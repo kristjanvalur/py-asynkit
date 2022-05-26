@@ -204,6 +204,53 @@ class TestReadyPopInsert:
         assert await self.gather() == log0
 
 
+class TestTasks:
+    async def foo(self, sleeptime):
+        await asyncio.sleep(sleeptime)
+
+    def tasks(self, sleeptime=0):
+        return [asyncio.create_task(self.foo(sleeptime)) for _ in range(4)]
+
+    async def test_find_task(self):
+        tasks = self.tasks()
+        loop = asyncio.get_running_loop()
+        for t in tasks:
+            assert loop.ready_find_task(t) >= 0
+
+    async def test_get_task(self):
+        tasks = self.tasks()
+        loop = asyncio.get_running_loop()
+        tasks2 = loop.ready_get_tasks()
+
+        # sort by position for safety
+        tasks2.sort(key=lambda t: t[1])
+
+        tasks3 = [t for t, _ in tasks2]
+        assert tasks3 == tasks
+
+    async def test_runnable_tasks(self):
+        tasks = self.tasks()
+        tasks2 = asynkit.runnable_tasks()
+        assert set(tasks) == tasks2
+        
+        # get them settled on their sleep
+        await asyncio.sleep(0)
+        assert set(tasks) == asynkit.runnable_tasks()
+        
+        # make them return from sleep
+        await asyncio.sleep(0)
+        assert asynkit.runnable_tasks() == set()
+
+    async def test_blocked_tasks(self):
+        tasks = self.tasks(0.1)
+        await asyncio.sleep(0)  # make our tasks blocked on the sleep
+        tasks2 = asynkit.blocked_tasks()
+        assert tasks2 == set(tasks)
+        assert asynkit.runnable_tasks() == set()
+        for task in tasks:
+            task.cancel()
+
+
 class TestRegularLoop:
     """
     Test that we get AttributeErrors when using scheduling functions on an eventloop that does

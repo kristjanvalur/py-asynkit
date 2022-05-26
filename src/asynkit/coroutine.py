@@ -6,6 +6,7 @@ from .tools import create_task
 __all__ = [
     "coro_start",
     "coro_is_blocked",
+    "coro_as_future",
     "coro_continue",
     "coro_await",
     "coro_eager",
