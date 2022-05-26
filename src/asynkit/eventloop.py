@@ -46,6 +46,10 @@ class SchedulingMixin:
         ready queue at `pos`"""
         self._ready.insert(pos, element)
 
+    def ready_append(self, element):
+        """Append a previously popped `element` to the end of the queue."""
+        self._ready.append(element)
+
     def call_insert(self, position, callback, *args, context=None):
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.

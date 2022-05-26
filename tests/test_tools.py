@@ -1,3 +1,4 @@
+import asyncio
 from collections import deque
 import pytest
 import asynkit.tools
@@ -25,3 +26,14 @@ def test_deque_pop():
         else:
             with pytest.raises(IndexError):
                 asynkit.tools.deque_pop(deq, i)
+
+async def test_task_from_handle():
+    async def foo():
+        pass
+    task = asyncio.create_task(foo())
+
+    item = asyncio.get_running_loop().ready_pop()
+    asyncio.get_running_loop().ready_append(item)
+    assert isinstance(item, asyncio.Handle)
+    task2 = asynkit.tools.task_from_handle(item)
+    assert task2 is task

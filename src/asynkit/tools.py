@@ -31,3 +31,20 @@ def deque_pop(d, pos=-1):
         return r
     # create exception
     [].pop(pos)
+
+def task_from_handle(item):
+    """
+    Runnable task objects exist as callbacks on the ready queue in the loop.
+    Specifically, they are Handle objects, containing a Task bound method
+    as the callback.  Retrieve such a Task instance from a Handle if possible.
+    Not everything on the queue are necessarily tasks, in which case we return None
+    """
+
+    try:
+        task = item._callback.__self__
+    except AttributeError:
+        return None
+    if isinstance(task, asyncio.Task):
+        return task
+    return None
+    
