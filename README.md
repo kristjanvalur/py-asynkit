@@ -35,12 +35,12 @@ async def my_complex_thing():
     return compute_result(intermediate_result, await future)
 ```
 
-By decorating your function with `asynkit.eager`, the coroutine will start executing __right away__ and
-control will return to the calling function as soon as it _blocks_, or returns a result or raises
+By decorating your function with `eager`, the coroutine will start executing __right away__ and
+control will return to the calling function as soon as it _blocks_, _returns_, or _raises_
 an exception.  In case it blocks, a _Task_ is created and returned. 
 
-What's more, if the called async function blocks, control is returned __directly__ back to the
-calling function maintaining synchronous execution.  In effect, conventional code
+Notice how, in either case, control is returned __directly__ back to the
+calling function, maintaining synchronous execution.  In effect, conventional code
 calling order is maintained as much as possible.  We call this _depth-first-execution_.
 
 This allows you to prepare and dispatch long running operations __as soon as possible__ while
@@ -77,6 +77,9 @@ assert log == ["a", 1, "b", "c", 2]
 ```
 
 `coro()` is actually a convenience function, invoking either `coro_eager()` or `async_eager()` (see below) depending on context.
+Decorating your function makes sense if you __always__ intend
+To _await_ its result at some later point. Otherwise, just apply it at the point
+of invocation in each such case. 
 
 ### `coro_eager()`, `async_eager()`
 
@@ -90,7 +93,7 @@ The result is an _awaitable_, either a `Future` or a `Task`.
 
 `async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
-### `coro_start()`, `coro_is_blocked()`, `1coro_as_future()`, `coro_continue()`
+### `coro_start()`, `coro_is_blocked()`, `coro_as_future()`, `coro_continue()`
 
 These methods are helpers to perform coroutine execution and are what what power the `coro_eager()` function.
 
