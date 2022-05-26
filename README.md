@@ -18,7 +18,7 @@ $ pip install asynkit
 Did you ever wish that your _coroutines_ started right away, and only returned control to
 the caller once they become blocked?  Like the way the `async` and `await` keywords work in the __C#__ language?
 
-Now they can.  Just decorate or convert them with `acyncio.eager`:
+Now they can.  Just decorate or convert them with `acynkit.eager`:
 
 ```python
 @asynkit.eager
