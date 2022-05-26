@@ -211,6 +211,11 @@ class TestTasks:
     def tasks(self, sleeptime=0):
         return [asyncio.create_task(self.foo(sleeptime)) for _ in range(4)]
 
+    def identity(self, loop=None):
+        all = asyncio.all_tasks(loop)
+        all2 = asynkit.runnable_tasks(loop) | asynkit.blocked_tasks(loop) | {asyncio.current_task(loop)}
+        assert all == all2
+
     async def test_find_task(self):
         tasks = self.tasks()
         loop = asyncio.get_running_loop()
@@ -232,23 +237,30 @@ class TestTasks:
         tasks = self.tasks()
         tasks2 = asynkit.runnable_tasks()
         assert set(tasks) == tasks2
-        
+        self.identity()
+
         # get them settled on their sleep
         await asyncio.sleep(0)
         assert set(tasks) == asynkit.runnable_tasks()
-        
+        self.identity()
+
         # make them return from sleep
         await asyncio.sleep(0)
         assert asynkit.runnable_tasks() == set()
 
     async def test_blocked_tasks(self):
+        self.identity()
         tasks = self.tasks(0.1)
+        self.identity()
         await asyncio.sleep(0)  # make our tasks blocked on the sleep
         tasks2 = asynkit.blocked_tasks()
         assert tasks2 == set(tasks)
+        self.identity()
         assert asynkit.runnable_tasks() == set()
+        self.identity()
         for task in tasks:
             task.cancel()
+        self.identity()
 
 
 class TestRegularLoop:

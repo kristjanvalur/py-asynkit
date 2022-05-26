@@ -90,7 +90,7 @@ The result is an _awaitable_, either a `Future` or a `Task`.
 
 `async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
-### `coro_start()`, `coro_is_blocked()`, `coro_continue()`
+### `coro_start()`, `coro_is_blocked()`, `1coro_as_future()`, `coro_continue()`
 
 These methods are helpers to perform coroutine execution and are what what power the `coro_eager()` function.
 
@@ -144,9 +144,10 @@ with asynkit.event_loop_policy():
     asyncio.run(myprogram())
 ```
 
-### Scheduling functions
+## Scheduling functions
 
 A couple of functions are provided making use of these scheduling features.
+They require a `SchedulingMixin` event loop to be current.
 
 ### `sleep_insert(pos)`
 
@@ -170,3 +171,21 @@ Similar to `asyncio.create_task()` this creates a task but starts it running rig
 up right after it blcks.  The effect is similar to using `asynkit.eager()` but
 it achieves its goals solely by modifying the runnable queue.  A `Task` is always
 created, unlike `eager`, which only creates a task if the target blocks.
+
+## Runnable task helpers
+
+A few functions are added to help working with tasks.
+They require a `SchedulingMixin` event loop to be current.
+
+The following identity applies:
+```python
+asyncio.all_tasks(loop) = asynkit.runnable_tasks(loop) | asynkit.blocked_tasks(loop) | {asyncio.current_task(loop)}
+```
+
+### `runnable_tasks(loop=None)`
+
+Returns a set of the tasks that are currently runnable in the given loop
+
+### `blocked_tasks(loop=None)`
+
+Returns a set of the tasks that are currently blocked on some future in the given loop
