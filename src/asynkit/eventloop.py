@@ -164,9 +164,9 @@ def task_reinsert(task, pos):
     loop.ready_insert(pos, item)
 
 
-async def task_switch(task, result=None, reinsert=None):
+async def task_switch(task, result=None, sleep_pos=None):
     """Switch immediately to the given task.
-    The target task is moved to the head of the queue.  If 'reinsert'
+    The target task is moved to the head of the queue.  If 'sleep_pos'
     is None, then the current task is scheduled at the end of the
     queue, otherwise it is inserted at the given position, typically
     at position 1, right after the target task.
@@ -177,13 +177,13 @@ async def task_switch(task, result=None, reinsert=None):
         raise ValueError("task is not runnable")
     # move the task to the head
     loop.ready_insert(0, loop.ready_pop(pos))
-    if reinsert is None:
+    if sleep_pos is None:
         # schedule ourselves to the end
         return await asyncio.sleep(0, result=result)
     else:
         # schedule ourselves at a given position, typically
         # position 1, right after the task.
-        return await sleep_insert(reinsert, result=result)
+        return await sleep_insert(sleep_pos, result=result)
 
 
 async def create_task_descend(coro, *, name=None):
