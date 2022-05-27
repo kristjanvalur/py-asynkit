@@ -213,14 +213,26 @@ class TestTasks:
 
     def identity(self, loop=None):
         all = asyncio.all_tasks(loop)
-        all2 = asynkit.runnable_tasks(loop) | asynkit.blocked_tasks(loop) | {asyncio.current_task(loop)}
+        all2 = (
+            asynkit.runnable_tasks(loop)
+            | asynkit.blocked_tasks(loop)
+            | {asyncio.current_task(loop)}
+        )
         assert all == all2
 
     async def test_find_task(self):
         tasks = self.tasks()
         loop = asyncio.get_running_loop()
-        for t in tasks:
-            assert loop.ready_find_task(t) >= 0
+        for i, t in enumerate(tasks):
+            assert loop.ready_find_task(t) == i
+
+        async def foo():
+            pass
+
+        task = asyncio.create_task(foo())
+        item = loop.ready_pop(-1)
+        assert loop.ready_find_task(task) == -1
+        loop.ready_append(item)
 
     async def test_get_task(self):
         tasks = self.tasks()

@@ -78,8 +78,8 @@ class SchedulingMixin:
         else -1
         """
         for i, handle in enumerate(self._ready):
-            task = task_from_handle(handle)
-            if task:
+            found = task_from_handle(handle)
+            if found is task:
                 return i
         return -1
 
