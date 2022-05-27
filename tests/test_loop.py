@@ -153,14 +153,15 @@ async def test_task_reinsert(pos):
     await asyncio.sleep(0)
     assert asyncio.get_running_loop().ready_len() == 0
     log = []
+    tasks = []
     for i in range(6):
 
         async def foo(n):
             log.append(n)
 
-        asyncio.create_task(foo(i))
+        tasks.append(asyncio.create_task(foo(i)))
 
-    asynkit.task_reinsert(pos)
+    asynkit.task_reinsert(tasks[-1], pos)
     await asyncio.sleep(0)
 
     expect = list(range(6))
@@ -375,7 +376,7 @@ class TestRegularLoop:
 
         with pytest.raises(AttributeError):
             task = asyncio.create_task(foo())
-            asynkit.task_reinsert(0)
+            asynkit.task_reinsert(task, 0)
             await task
 
     async def test_create_task_descend(self):

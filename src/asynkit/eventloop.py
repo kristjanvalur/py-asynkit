@@ -154,26 +154,20 @@ async def sleep_insert(pos, result=None):
     return await asyncio.sleep(0, result)
 
 
-def task_reinsert(pos):
+def task_reinsert(task, pos):
     """Place a just-created task at position 'pos' in the runnable queue."""
     loop = asyncio.get_running_loop()
-    if pos == 0:
-        # simply rotate it from the endo to the beginning
-        loop.ready_rotate(1)
-    else:
-        task = loop.ready_pop()
-        try:
-            loop.ready_insert(pos, task)
-        except:
-            # in case of error, put it back where it was
-            loop.ready_insert(loop.ready_len(), task)
-            raise
+    current_pos = loop.ready_find_task(task)
+    if current_pos < 0:
+        raise ValueError("task is not runnable")
+    item = loop.ready_pop(current_pos)
+    loop.ready_insert(pos, item)
 
 
 async def task_switch(task, result=None, reinsert=None):
     """Switch immediately to the given task.
     The target task is moved to the head of the queue.  If 'reinsert'
-    is None, then the current task is scheduled at the end of the 
+    is None, then the current task is scheduled at the end of the
     queue, otherwise it is inserted at the given position, typically
     at position 1, right after the target task.
     """
@@ -198,10 +192,9 @@ async def create_task_descend(coro, *, name=None):
     initially blocks.  The new task is returned.
     This facilitates a depth-first task execution pattern.
     """
-    loop = asyncio.get_running_loop()
     task = create_task(coro, name=name)
-    # the task was previously at the end.  Make it the next runnable task
-    task_reinsert(0)
+    # Make it the next runnable task
+    task_reinsert(task, 0)
     # sleep, placing us at the second place, to be resumed when the task blocks.
     await sleep_insert(1)
     return task
