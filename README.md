@@ -156,22 +156,29 @@ They require a `SchedulingMixin` event loop to be current.
 
 Similar to `asyncio.sleep()` but sleeps only for `pos` places in the runnable queue.
 Whereas `asyncio.sleep(0)` will place the executing task at the end of the queue, which is
-appropriate for fair scheduling, in some advanced cases you want to wake sooner than that, perhaps
+appropriate for fair scheduling, in some advanced cases you want to wake up sooner than that, perhaps
 after a specific task.
 
-### `task_reinsert(pos)`
+### `task_reinsert(task, pos)`
 
-Takes a task which has just been created (with `asyncio.create_task()` or similar) and
-reinserts it at a given position in the queue.  It assumes the task is already at
-the end of the queue.  Similarly as for `sleep_insert()` this can be useful to achieve
-certain goals.
+Takes a _runnable_ task (for example just created with `asyncio.create_task()` or similar) and
+reinserts it at a given position in the queue.  
+Similarly as for `sleep_insert()`, this can be useful to achieve
+certain scheduling goals.
+
+### `task_switch(task, result=None, sleep_pos=None)`
+
+Immediately moves the given task to the head of the runnable queue and switches to it, assuming it is runnable.
+When this call returns, returns `result`.  if `sleep_pos` is not None, the current task will be
+put to sleep at that position, using `sleep_insert()`.  Otherwise the current task is put at the end
+of the ready queue.
 
 ### `create_task_descend(coro)`
 
 Implements depth-first task scheduling.
 
 Similar to `asyncio.create_task()` this creates a task but starts it running right away, and positions the caller to be woken
-up right after it blcks.  The effect is similar to using `asynkit.eager()` but
+up right after it blocks.  The effect is similar to using `asynkit.eager()` but
 it achieves its goals solely by modifying the runnable queue.  A `Task` is always
 created, unlike `eager`, which only creates a task if the target blocks.
 
@@ -191,4 +198,4 @@ Returns a set of the tasks that are currently runnable in the given loop
 
 ### `blocked_tasks(loop=None)`
 
-Returns a set of the tasks that are currently blocked on some future in the given loop
+Returns a set of the tasks that are currently blocked on some future in the given loop.
