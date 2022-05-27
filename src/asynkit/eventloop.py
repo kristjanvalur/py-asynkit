@@ -77,10 +77,12 @@ class SchedulingMixin:
         Look for a runnable task in the ready queue.  Return its index if found,
         else -1
         """
-        for i, handle in enumerate(self._ready):
+        # we search in reverse, since the task is likely to have been
+        # just appended to the queue
+        for i, handle in enumerate(reversed(self._ready)):
             found = task_from_handle(handle)
             if found is task:
-                return i
+                return len(self._ready) - i - 1
         return -1
 
     def ready_get_tasks(self):
