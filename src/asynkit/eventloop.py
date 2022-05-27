@@ -193,10 +193,7 @@ async def create_task_descend(coro, *, name=None):
     This facilitates a depth-first task execution pattern.
     """
     task = create_task(coro, name=name)
-    # Make it the next runnable task
-    task_reinsert(task, 0)
-    # sleep, placing us at the second place, to be resumed when the task blocks.
-    await sleep_insert(1)
+    await task_switch(task, sleep_pos=1)
     return task
 
 
