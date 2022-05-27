@@ -13,6 +13,7 @@ __all__ = [
     "event_loop_policy",
     "sleep_insert",
     "task_reinsert",
+    "task_switch",
     "create_task_start",
     "create_task_descend",
     "runnable_tasks",
@@ -167,6 +168,28 @@ def task_reinsert(pos):
             # in case of error, put it back where it was
             loop.ready_insert(loop.ready_len(), task)
             raise
+
+
+async def task_switch(task, result=None, reinsert=None):
+    """Switch immediately to the given task.
+    The target task is moved to the head of the queue.  If 'reinsert'
+    is None, then the current task is scheduled at the end of the 
+    queue, otherwise it is inserted at the given position, typically
+    at position 1, right after the target task.
+    """
+    loop = asyncio.get_running_loop()
+    pos = loop.ready_find_task(task)
+    if pos < 0:
+        raise ValueError("task is not runnable")
+    # move the task to the head
+    loop.ready_insert(0, loop.ready_pop(pos))
+    if reinsert is None:
+        # schedule ourselves to the end
+        return await asyncio.sleep(0, result=result)
+    else:
+        # schedule ourselves at a given position, typically
+        # position 1, right after the task.
+        return await sleep_insert(reinsert, result=result)
 
 
 async def create_task_descend(coro, *, name=None):

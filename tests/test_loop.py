@@ -169,6 +169,82 @@ async def test_task_reinsert(pos):
     assert log == expect
 
 
+@pytest.mark.parametrize("pos", [0, 1, 3, 5])
+async def test_task_switch(pos):
+    await asyncio.sleep(0)
+    assert asyncio.get_running_loop().ready_len() == 0
+    log = []
+    tasks = []
+    for i in range(6):
+
+        async def foo(n):
+            log.append(n)
+
+        tasks.append(asyncio.create_task(foo(i)))
+
+    assert len(log) == 0
+    await asynkit.task_switch(tasks[pos])
+    log.append("me")
+    await asyncio.sleep(0)
+    assert len(log) == 7
+
+    expect = list(range(6))
+    p = expect.pop(pos)
+    expect.insert(0, pos)
+    expect.append("me")
+    assert log == expect
+
+
+@pytest.mark.parametrize("pos", [0, 1, 3, 5])
+async def test_task_switch_insert(pos):
+    await asyncio.sleep(0)
+    assert asyncio.get_running_loop().ready_len() == 0
+    log = []
+    tasks = []
+    for i in range(6):
+
+        async def foo(n):
+            log.append(n)
+
+        tasks.append(asyncio.create_task(foo(i)))
+
+    assert len(log) == 0
+    await asynkit.task_switch(tasks[pos], reinsert=1)
+    log.append("me")
+    await asyncio.sleep(0)
+    assert len(log) == 7
+
+    expect = list(range(6))
+    p = expect.pop(pos)
+    expect.insert(0, pos)
+    expect.insert(1, "me")
+    assert log == expect
+
+
+async def test_task_switch_notfound():
+    async def foo():
+        pass
+
+    task = asyncio.create_task(foo())
+    loop = asyncio.get_running_loop()
+    item = loop.ready_pop(loop.ready_find_task(task))
+    with pytest.raises(ValueError):
+        await asynkit.task_switch(task)
+    loop.ready_append(item)
+
+
+async def test_task_switch_blocked():
+    async def foo():
+        await asyncio.sleep(0.01)
+
+    task = asyncio.create_task(foo())
+    # make it settle on its sleep
+    await asyncio.sleep(0)
+    with pytest.raises(ValueError):
+        await asynkit.task_switch(task)
+    await task
+
+
 class TestReadyPopInsert:
     """
     Test popping from and inserting into the ready queue
