@@ -14,6 +14,7 @@ __all__ = [
     "sleep_insert",
     "task_reinsert",
     "task_switch",
+    "task_is_blocked",
     "create_task_start",
     "create_task_descend",
     "runnable_tasks",
@@ -186,6 +187,17 @@ async def task_switch(task, result=None, sleep_pos=None):
         return await sleep_insert(sleep_pos, result=result)
 
 
+def task_is_blocked(task):
+    """
+    Returns True if the task is blocked, as opposed to runnable.
+    """
+    # despite the comment in the Task implementation, a task on the
+    # runnable queue can have a future which is done, e.g. when the
+    # task was cancelled, or when the future it was waiting for
+    # got done or cancelled.
+    return task._fut_waiter is not None and not task._fut_waiter.done()
+
+
 async def create_task_descend(coro, *, name=None):
     """Creates a task for the coroutine and starts it immediately.
     The current task is paused, to be resumed next when the new task
@@ -212,7 +224,12 @@ def runnable_tasks(loop=None):
     if loop is None:
         loop = events.get_running_loop()
     tasks = loop.ready_get_tasks()
-    return set(t for (t, _) in tasks)
+    result = set(t for (t, _) in tasks)
+    for task in result:
+        if task_is_blocked(task):
+            print(task)
+    assert all(not task_is_blocked(task) for task in result)
+    return result
 
 
 def blocked_tasks(loop=None):
@@ -222,4 +239,5 @@ def blocked_tasks(loop=None):
     result = asyncio.all_tasks(loop) - runnable_tasks(loop)
     # the current task is not blocked
     result.discard(asyncio.current_task(loop))
+    assert all(task_is_blocked(task) for task in result)
     return result

@@ -385,3 +385,131 @@ class TestRegularLoop:
 
         with pytest.raises(AttributeError):
             await asynkit.create_task_descend(foo())
+
+
+class TestTaskIsBlocked:
+    async def test_blocked_sleep(self):
+        async def foo():
+            await asyncio.sleep(0.1)
+
+        task = asyncio.create_task(foo())
+        assert not asynkit.task_is_blocked(task)
+
+        # settle on the sleep
+        await asyncio.sleep(0)
+        assert asynkit.task_is_blocked(task)
+        task.cancel()
+        assert not asynkit.task_is_blocked(task)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert task.done()
+        assert not asynkit.task_is_blocked(task)
+
+    async def test_blocked_future(self):
+        fut = asyncio.Future()
+
+        async def foo():
+            await fut
+
+        task = asyncio.create_task(foo())
+        assert not asynkit.task_is_blocked(task)
+        # settle on the await
+        await asyncio.sleep(0)
+        assert asyncio.get_running_loop().ready_find_task(task) == -1
+        assert asynkit.task_is_blocked(task)
+
+        task.cancel()
+        assert not asynkit.task_is_blocked(task)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    async def test_blocked_future_result(self):
+        fut = asyncio.Future()
+
+        async def foo():
+            await fut
+
+        task = asyncio.create_task(foo())
+        assert not asynkit.task_is_blocked(task)
+        # settle on the await
+        await asyncio.sleep(0)
+        assert asyncio.get_running_loop().ready_find_task(task) == -1
+        assert asynkit.task_is_blocked(task)
+
+        fut.set_result(None)
+        assert asyncio.get_running_loop().ready_find_task(task) >= 0
+        assert not asynkit.task_is_blocked(task)
+        await task
+
+    async def test_blocked_future_exception(self):
+        fut = asyncio.Future()
+
+        async def foo():
+            await fut
+
+        task = asyncio.create_task(foo())
+        assert not asynkit.task_is_blocked(task)
+        # settle on the await
+        await asyncio.sleep(0)
+        assert asyncio.get_running_loop().ready_find_task(task) == -1
+        assert asynkit.task_is_blocked(task)
+
+        fut.set_exception(ZeroDivisionError())
+        assert asyncio.get_running_loop().ready_find_task(task) >= 0
+        assert not asynkit.task_is_blocked(task)
+        with pytest.raises(ZeroDivisionError):
+            await task
+
+    async def test_blocked_future_cancel(self):
+        fut = asyncio.Future()
+
+        async def foo():
+            await fut
+
+        task = asyncio.create_task(foo())
+        assert not asynkit.task_is_blocked(task)
+        # settle on the await
+        await asyncio.sleep(0)
+        assert asyncio.get_running_loop().ready_find_task(task) == -1
+        assert asynkit.task_is_blocked(task)
+
+        fut.cancel()
+        assert asyncio.get_running_loop().ready_find_task(task) >= 0
+        assert not asynkit.task_is_blocked(task)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    async def test_blocked_await(self):
+        # Test a task, blocked waiting for another blocked task
+        async def foo():
+            await asyncio.sleep(0.1)
+
+        async def bar(task):
+            await task
+
+        task2 = asyncio.create_task(foo())
+        task = asyncio.create_task(bar(task2))
+        assert not asynkit.task_is_blocked(task)
+
+        # settle on the sleep
+        await asyncio.sleep(0)
+        assert asynkit.task_is_blocked(task)
+        assert asynkit.task_is_blocked(task2)
+        # cancel the second task.  But the awaiting task doesn't become unblocked
+        # befre the second task has had a chance to finish, by being run for a bit.
+        task2.cancel()
+        assert not asynkit.task_is_blocked(task2)
+        assert not task2.done()
+        # task is still blocked
+        assert asynkit.task_is_blocked(task)
+        assert asyncio.get_running_loop().ready_find_task(task) == -1
+
+        # give task2 a chance to finish, unblocking task
+        await asyncio.sleep(0)
+        assert task2.done()
+        assert not task.done()
+        assert not asynkit.task_is_blocked(task)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert task.done()
+        assert not asynkit.task_is_blocked(task)

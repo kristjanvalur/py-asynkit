@@ -168,10 +168,15 @@ certain scheduling goals.
 
 ### `task_switch(task, result=None, sleep_pos=None)`
 
-Immediately moves the given task to the head of the runnable queue and switches to it, assuming it is runnable.
+Immediately moves the given task to the head of the ready queue and switches to it, assuming it is runnable.
 When this call returns, returns `result`.  if `sleep_pos` is not None, the current task will be
 put to sleep at that position, using `sleep_insert()`.  Otherwise the current task is put at the end
 of the ready queue.
+
+### `task_is_blocked(task)`
+
+Returns True if the task is waiting for some awaitable, such as a Future or another Task, and is thus not
+on the ready queue.
 
 ### `create_task_descend(coro)`
 
