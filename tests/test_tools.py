@@ -37,3 +37,5 @@ async def test_task_from_handle():
     assert isinstance(item, asyncio.Handle)
     task2 = asynkit.tools.task_from_handle(item)
     assert task2 is task
+
+    assert asynkit.tools.task_from_handle(foo) is None
