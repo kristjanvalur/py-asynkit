@@ -124,7 +124,8 @@ class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 
 
 @contextlib.contextmanager
-def event_loop_policy(policy=SchedulingEventLoopPolicy):
+def event_loop_policy(policy=None):
+    policy = policy or SchedulingEventLoopPolicy()
     previous = asyncio.get_event_loop_policy()
     asyncio.set_event_loop_policy(policy)
     try:
