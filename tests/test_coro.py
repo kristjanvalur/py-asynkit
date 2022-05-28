@@ -99,3 +99,52 @@ class TestEager:
         with pytest.raises(RuntimeError):
             await awaitable
         assert log == [1, 2]
+
+    def test_eager_invalid(self):
+        with pytest.raises(TypeError):
+            asynkit.eager(self)
+
+
+wrap = asynkit.coroutine.coro_await
+
+
+class TestCoro:
+    async def test_return_nb(self):
+        async def func(a):
+            return a
+
+        d = ["foo"]
+        assert await wrap(func(d)) is d
+
+    async def test_exception_nb(self):
+        async def func():
+            1 / 0
+
+        with pytest.raises(ZeroDivisionError):
+            await wrap(func())
+
+    async def test_coro_cancel(self):
+        async def func():
+            await asyncio.sleep(0)
+
+        coro = wrap(func())
+        task = asyncio.create_task(coro)
+        await asyncio.sleep(0)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    async def test_coro_handle_cancel(self):
+        async def func(a):
+            try:
+                await asyncio.sleep(0)
+            except asyncio.CancelledError:
+                return a
+
+        d = ["a"]
+        coro = wrap(func(d))
+        task = asyncio.create_task(coro)
+        await asyncio.sleep(0)
+        task.cancel()
+        assert await task is d

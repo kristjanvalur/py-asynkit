@@ -77,7 +77,8 @@ def coro_continue(coro_state):
     while True:
         try:
             in_value = yield out_value
-        except GeneratorExit:
+        except GeneratorExit:  # pragma: no coverage
+            # asyncio lib does not appear to ever close coroutines.
             coro.close()
             raise
         except BaseException as e:
