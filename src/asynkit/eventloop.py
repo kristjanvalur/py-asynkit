@@ -225,9 +225,6 @@ def runnable_tasks(loop=None):
         loop = events.get_running_loop()
     tasks = loop.ready_get_tasks()
     result = set(t for (t, _) in tasks)
-    for task in result:
-        if task_is_blocked(task):
-            print(task)
     assert all(not task_is_blocked(task) for task in result)
     return result
 
