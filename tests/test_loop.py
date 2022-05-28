@@ -170,6 +170,20 @@ async def test_task_reinsert(pos):
     assert log == expect
 
 
+async def test_task_reinsert_blocked():
+    async def foo():
+        await asyncio.sleep(0.1)
+
+    task = asyncio.create_task(foo())
+    await asyncio.sleep(0)
+    with pytest.raises(ValueError):
+        asynkit.task_reinsert(task, 0)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
 @pytest.mark.parametrize("pos", [0, 1, 3, 5])
 async def test_task_switch(pos):
     await asyncio.sleep(0)
@@ -513,3 +527,11 @@ class TestTaskIsBlocked:
             await task
         assert task.done()
         assert not asynkit.task_is_blocked(task)
+
+
+def test_event_loop_policy_context():
+    with asynkit.event_loop_policy() as a:
+        assert isinstance(a, asynkit.SchedulingEventLoopPolicy)
+        async def foo():
+            assert isinstance(asyncio.get_running_loop(), asynkit.SchedulingMixin)
+        asyncio.run(foo())

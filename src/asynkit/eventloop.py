@@ -64,12 +64,13 @@ class SchedulingMixin:
         Negative values will insert before the entries counting from the end.  A value of -1 will place
         it in the next-to-last place.  use `call_soon` to place it _at_ the end.
         """
+        # this is based on code copied from base_events.call_soon()
         self._check_closed()
-        if self._debug:
+        if self._debug:  # pragma: no coverage
             self._check_thread()
             self._check_callback(callback, "call_insert")
         handle = events.Handle(callback, args, self, context)
-        if handle._source_traceback:
+        if handle._source_traceback:  # pragma: no coverage
             del handle._source_traceback[-1]
         self._ready.insert(position, handle)
         return handle
@@ -113,9 +114,9 @@ if hasattr(asyncio, "ProactorEventLoop"):
 
 
 if sys.platform == "win32" and globals().get("SchedulingProactorEventLoop"):
-    DefaultSchedulingEventLoop = SchedulingProactorEventLoop
+    DefaultSchedulingEventLoop = SchedulingProactorEventLoop  # pragma: no coverage
 else:
-    DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
+    DefaultSchedulingEventLoop = SchedulingSelectorEventLoop  # pragma: no coverage
 
 
 class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
