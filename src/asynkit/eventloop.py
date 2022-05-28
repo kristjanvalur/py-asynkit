@@ -64,15 +64,10 @@ class SchedulingMixin:
         Negative values will insert before the entries counting from the end.  A value of -1 will place
         it in the next-to-last place.  use `call_soon` to place it _at_ the end.
         """
-        # this is based on code copied from base_events.call_soon()
-        self._check_closed()
-        if self._debug:  # pragma: no coverage
-            self._check_thread()
-            self._check_callback(callback, "call_insert")
-        handle = events.Handle(callback, args, self, context)
-        if handle._source_traceback:  # pragma: no coverage
-            del handle._source_traceback[-1]
-        self._ready.insert(position, handle)
+        handle = self.call_soon(callback, *args, context=context)
+        handle2 = self.ready_pop(-1)
+        assert handle2 is handle
+        self.ready_insert(position, handle)
         return handle
 
     def ready_find_task(self, task):
@@ -141,9 +136,6 @@ async def sleep_insert(pos, result=None):
     This effectively pauses the current coroutine and places it at position `pos`
     in the ready queue.  This position may subsequently change due to other
     scheduling operations
-
-    In case the current event loop doesn't support the `call_insert` method, it
-    behaves the same as sleep(0)
     """
     loop = events.get_running_loop()
 
