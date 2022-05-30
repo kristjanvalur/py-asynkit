@@ -312,10 +312,12 @@ class TestTasks:
         assert all == all2
 
     async def test_find_task(self):
-        tasks = self.tasks()
+        await asyncio.sleep(0)
         loop = asyncio.get_running_loop()
+        n = loop.ready_len()
+        tasks = self.tasks()
         for i, t in enumerate(tasks):
-            assert loop.ready_find_task(t) == i
+            assert loop.ready_find_task(t) == i + n
 
         async def foo():
             pass
