@@ -45,11 +45,12 @@ async def test_callback_nohandler():
     with pytest.raises(TaskCallbackSignal):
         assert await (mytask) == "ok"
 
+
 async def test_stack():
     async def func(arg):
         await signals(asyncio.sleep(0.1))
         return arg
-        
+
     async def func2(arg):
         return await func(arg)
 
@@ -59,6 +60,8 @@ async def test_stack():
     mytask = MyTask(func3("ok"))
     await asyncio.sleep(0)
 
-    s = mytask.print_stack()
-    print (mytask.get_stack())
-    
+    # s = mytask.print_stack()
+    stack = mytask.get_stack()
+    assert "code func3" in str(stack[0])
+    assert "code func" in str(stack[-1])
+    assert await mytask == "ok"
