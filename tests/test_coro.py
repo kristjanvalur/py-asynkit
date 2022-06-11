@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import pytest
 import asynkit
+import types
 
 
 class TestEager:
@@ -148,3 +149,91 @@ class TestCoro:
         await asyncio.sleep(0)
         task.cancel()
         assert await task is d
+
+
+@pytest.mark.parametrize("kind", ["cr", "gi", "ag"])
+class TestCoroState:
+    def get_coro(self, kind):
+        if kind == "cr":
+
+            async def coro(f):
+                await f
+
+        elif kind == "gi":
+
+            @types.coroutine
+            def coro(f):
+                yield from f
+
+        else:
+
+            async def coro(f):
+                await f
+                yield f
+
+        return coro
+
+    def wrap_coro(self, kind, coro):
+        if kind == "ag":
+
+            async def wrap():
+                async for _ in coro:
+                    pass
+
+        else:
+
+            async def wrap():
+                await coro
+
+        return wrap
+
+    async def test_coro_new(self, kind):
+        func = self.get_coro(kind)
+        f = asyncio.Future()
+        f.set_result(True)
+        coro = func(f)
+        assert asynkit.coro_is_new(coro)
+        assert not asynkit.coro_is_suspended(coro)
+        assert not asynkit.coro_is_finished(coro)
+        await self.wrap_coro(kind, coro)()
+
+    async def test_coro_suspended(self, kind):
+        func = self.get_coro(kind)
+        f = asyncio.Future()
+        coro = func(f)
+        wrap = self.wrap_coro(kind, coro)
+        t = asyncio.Task(wrap())
+        await asyncio.sleep(0)
+        assert not asynkit.coro_is_new(coro)
+        assert asynkit.coro_is_suspended(coro)
+        assert not asynkit.coro_is_finished(coro)
+        f.set_result(True)
+        await t
+
+    async def test_coro_finished(self, kind):
+        func = self.get_coro(kind)
+        f = asyncio.Future()
+        coro = func(f)
+        wrap = self.wrap_coro(kind, coro)
+        t = asyncio.Task(wrap())
+        await asyncio.sleep(0)
+        f.set_result(True)
+        await t
+        assert not asynkit.coro_is_new(coro)
+        assert not asynkit.coro_is_suspended(coro)
+        assert asynkit.coro_is_finished(coro)
+
+
+async def test_current():
+    coro = None
+
+    async def foo():
+        f = asynkit.coroutine.coro_get_frame(coro)
+
+        # a running coroutine is neither new, suspended nor finished.
+        assert not asynkit.coro_is_new(coro)
+        assert not asynkit.coro_is_suspended(coro)
+        assert not asynkit.coro_is_finished(coro)
+
+    coro = foo()
+    await coro
