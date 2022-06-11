@@ -12,11 +12,72 @@ __all__ = [
     "coro_eager",
     "func_eager",
     "eager",
+    "coro_get_frame",
+    "coro_is_new",
+    "coro_is_suspended",
+    "coro_is_finished",
 ]
 
 """
 Tools and utilities for advanced management of coroutines
 """
+
+
+# Helpers to find if a coroutine (or a generator as created by types.coroutine)
+# has started or finished
+
+
+def _coro_getattr(coro, suffix):
+    """
+    Get an attribute of a coroutine or coroutine like object
+    """
+    # look for
+    # 1. coroutine
+    # 2. legacy coroutine (even wrapped with types.coroutine())
+    # 3. async generator
+    for prefix in ("cr_", "gi_", "ag_"):
+        if hasattr(coro, prefix + suffix):
+            if prefix == "ag_" and suffix == "running":
+                return False  # async generators are shown as ag_running=True, even when the code is not executiong.  Override that.
+            # coroutine (async function)
+            return getattr(coro, prefix + suffix)
+    raise TypeError("a coroutine or coroutine like object is required")
+
+
+def coro_get_frame(coro):
+    """
+    Get the current frame of a coroutine or coroutine like object (generator, legacy coroutines)
+    """
+    return _coro_getattr(coro, "frame")
+
+
+def coro_is_new(coro):
+    """
+    Returns True if the coroutine has just been created and
+    never not yet started
+    """
+    frame = coro_get_frame(coro)
+    return frame is not None and frame.f_lasti < 0
+
+
+def coro_is_suspended(coro):
+    """
+    Returns True if the coroutine has started but not exited
+    """
+    frame = coro_get_frame(coro)
+    # frame is None if it has already exited
+    # the currently running coroutine is also not suspended by definition.
+    return (
+        frame is not None and frame.f_lasti >= 0 and not _coro_getattr(coro, "running")
+    )
+
+
+def coro_is_finished(coro):
+    """
+    Returns True if the coroutine has finished execution, either by
+    returning or throwing an exception
+    """
+    return coro_get_frame(coro) is None
 
 
 def coro_start(coro):
