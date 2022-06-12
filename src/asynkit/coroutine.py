@@ -38,7 +38,7 @@ def _coro_getattr(coro, suffix):
                 return False  # async generators are shown as ag_running=True, even when the code is not executiong.  Override that.
             # coroutine (async function)
             return getattr(coro, prefix + suffix)
-    raise TypeError("a coroutine or coroutine like object is required")
+    raise TypeError("a coroutine or coroutine like object is required, not %r" % type(coro))
 
 
 def coro_get_frame(coro):
@@ -148,21 +148,24 @@ class CoroStart:
         # yield up the initial future from `coro_start`.
         # This is similar to how `yield from` is defined (see pep-380)
         # except that it uses a coroutines's send() and throw() methods.
+
+        # store a local 'coro' here so that frame inspection can find it
+        coro = self.coro
         while True:
             try:
                 in_value = yield out_value
             except GeneratorExit:  # pragma: no coverage
                 # asyncio lib does not appear to ever close coroutines.
-                self.coro.close()
+                coro.close()
                 raise
             except BaseException as exc:
                 try:
-                    out_value = self.coro.throw(exc)
+                    out_value = coro.throw(exc)
                 except StopIteration as exc:
                     return exc.value
             else:
                 try:
-                    out_value = self.coro.send(in_value)
+                    out_value = coro.send(in_value)
                 except StopIteration as exc:
                     return exc.value
 

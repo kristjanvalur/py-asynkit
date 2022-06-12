@@ -1,5 +1,6 @@
 import asyncio
 import pytest
+import asynkit
 from asynkit.experimental import *
 
 
@@ -86,3 +87,57 @@ async def test_stack():
     assert "code func3" in str(stack[0])
     assert "code func" in str(stack[-1])
     assert await mytask == "ok"
+
+
+async def test_coro_stack():
+    async def a():
+        return await b()
+
+    async def b():
+        return await asyncio.sleep(0)
+
+    coro = a()
+    task = asyncio.create_task(coro)
+
+    await asyncio.sleep(0)
+    stack = coro_get_stack(coro)
+    # print(stack)
+    assert len(stack) >= 2
+
+
+async def test_coro_stack_eager():
+    async def a():
+        # see that we pass through our "manual await" code.
+        return await asynkit.coro_await(b())
+
+    async def b():
+        return await asyncio.sleep(0)
+
+    coro = a()
+    task = asyncio.create_task(coro)
+
+    await asyncio.sleep(0)
+    stack = coro_get_stack(coro)
+    print(stack)
+    assert len(stack) >= 2
+
+
+@pytest.mark.xfail(
+    reason="cannot inspect async_generator_asend object for the inner async_generator"
+)
+async def test_coro_stack_generator():
+    async def a():
+        # see tht we can pass into an async generator
+        async for _ in b():
+            pass
+
+    async def b():
+        await asyncio.sleep(0)
+        yield 1
+
+    coro = a()
+    task = asyncio.create_task(coro)
+
+    await asyncio.sleep(0)
+    stack = coro_get_stack(coro)
+    assert len(stack) >= 2

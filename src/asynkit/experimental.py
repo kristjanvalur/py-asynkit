@@ -4,7 +4,9 @@ import sys
 import traceback
 
 from .eventloop import task_is_blocked, task_is_runnable
-from .coroutine import coro_is_suspended
+from .coroutine import coro_is_suspended, coro_get_frame
+
+_sentinel = object()
 
 
 class TaskSignal(BaseException):
@@ -256,3 +258,49 @@ class TaskMixin:
 
 class MyTask(TaskMixin, asyncio.Task):
     pass
+
+
+def coro_walk_down(coro):
+    next = coro
+    while next:
+        yield next
+        coro = next
+        # Find any inner coroutine, whatever this one is "awaiting"
+
+        # common case: async function
+        try:
+            next = coro.cr_await
+            continue
+        except AttributeError:
+            pass
+        # async generator:
+        try:
+            next = coro.ag_await
+            continue
+        except AttributeError:
+            pass
+        # generator-iterator (old-style coroutine, or types.coroutine)
+        try:
+            next = coro.gi_yieldfrom
+            if next is None:
+                # This could be one of our "manual yield from" methods.  Look into the frame and get
+                # the 'coro' local variable
+                f = coro_get_frame(coro)
+                next = f.f_locals.get("coro")
+                if next is None:
+                    return  # give up
+        except AttributeError:
+            # we have reached something we don't know what is.  For example, an async_generator_asend object.
+            # Give up
+            return
+
+
+def coro_get_stack(coro):
+    stack = []
+    for c in coro_walk_down(coro):
+        try:
+            stack.append(coro_get_frame(c))
+        except TypeError:
+            # awaiting some future
+            break
+    return stack
