@@ -5,7 +5,28 @@ from asynkit.experimental import *
 
 async def test_callback():
     async def func(arg):
-        await signals(asyncio.sleep(0.1))
+        await await_with_signals(asyncio.sleep(0.1))
+        return arg
+
+    mytask = MyTask(func("ok"))
+    await asyncio.sleep(0)
+
+    val = ""
+
+    def cb(a, b):
+        nonlocal val
+        val = f"I am cb {a} and {b}"
+
+    r = mytask.execute_callback(cb, "foo", "bar")
+    assert val == "I am cb foo and bar"
+
+    assert await (mytask) == "ok"
+
+
+@pytest.mark.parametrize("delay", [0, 0.1])
+async def test_callback_sleep(delay):
+    async def func(arg):
+        await sleep_signals(delay)
         return arg
 
     mytask = MyTask(func("ok"))
@@ -48,7 +69,7 @@ async def test_callback_nohandler():
 
 async def test_stack():
     async def func(arg):
-        await signals(asyncio.sleep(0.1))
+        await await_with_signals(asyncio.sleep(0.1))
         return arg
 
     async def func2(arg):
