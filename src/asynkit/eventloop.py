@@ -15,6 +15,7 @@ __all__ = [
     "task_reinsert",
     "task_switch",
     "task_is_blocked",
+    "task_is_runnable",
     "create_task_start",
     "create_task_descend",
     "runnable_tasks",
@@ -190,6 +191,15 @@ def task_is_blocked(task):
     # task was cancelled, or when the future it was waiting for
     # got done or cancelled.
     return task._fut_waiter is not None and not task._fut_waiter.done()
+
+
+def task_is_runnable(task):
+    """
+    Returns True if the task is ready.
+    """
+    # we don't actually check for the task's presence in the ready queue,
+    # it must be either, blocked, runnable or done.
+    return not (task_is_blocked(task) or task.done())
 
 
 async def create_task_descend(coro, *, name=None):

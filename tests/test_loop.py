@@ -410,16 +410,19 @@ class TestTaskIsBlocked:
 
         task = asyncio.create_task(foo())
         assert not asynkit.task_is_blocked(task)
+        assert asynkit.task_is_runnable(task)
 
         # settle on the sleep
         await asyncio.sleep(0)
         assert asynkit.task_is_blocked(task)
+        assert not asynkit.task_is_runnable(task)
         task.cancel()
         assert not asynkit.task_is_blocked(task)
         with pytest.raises(asyncio.CancelledError):
             await task
         assert task.done()
         assert not asynkit.task_is_blocked(task)
+        assert not asynkit.task_is_runnable(task)
 
     async def test_blocked_future(self):
         fut = asyncio.Future()
@@ -534,6 +537,8 @@ class TestTaskIsBlocked:
 def test_event_loop_policy_context():
     with asynkit.event_loop_policy() as a:
         assert isinstance(a, asynkit.SchedulingEventLoopPolicy)
+
         async def foo():
             assert isinstance(asyncio.get_running_loop(), asynkit.SchedulingMixin)
+
         asyncio.run(foo())
