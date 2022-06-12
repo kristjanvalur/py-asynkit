@@ -81,8 +81,8 @@ class CoroStart:
     """
     A class to encapsulate the state of a corourine which is manually started
     until its first suspension point, and then resumed.  This facilitates
-    eater execution of coroutines, encapsulating them in Tasks only at the point when
-    they initially block.
+    later execution of coroutines, encapsulating them in Tasks only at the point when
+    they initially become suspended.
     """
 
     __slots__ = ["coro", "future", "exception"]
