@@ -36,8 +36,9 @@ async def my_complex_thing():
 ```
 
 By decorating your function with `eager`, the coroutine will start executing __right away__ and
-control will return to the calling function as soon as it _blocks_, _returns_, or _raises_
-an exception.  In case it blocks, a _Task_ is created and returned. 
+control will return to the calling function as soon as it _suspends_, _returns_, or _raises_
+an exception.  In case it is suspended, a _Task_ is created and returned, ready to resume
+execution from that point.
 
 Notice how, in either case, control is returned __directly__ back to the
 calling function, maintaining synchronous execution.  In effect, conventional code
@@ -85,23 +86,27 @@ of invocation in each such case.
 
 `coro_eager()` is the magic coroutine wrapper providing the __eager__ behaviour:
 
-1. It runs `coro_start()` on the coroutine.
-2. If `coro_is_blocked()` returns `False`, it returns `coro_as_future()`
-3. Otherwise, it creates a `Task` and invokes `coro_contine()` in the task.
+1. It runs `CoroStart.start()` on the coroutine.
+2. It returns `CoroStart.as_future()`.
 
-The result is an _awaitable_, either a `Future` or a `Task`.
+If the coroutine finished in step 1 above, the Future is a plain future and the
+result is immediately available.  Otherwise, a Task is created continuing from
+the point where the coroutine initially suspended.  In either case, the result
+is an __awaitable__.
 
 `async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
-### `coro_start()`, `coro_is_blocked()`, `coro_as_future()`, `coro_continue()`
+### `CoroStart`
 
-These methods are helpers to perform coroutine execution and are what what power the `coro_eager()` function.
+This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function.  It has
+the following methods:
 
-- `coro_start()` runs the coroutine until it either blocks, returns, or raises an exception.  It returns a special tuple reflecting the coroutine's
-  state.
-- `coro_is_blocked()` returns true if the coroutine is in a blocked state
-- `coro_as_future()` creates a future with the coroutine's result in case it didn't block
-- `coro_continue()` is an async function which continues the execution of the coroutine from the initial state.
+- `start()` runs the coroutine until it either suspends, returns, or raises an exception. It is usually automatically
+  invoked by the class Initializer
+- `resume()` is an async function which continues the execution of the coroutine from the initial state.
+- `is_suspended()` returns true if the coroutine start resulted in it becoming suspended.
+- `as_future()` returns a Future with the coroutine's results.  If it finished, this is just a plain Future,
+  otherwise, it is a `Task`.
 
 ## Event loop tools
 
@@ -178,6 +183,11 @@ of the ready queue.
 Returns True if the task is waiting for some awaitable, such as a Future or another Task, and is thus not
 on the ready queue.
 
+### `task_is_runnable(task)`
+
+Roughly the opposite of `task_is_blocked()`, returns True if the task is neither `done()` nor __blocked__ and
+awaits execution.
+
 ### `create_task_descend(coro)`
 
 Implements depth-first task scheduling.
@@ -204,3 +214,25 @@ Returns a set of the tasks that are currently runnable in the given loop
 ### `blocked_tasks(loop=None)`
 
 Returns a set of the tasks that are currently blocked on some future in the given loop.
+
+## Coroutine helpers
+
+A couple of functions are provided to introspect the state of coroutine objects.  They
+work on both regular __async__ coroutines, __classic__ coroutines (using `yield from`) and
+__async generators__.  
+
+### `coro_is_new(coro)`
+
+Returns true if the object has just been created and hasn't started executing yet
+
+### `coro_is_suspended(coro)`
+
+Returns true if the object is in a suspended state.
+
+### `coro_is_done(coro)`
+
+Returns true if the object has finished executing, e.g. by returning or raising an exception.
+
+### `coro_get_frame(coro)`
+
+Returns the current frame object of the coroutine, if it has one, or `None`.
