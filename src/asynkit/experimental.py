@@ -1,7 +1,6 @@
 import asyncio
 import types
 import sys
-import traceback
 
 from .eventloop import task_is_blocked, task_is_runnable
 from .coroutine import coro_is_suspended, coro_get_frame
@@ -261,6 +260,14 @@ class MyTask(TaskMixin, asyncio.Task):
 
 
 def coro_walk_down(coro):
+    """
+    Walk down the chain of suspended coroutines as far as possible, yielding
+    each one in turn, ever more deeply nested.
+    Regular coroutines have a property holding any coroutine it is
+    "awating" on and so it may be possible do descend a certain
+    amount.  Many awaitables do not allow any such introspection, though,
+    such as the iterators for async generators.
+    """
     next = coro
     while next:
         yield next
@@ -287,20 +294,23 @@ def coro_walk_down(coro):
                 # the 'coro' local variable
                 f = coro_get_frame(coro)
                 next = f.f_locals.get("coro")
-                if next is None:
-                    return  # give up
         except AttributeError:
             # we have reached something we don't know what is.  For example, an async_generator_asend object.
             # Give up
             return
 
 
-def coro_get_stack(coro):
-    stack = []
+def coro_walk_stack(coro):
+    """
+    Generate a sequence of stack frames from coroutines by walking down
+    the chain of awaiting coroutines as well as it is possible.
+    Yields the most-recently called (deeply nested) frame last.
+    """
     for c in coro_walk_down(coro):
         try:
-            stack.append(coro_get_frame(c))
+            frame = coro_get_frame(c)
         except TypeError:
-            # awaiting some future
-            break
-    return stack
+            # this coroutine has no frame
+            frame = None
+        if frame is not None:
+            yield frame

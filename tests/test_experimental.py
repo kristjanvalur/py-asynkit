@@ -100,7 +100,7 @@ async def test_coro_stack():
     task = asyncio.create_task(coro)
 
     await asyncio.sleep(0)
-    stack = coro_get_stack(coro)
+    stack = list(coro_walk_stack(coro))
     # print(stack)
     assert len(stack) >= 2
 
@@ -117,7 +117,7 @@ async def test_coro_stack_eager():
     task = asyncio.create_task(coro)
 
     await asyncio.sleep(0)
-    stack = coro_get_stack(coro)
+    stack = list(coro_walk_stack(coro))
     print(stack)
     assert len(stack) >= 2
 
@@ -139,5 +139,5 @@ async def test_coro_stack_generator():
     task = asyncio.create_task(coro)
 
     await asyncio.sleep(0)
-    stack = coro_get_stack(coro)
+    stack = list(coro_walk_stack(coro))
     assert len(stack) >= 2
