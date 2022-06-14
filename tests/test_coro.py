@@ -105,6 +105,23 @@ class TestEager:
         with pytest.raises(TypeError):
             asynkit.eager(self)
 
+    async def test_coro_start(self):
+        log = []
+        cs = asynkit.CoroStart(self.coro1(log), auto_start=False)
+        cs.start()
+        assert cs.is_suspended()
+        log.append("a")
+        await cs.as_future()
+        assert log == [1, "a", 2]
+
+    async def test_coro_start_autostart(self):
+        log = []
+        cs = asynkit.CoroStart(self.coro1(log))
+        assert cs.is_suspended()
+        log.append("a")
+        await cs.as_future()
+        assert log == [1, "a", 2]
+
 
 wrap = asynkit.coroutine.coro_await
 
@@ -222,6 +239,11 @@ class TestCoroState:
         assert not asynkit.coro_is_new(coro)
         assert not asynkit.coro_is_suspended(coro)
         assert asynkit.coro_is_finished(coro)
+
+
+def test_coro_is_new_invalid():
+    with pytest.raises(TypeError):
+        asynkit.coro_is_new("string")
 
 
 async def test_current():
