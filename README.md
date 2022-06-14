@@ -92,7 +92,7 @@ of invocation in each such case.
 If the coroutine finished in step 1 above, the Future is a plain future and the
 result is immediately available.  Otherwise, a Task is created continuing from
 the point where the coroutine initially suspended.  In either case, the result
-is an __awaitable__.
+is an _awaitable_.
 
 `async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
@@ -105,7 +105,7 @@ the following methods:
   invoked by the class Initializer
 - `resume()` is an async function which continues the execution of the coroutine from the initial state.
 - `is_suspended()` returns true if the coroutine start resulted in it becoming suspended.
-- `as_future()` returns a Future with the coroutine's results.  If it finished, this is just a plain Future,
+- `as_future()` returns a _future_ with the coroutine's results.  If it finished, this is just a plain `Future`,
   otherwise, it is a `Task`.
 
 ## Event loop tools
@@ -141,7 +141,7 @@ A policy class is provided to automatically create the appropriate event loops.
 Use this either directly:
 
 ```python
-asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy)
+asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy())
 asyncio.run(myprogram())
 ```
 
@@ -174,7 +174,7 @@ certain scheduling goals.
 ### `task_switch(task, result=None, sleep_pos=None)`
 
 Immediately moves the given task to the head of the ready queue and switches to it, assuming it is runnable.
-When this call returns, returns `result`.  if `sleep_pos` is not None, the current task will be
+When this call returns, returns `result`.  if `sleep_pos is not None`, the current task will be
 put to sleep at that position, using `sleep_insert()`.  Otherwise the current task is put at the end
 of the ready queue.
 
