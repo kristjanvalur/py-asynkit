@@ -77,19 +77,15 @@ class TestNested:
             assert self.c[-1] is val
             del self.c[-1]
 
-    def test_nested_1(self):
-        with asynkit.nested(self.cx("a")) as v:
-            assert v == ("a",)
-
-    def test_nested_3(self):
+    @pytest.mark.parametrize("vals", [[], ["a"], ["a", "b", "c"]])
+    def test_nested(self, vals):
         vals = ["a", "b", "c"]
         ctxs = [self.cx(c) for c in vals]
         with asynkit.nested(*ctxs) as v:
             assert v == tuple(vals)
 
-    def test_nested_delayed_1(self):
-        vals = ["a"]
-
+    @pytest.mark.parametrize("vals", [[], ["a"], ["a", "b", "c", "d", "e"]])
+    def test_nested_jit(self, vals):
         def get_ctxt(m):
             def ctxt():
                 return self.cx(m)
@@ -100,35 +96,23 @@ class TestNested:
         with asynkit.nested_jit(*ctxs) as v:
             assert v == tuple(vals)
 
-    def test_nested_delayed_5(self):
-        vals = ["a", "b", "c", "d", "e"]
-
+    @pytest.mark.parametrize(
+        "vals", [[], ["a"], ["a", "b", "c", "d", "e"], ["ax", "b", "cx", "d", "ex"]]
+    )
+    async def test_anested(self, vals):
         def get_ctxt(m):
-            def ctxt():
+            if "x" in m:
                 return self.cx(m)
-
-            return ctxt
-
-        ctxs = [get_ctxt(c) for c in vals]
-        with asynkit.nested_jit(*ctxs) as v:
-            assert v == tuple(vals)
-
-    async def test_anested_delayed_5(self):
-        vals = ["a", "b", "c", "d", "e"]
-
-        def get_ctxt(m):
-            def ctxt():
-                return self.acx(m)
-
-            return ctxt
+            return self.acx(m)
 
         ctxs = [get_ctxt(c) for c in vals]
-        async with asynkit.anested_jit(*ctxs) as v:
+        async with asynkit.anested(*ctxs) as v:
             assert v == tuple(vals)
 
-    async def test_anested_delayed_mixed_5(self):
-        vals = ["a", "b", "cx", "d", "e"]
-
+    @pytest.mark.parametrize(
+        "vals", [[], ["a"], ["a", "b", "c", "d", "e"], ["ax", "b", "cx", "d", "ex"]]
+    )
+    async def test_anested_jit(self, vals):
         def get_ctxt(m):
             def ctxt():
                 if "x" in m:
