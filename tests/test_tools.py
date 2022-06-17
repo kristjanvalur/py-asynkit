@@ -1,6 +1,7 @@
 import asyncio
 from collections import deque
 import pytest
+import contextlib
 import asynkit.tools
 
 
@@ -51,3 +52,91 @@ async def test_task_from_handle_notask():
 
     h = asyncio.Handle(Foo().bar, (), asyncio.get_running_loop())
     assert asynkit.tools.task_from_handle(h) is None
+
+
+class TestNested:
+    @contextlib.contextmanager
+    def cx(self, val):
+        try:
+            if not hasattr(self, "c"):
+                self.c = []
+            self.c.append(val)
+            yield val
+        finally:
+            assert self.c[-1] is val
+            del self.c[-1]
+
+    @contextlib.asynccontextmanager
+    async def acx(self, val):
+        try:
+            if not hasattr(self, "c"):
+                self.c = []
+            self.c.append(val)
+            yield val
+        finally:
+            assert self.c[-1] is val
+            del self.c[-1]
+
+    def test_nested_1(self):
+        with asynkit.tools.nested(self.cx("a")) as v:
+            assert v == ("a",)
+
+    def test_nested_3(self):
+        vals = ["a", "b", "c"]
+        ctxs = [self.cx(c) for c in vals]
+        with asynkit.tools.nested(*ctxs) as v:
+            assert v == tuple(vals)
+
+    def test_nested_delayed_1(self):
+        vals = ["a"]
+
+        def get_ctxt(m):
+            def ctxt():
+                return self.cx(m)
+
+            return ctxt
+
+        ctxs = [get_ctxt(c) for c in vals]
+        with asynkit.tools.nested_delayed(*ctxs) as v:
+            assert v == tuple(vals)
+
+    def test_nested_delayed_5(self):
+        vals = ["a", "b", "c", "d", "e"]
+
+        def get_ctxt(m):
+            def ctxt():
+                return self.cx(m)
+
+            return ctxt
+
+        ctxs = [get_ctxt(c) for c in vals]
+        with asynkit.tools.nested_delayed(*ctxs) as v:
+            assert v == tuple(vals)
+
+    async def test_anested_delayed_5(self):
+        vals = ["a", "b", "c", "d", "e"]
+
+        def get_ctxt(m):
+            def ctxt():
+                return self.acx(m)
+
+            return ctxt
+
+        ctxs = [get_ctxt(c) for c in vals]
+        async with asynkit.tools.anested_delayed(*ctxs) as v:
+            assert v == tuple(vals)
+
+    async def test_anested_delayed_mixed_5(self):
+        vals = ["a", "b", "cx", "d", "e"]
+
+        def get_ctxt(m):
+            def ctxt():
+                if "x" in m:
+                    return self.cx(m)
+                return self.acx(m)
+
+            return ctxt
+
+        ctxs = [get_ctxt(c) for c in vals]
+        async with asynkit.tools.anested_delayed(*ctxs) as v:
+            assert v == tuple(vals)
