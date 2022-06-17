@@ -1,11 +1,13 @@
 import asyncio
 import sys
+import contextlib
 
 _ver = sys.version_info[:2]
 
 if _ver >= (3, 8):
     create_task = asyncio.create_task
-else: # pragma: no cover
+else:  # pragma: no cover
+
     def create_task(coro, name):
         return asyncio.create_task(coro)
 
@@ -31,6 +33,7 @@ def deque_pop(d, pos=-1):
     # create exception
     [].pop(pos)
 
+
 def task_from_handle(item):
     """
     Runnable task objects exist as callbacks on the ready queue in the loop.
@@ -45,4 +48,75 @@ def task_from_handle(item):
         return None
     if isinstance(task, asyncio.Task):
         return task
-    
+
+
+@contextlib.contextmanager
+def nested_delayed(*callables):
+    """
+    Instantiate and invoke context managers in a nested way.  each argument is a callable which
+    returns an instantiated context manager
+    """
+    if len(callables) > 1:
+        mid = len(callables) // 2
+        with nested_delayed(*callables[:mid]) as a, nested_delayed(
+            *callables[mid:]
+        ) as b:
+            yield a + b
+    elif len(callables) == 1:
+        with callables[0]() as a:
+            yield (a,)
+    else:
+        yield ()
+
+
+def nested(*managers):
+    """
+    Invoke preinstantiated context managers in a nested way
+    """
+
+    def helper(m):
+        return lambda: m
+
+    return nested_delayed(*(helper(m) for m in managers))
+
+
+@contextlib.asynccontextmanager
+async def anested_delayed(*callables):
+    """
+    Instantiate and invoke context managers in a nested way.  each argument is a callable which
+    returns an instantiated context manager
+    """
+    if len(callables) > 1:
+        mid = len(callables) // 2
+        async with anested_delayed(*callables[:mid]) as a, anested_delayed(
+            *callables[mid:]
+        ) as b:
+            yield a + b
+    elif len(callables) == 1:
+        async with as_asyncmgr(callables[0]()) as a:
+            yield (a,)
+    else:
+        yield ()
+
+
+def as_asyncmgr(mgr):
+    if hasattr(mgr, "__aenter__"):
+        return mgr
+
+    @contextlib.asynccontextmanager
+    async def wrapper():
+        with mgr as result:
+            yield result
+
+    return wrapper()
+
+
+def anested(*managers):
+    """
+    Invoke preinstantiated context managers in a nested way
+    """
+
+    def helper(m):
+        return lambda: m
+
+    return anested_delayed(*(helper(m) for m in managers))
