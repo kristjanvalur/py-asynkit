@@ -2,6 +2,8 @@ import asyncio
 import sys
 import contextlib
 
+__all__ = ["deque_pop", "nested", "nested_jit", "anested", "anested_jit"]
+
 _ver = sys.version_info[:2]
 
 if _ver >= (3, 8):
@@ -51,16 +53,14 @@ def task_from_handle(item):
 
 
 @contextlib.contextmanager
-def nested_delayed(*callables):
+def nested_jit(*callables):
     """
     Instantiate and invoke context managers in a nested way.  each argument is a callable which
     returns an instantiated context manager
     """
     if len(callables) > 1:
         mid = len(callables) // 2
-        with nested_delayed(*callables[:mid]) as a, nested_delayed(
-            *callables[mid:]
-        ) as b:
+        with nested_jit(*callables[:mid]) as a, nested_jit(*callables[mid:]) as b:
             yield a + b
     elif len(callables) == 1:
         with callables[0]() as a:
@@ -77,29 +77,33 @@ def nested(*managers):
     def helper(m):
         return lambda: m
 
-    return nested_delayed(*(helper(m) for m in managers))
+    return nested_jit(*(helper(m) for m in managers))
 
 
 @contextlib.asynccontextmanager
-async def anested_delayed(*callables):
+async def anested_jit(*callables):
     """
-    Instantiate and invoke context managers in a nested way.  each argument is a callable which
+    Instantiate and invoke async context managers in a nested way.  each argument is a callable which
     returns an instantiated context manager
     """
     if len(callables) > 1:
         mid = len(callables) // 2
-        async with anested_delayed(*callables[:mid]) as a, anested_delayed(
+        async with anested_jit(*callables[:mid]) as a, anested_jit(
             *callables[mid:]
         ) as b:
             yield a + b
     elif len(callables) == 1:
-        async with as_asyncmgr(callables[0]()) as a:
+        async with as_asynccontextmanager(callables[0]()) as a:
             yield (a,)
     else:
         yield ()
 
 
-def as_asyncmgr(mgr):
+def as_asynccontextmanager(mgr):
+    """
+    Ensure a context manager has an asyn interface, wrapping
+    it if necessary
+    """
     if hasattr(mgr, "__aenter__"):
         return mgr
 
@@ -119,4 +123,4 @@ def anested(*managers):
     def helper(m):
         return lambda: m
 
-    return anested_delayed(*(helper(m) for m in managers))
+    return anested_jit(*(helper(m) for m in managers))

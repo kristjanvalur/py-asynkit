@@ -78,13 +78,13 @@ class TestNested:
             del self.c[-1]
 
     def test_nested_1(self):
-        with asynkit.tools.nested(self.cx("a")) as v:
+        with asynkit.nested(self.cx("a")) as v:
             assert v == ("a",)
 
     def test_nested_3(self):
         vals = ["a", "b", "c"]
         ctxs = [self.cx(c) for c in vals]
-        with asynkit.tools.nested(*ctxs) as v:
+        with asynkit.nested(*ctxs) as v:
             assert v == tuple(vals)
 
     def test_nested_delayed_1(self):
@@ -97,7 +97,7 @@ class TestNested:
             return ctxt
 
         ctxs = [get_ctxt(c) for c in vals]
-        with asynkit.tools.nested_delayed(*ctxs) as v:
+        with asynkit.nested_jit(*ctxs) as v:
             assert v == tuple(vals)
 
     def test_nested_delayed_5(self):
@@ -110,7 +110,7 @@ class TestNested:
             return ctxt
 
         ctxs = [get_ctxt(c) for c in vals]
-        with asynkit.tools.nested_delayed(*ctxs) as v:
+        with asynkit.nested_jit(*ctxs) as v:
             assert v == tuple(vals)
 
     async def test_anested_delayed_5(self):
@@ -123,7 +123,7 @@ class TestNested:
             return ctxt
 
         ctxs = [get_ctxt(c) for c in vals]
-        async with asynkit.tools.anested_delayed(*ctxs) as v:
+        async with asynkit.anested_jit(*ctxs) as v:
             assert v == tuple(vals)
 
     async def test_anested_delayed_mixed_5(self):
@@ -138,5 +138,5 @@ class TestNested:
             return ctxt
 
         ctxs = [get_ctxt(c) for c in vals]
-        async with asynkit.tools.anested_delayed(*ctxs) as v:
+        async with asynkit.anested_jit(*ctxs) as v:
             assert v == tuple(vals)
