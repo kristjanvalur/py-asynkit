@@ -129,7 +129,7 @@ class TestCreateTask:
         if method == "descend":
             # task order becomes uncertain on unwind, split by 0:1:1B until we understand
             # why
-            item = '0:1:1B'
+            item = "0:1:1B"
             assert self.splitlog(log, item) == self.splitlog(log2, item)
         elif method != "start":
             assert self.splitlog(log) == self.splitlog(log2)
