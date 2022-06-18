@@ -58,25 +58,29 @@ async def test_task_from_handle_notask():
 class TestNested:
     @contextlib.contextmanager
     def cx(self, val):
+        self.c = getattr(self, "c", [])
+        self.l = getattr(self, "l", [])
         try:
-            if not hasattr(self, "c"):
-                self.c = []
             self.c.append(val)
+            self.l.append("+" + val)
             yield val
         finally:
             assert self.c[-1] is val
             del self.c[-1]
+            self.l.append("-" + val)
 
     @contextlib.asynccontextmanager
     async def acx(self, val):
+        self.c = getattr(self, "c", [])
+        self.l = getattr(self, "l", [])
         try:
-            if not hasattr(self, "c"):
-                self.c = []
             self.c.append(val)
+            self.l.append("+" + val)
             yield val
         finally:
             assert self.c[-1] is val
             del self.c[-1]
+            self.l.append("-" + val)
 
     @pytest.mark.parametrize("vals", [[], ["a"], ["a", "b", "c"]])
     def test_nested(self, vals):
@@ -173,3 +177,34 @@ class TestNested:
                 assert False
         async with asynkit.nest, asynkit.anested(outer(), inner()):
             assert False
+
+    @pytest.mark.parametrize(
+        "vals", [[], ["a"], ["a", "b", "c", "d", "e"], ["ax", "b", "cx", "d", "ex"]]
+    )
+    async def test_anested_jit_execution(self, vals):
+        """
+        Test that the context managers are instantiated just before they are entered
+        """
+        self.l = []
+
+        def get_ctxt(m):
+            def ctxt():
+                self.l.append("*" + m)  # ctxt manager is instantiated
+                if "x" in m:
+                    return self.cx(m)
+                return self.acx(m)
+
+            return ctxt
+
+        ctxs = [get_ctxt(c) for c in vals]
+        async with asynkit.nest, asynkit.anested_jit(*ctxs) as v:
+            assert v == tuple(vals)
+
+        expect = []
+        for c in vals:
+            expect.append("*" + c)  # context manager instantiated
+            expect.append("+" + c)  # context manager entered
+        for c in reversed(vals):
+            expect.append("-" + c)  # context manager exited
+
+        assert self.l == expect

@@ -72,6 +72,7 @@ class Nest:
     These are raised from inner context managers, when the body of the statement
     should be skipped.
     """
+
     def __enter__(self):
         pass
 
