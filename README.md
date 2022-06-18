@@ -3,7 +3,7 @@
 [![CI](https://github.com/kristjanvalur/py-asynkit/actions/workflows/ci.yml/badge.svg)](https://github.com/kristjanvalur/py-asynkit/actions/workflows/ci.yml)
 
 This module provides some handy tools for those wishing to have better control over the
-way Python's `asyncio` module does things
+way Python's `asyncio` module does things, as well as some general python utilities.
 
 ## Installation
 
@@ -80,7 +80,11 @@ assert log == ["a", 1, "b", "c", 2]
 `coro()` is actually a convenience function, invoking either `coro_eager()` or `async_eager()` (see below) depending on context.
 Decorating your function makes sense if you __always__ intend
 To _await_ its result at some later point. Otherwise, just apply it at the point
-of invocation in each such case. 
+of invocation in each such case.
+
+Note that if you immediately await the result of a function, such as `result = await myfunc()`, then using `eager` is pointless
+and just causes overhead.  Which is why you should only decorate a function with `eager` if you always intend to await its
+result later.
 
 ### `coro_eager()`, `async_eager()`
 
@@ -236,3 +240,95 @@ Returns true if the object has finished executing, e.g. by returning or raising 
 ### `coro_get_frame(coro)`
 
 Returns the current frame object of the coroutine, if it has one, or `None`.
+
+## Other Tools
+
+A few useful utilities are included that are of general use.
+
+The `nested` family of funcions replace the old `contextlib.nested` which
+was removed from the standard library many moons ago.  The standard library
+version had multiple issues causing it to be removed.  
+
+### `deque_pop(deque, pos)`
+
+Pop a value off a deque at an arbitrary position
+
+### `nested(*contextmanagers)`
+
+Return a contextmanager created by nesting the provided context managers
+
+### `nested_jit(*callables)`
+
+Returns a nested context manager which instantiates the constituent context
+managers by invoking the provided callables at each level
+
+### `anested(*contextmanagers)
+
+An asynchronous version of `nested()`.  The individual context managers need
+not be asynchronous themselves.
+
+### `anested_jit(*callables)`
+
+An asynchronous version of `nested_jit()`.  The individual context managers need
+not be asynchronous themselves.
+
+### `nest() and anest()`
+
+Special context managers suppressing an `asynkit.ContextManagerExit` exception.  See
+discussion below.
+
+### A brief discussion of `contextlib.nested`
+
+Since python 2.7 `contextlib.nested` was deprectated and later removed in 3.1.  the 
+[documentation for 2.7](https://python.readthedocs.io/en/v2.7.2/library/contextlib.html) states:
+
+> This function has two major quirks that have led to it being deprecated. Firstly, as the context 
+> managers are all constructed before the function is invoked, the __new__() and __init__() methods
+> of the inner context managers are not actually covered by the scope of the outer context managers.
+> That means, for example, that using nested() to open two files is a programming error as the first
+> file will not be closed promptly if an > exception is thrown when opening the second file.
+>
+> Secondly, if the __enter__() method of one of the inner context managers raises an exception that
+> is caught and suppressed by the __exit__() method of one of the outer context managers, this
+> construct will raise RuntimeError rather than skipping the body of the with statement.
+
+The first issue is easily resolved, and this library provides a `nested_jit` which takes a list
+of callables, each in turn returning an initialized context manager when invoked.  Each is called
+in turn, when required, and not up-front.
+
+The second issue is the trickier one.  Essentially, a single context manager cannot elect to _skip_ the
+body of a `with` statement, even though it is perfectly possible by simply manually nesting two of them,
+or by using the multiple with statement, introduced in versions 2.7 and 3.2.
+
+An [issue on bugs.python.org](https://bugs.python.org/issue18677) suggested adding a
+`ContextManagerExit` error to allow a context manager to
+skip the body.  But it faced opposition, particularly since the BDFL had expressed that he
+specifically didn't want the `with` statement to affect program flow.  But the multiple form
+of the statement can indeed do that:
+
+```python
+with suppress, raise_on_enter:
+    never_executed()
+```
+
+Here, the `raise_on_enter` context manager raises an exception in its `__enter__` method, and
+`suppress` chooses to handle and suppress it in its `__exit__` method.  `never_executed()` is
+indeed, never executed.
+
+In this library we have resurrected this idea.  We provide a `ContextManagerExit` exception,
+and the provided `nested` and `nested_jit` context managers will raise this exception when
+they detect that the body should be skipped.  A second context manager, `nest` is then provided
+to catch and suppress this exception.
+
+A full example, overcoming both of the problems mentioned, therefore looks like this:
+
+```python
+with asynkit.nest(), asynkit.nested_jit(callable_a, callable_b) as (a, b):
+    optionally_do_stuff_with(a, b)
+```
+
+The need to have `asynkit.nest()` called stems from the curious fact that a _single_ context
+manager isn't allowed to skip its body, while _multiple ones are!.  If Python had built-in
+support for a `ContextManagerExit` error, the use of `asynkit.nest()` wouldn't be necessary.
+As it is, think of it as _syntactic salt_, a necessary but unpleasant verbosity.
+
