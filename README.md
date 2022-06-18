@@ -277,7 +277,7 @@ not be asynchronous themselves.
 Special context manager instance suppressing an `asynkit.ContextManagerExit` exception.  See
 discussion below.
 
-### A brief discussion of `contextlib.nested`
+## A brief discussion of `contextlib.nested`
 
 Since python 2.7 `contextlib.nested` was deprectated and later removed in 3.1.  the 
 [documentation for 2.7](https://python.readthedocs.io/en/v2.7.2/library/contextlib.html) states:
@@ -328,7 +328,7 @@ with asynkit.nest, asynkit.nested_jit(callable_a, callable_b) as (a, b):
 ```
 
 The need to have `asynkit.nest` included stems from the curious fact that a _single_ context
-manager isn't allowed to skip its body, while _multiple ones are!.  If Python had built-in
+manager isn't allowed to skip its body, while _multiple ones_ are!.  If Python had built-in
 support for a `ContextManagerExit` error, the use of `asynkit.nest` wouldn't be necessary.
 As it is, think of it as _syntactic salt_, a necessary but unpleasant verbosity.
 
