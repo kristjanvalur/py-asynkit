@@ -9,7 +9,6 @@ __all__ = [
     "anested",
     "anested_jit",
     "nest",
-    "anest",
     "ContextManagerExit",
 ]
 
@@ -67,27 +66,29 @@ class ContextManagerExit(BaseException):
     """
 
 
-@contextlib.contextmanager
-def nest():
+class Nest:
     """
-    Catch and suppress a `ContextManagerException` allowing us to skip the body of
-    a context.
+    A context manager class which simply suppresses ContextManagerExit exceptions.
+    These are raised from inner context managers, when the body of the statement
+    should be skipped.
     """
-    try:
-        yield
-    except ContextManagerExit:
+    def __enter__(self):
         pass
 
-
-@contextlib.asynccontextmanager
-async def anest():
-    """
-    async version of `nest()`
-    """
-    try:
-        yield
-    except ContextManagerExit:
+    async def __aenter__(self):
         pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if isinstance(exc_val, ContextManagerExit):
+            return True
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if isinstance(exc_val, ContextManagerExit):
+            return True
+
+
+# A singleton instance of this context manager
+nest = Nest()
 
 
 @contextlib.contextmanager

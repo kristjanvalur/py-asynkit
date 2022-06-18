@@ -272,9 +272,9 @@ not be asynchronous themselves.
 An asynchronous version of `nested_jit()`.  The individual context managers need
 not be asynchronous themselves.
 
-### `nest() and anest()`
+### `nest`
 
-Special context managers suppressing an `asynkit.ContextManagerExit` exception.  See
+Special context manager instance suppressing an `asynkit.ContextManagerExit` exception.  See
 discussion below.
 
 ### A brief discussion of `contextlib.nested`
@@ -323,12 +323,12 @@ to catch and suppress this exception.
 A full example, overcoming both of the problems mentioned, therefore looks like this:
 
 ```python
-with asynkit.nest(), asynkit.nested_jit(callable_a, callable_b) as (a, b):
+with asynkit.nest, asynkit.nested_jit(callable_a, callable_b) as (a, b):
     optionally_do_stuff_with(a, b)
 ```
 
-The need to have `asynkit.nest()` called stems from the curious fact that a _single_ context
+The need to have `asynkit.nest` included stems from the curious fact that a _single_ context
 manager isn't allowed to skip its body, while _multiple ones are!.  If Python had built-in
-support for a `ContextManagerExit` error, the use of `asynkit.nest()` wouldn't be necessary.
+support for a `ContextManagerExit` error, the use of `asynkit.nest` wouldn't be necessary.
 As it is, think of it as _syntactic salt_, a necessary but unpleasant verbosity.
 

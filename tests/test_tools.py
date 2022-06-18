@@ -94,7 +94,7 @@ class TestNested:
             return ctxt
 
         ctxs = [get_ctxt(c) for c in vals]
-        with asynkit.nested_jit(*ctxs) as v:
+        with asynkit.nest, asynkit.nested_jit(*ctxs) as v:
             assert v == tuple(vals)
 
     @pytest.mark.parametrize(
@@ -123,7 +123,7 @@ class TestNested:
             return ctxt
 
         ctxs = [get_ctxt(c) for c in vals]
-        async with asynkit.anested_jit(*ctxs) as v:
+        async with asynkit.nest, asynkit.anested_jit(*ctxs) as v:
             assert v == tuple(vals)
 
     def test_nested_deprecation(self):
@@ -152,7 +152,7 @@ class TestNested:
         with pytest.raises(asynkit.ContextManagerExit):
             with asynkit.nested(outer(), inner()):
                 assert False
-        with asynkit.nest(), asynkit.nested(outer(), inner()):
+        with asynkit.nest, asynkit.nested(outer(), inner()):
             assert False
 
     async def test_anested_deprecation(self):
@@ -171,5 +171,5 @@ class TestNested:
         with pytest.raises(asynkit.ContextManagerExit):
             async with asynkit.anested(outer(), inner()):
                 assert False
-        async with asynkit.anest(), asynkit.anested(outer(), inner()):
+        async with asynkit.nest, asynkit.anested(outer(), inner()):
             assert False
