@@ -1,8 +1,17 @@
 import asyncio
-import sys
 import contextlib
+import sys
 
-__all__ = ["deque_pop", "nested", "nested_jit", "anested", "anested_jit"]
+__all__ = [
+    "deque_pop",
+    "nested",
+    "nested_jit",
+    "anested",
+    "anested_jit",
+    "nest",
+    "anest",
+    "ContextManagerExit",
+]
 
 _ver = sys.version_info[:2]
 
@@ -52,19 +61,52 @@ def task_from_handle(item):
         return task
 
 
+class ContextManagerExit(BaseException):
+    """
+    Special signalling exception to indicate that a context manager didn't execute
+    """
+
+
+@contextlib.contextmanager
+def nest():
+    """
+    Catch and suppress a `ContextManagerException` allowing us to skip the body of
+    a context.
+    """
+    try:
+        yield
+    except ContextManagerExit:
+        pass
+
+
+@contextlib.asynccontextmanager
+async def anest():
+    """
+    async version of `nest()`
+    """
+    try:
+        yield
+    except ContextManagerExit:
+        pass
+
+
 @contextlib.contextmanager
 def nested_jit(*callables):
     """
     Instantiate and invoke context managers in a nested way.  each argument is a callable which
     returns an instantiated context manager
     """
-    if len(callables) > 1:
-        mid = len(callables) // 2
-        with nested_jit(*callables[:mid]) as a, nested_jit(*callables[mid:]) as b:
-            yield a + b
-    elif len(callables) == 1:
+    if len(callables) == 1:  # most common case
         with callables[0]() as a:
             yield (a,)
+    elif len(callables) > 1:
+        mid = len(callables) // 2
+        entered = False
+        with nested_jit(*callables[:mid]) as a, nested_jit(*callables[mid:]) as b:
+            entered = True
+            yield a + b
+        if not entered:
+            raise ContextManagerExit
     else:
         yield ()
 
@@ -86,15 +128,19 @@ async def anested_jit(*callables):
     Instantiate and invoke async context managers in a nested way.  each argument is a callable which
     returns an instantiated context manager
     """
-    if len(callables) > 1:
+    if len(callables) == 1:
+        async with as_asynccontextmanager(callables[0]()) as a:
+            yield (a,)
+    elif len(callables) > 1:
         mid = len(callables) // 2
+        entered = False
         async with anested_jit(*callables[:mid]) as a, anested_jit(
             *callables[mid:]
         ) as b:
+            entered = True
             yield a + b
-    elif len(callables) == 1:
-        async with as_asynccontextmanager(callables[0]()) as a:
-            yield (a,)
+        if not entered:
+            raise ContextManagerExit
     else:
         yield ()
 

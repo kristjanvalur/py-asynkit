@@ -1,8 +1,9 @@
 import asyncio
-from collections import deque
-import pytest
 import contextlib
+from collections import deque
+
 import asynkit.tools
+import pytest
 
 
 def test_deque_pop():
@@ -124,3 +125,51 @@ class TestNested:
         ctxs = [get_ctxt(c) for c in vals]
         async with asynkit.anested_jit(*ctxs) as v:
             assert v == tuple(vals)
+
+    def test_nested_deprecation(self):
+        """
+        Test that this versionof nested doesn't have the problem causing "nested" to be deprectted from the standard library:
+
+        "Secondly, if the __enter__() method of one of the inner context managers raises an exception that is caught and suppressed by the __exit__()
+        method of one of the outer context managers, this construct will raise RuntimeError rather than skipping the body of the with statement."
+
+        It is impossible to skip the body of a with statement with a single context manager, but possible with two.  So, we implement
+        a ContextManagerExit exception and catch it at the top with a special `nest` context manager.
+        """
+
+        @contextlib.contextmanager
+        def outer():
+            try:
+                yield
+            except ZeroDivisionError:
+                pass
+
+        @contextlib.contextmanager
+        def inner():
+            1 / 0
+            yield
+
+        with pytest.raises(asynkit.ContextManagerExit):
+            with asynkit.nested(outer(), inner()):
+                assert False
+        with asynkit.nest(), asynkit.nested(outer(), inner()):
+            assert False
+
+    async def test_anested_deprecation(self):
+        @contextlib.contextmanager
+        def outer():
+            try:
+                yield
+            except ZeroDivisionError:
+                pass
+
+        @contextlib.contextmanager
+        def inner():
+            1 / 0
+            yield
+
+        with pytest.raises(asynkit.ContextManagerExit):
+            async with asynkit.anested(outer(), inner()):
+                assert False
+        async with asynkit.anest(), asynkit.anested(outer(), inner()):
+            assert False
