@@ -9,7 +9,9 @@ __all__ = [
     "anested",
     "anested_jit",
     "nest",
+    "skip_unless",
     "ContextManagerExit",
+    "as_asyncmgr",
 ]
 
 _ver = sys.version_info[:2]
@@ -124,6 +126,21 @@ def nested(*managers):
     return nested_jit(*(helper(m) for m in managers))
 
 
+@contextlib.contextmanager
+def skip_unless(flag):
+    """
+    A context manager which skips its body unless the provided value returns true.
+    Needs to be accompanied with the `nested` managers, such as:
+    ```
+    with nested, skip_unless(False):
+        assert False  # never executed
+    ```
+    """
+    if not flag:
+        raise ContextManagerExit
+    yield flag
+
+
 @contextlib.asynccontextmanager
 async def anested_jit(*callables):
     """
@@ -131,7 +148,7 @@ async def anested_jit(*callables):
     returns an instantiated context manager
     """
     if len(callables) == 1:
-        async with as_asynccontextmanager(callables[0]()) as a:
+        async with as_asyncmgr(callables[0]()) as a:
             yield (a,)
     elif len(callables) > 1:
         mid = len(callables) // 2
@@ -147,9 +164,9 @@ async def anested_jit(*callables):
         yield ()
 
 
-def as_asynccontextmanager(mgr):
+def as_asyncmgr(mgr):
     """
-    Ensure a context manager has an asyn interface, wrapping
+    Ensure a context manager has an async interface, wrapping
     it if necessary
     """
     if hasattr(mgr, "__aenter__"):

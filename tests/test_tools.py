@@ -208,3 +208,21 @@ class TestNested:
             expect.append("-" + c)  # context manager exited
 
         assert self.l == expect
+
+
+def test_skip_unless():
+    with asynkit.nest, asynkit.skip_unless(False):
+        assert False  # never run
+
+    ran = False
+
+    with asynkit.nest, asynkit.skip_unless(True) as flag:
+        assert flag is True
+        ran = True
+
+    assert ran
+
+
+async def test_as_asyncmgr():
+    async with asynkit.nest, asynkit.as_asyncmgr(asynkit.skip_unless(False)):
+        assert False  # never run
