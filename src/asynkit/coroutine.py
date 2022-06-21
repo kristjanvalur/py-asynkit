@@ -38,7 +38,9 @@ def _coro_getattr(coro, suffix):
                 return False  # async generators are shown as ag_running=True, even when the code is not executiong.  Override that.
             # coroutine (async function)
             return getattr(coro, prefix + suffix)
-    raise TypeError("a coroutine or coroutine like object is required, not %r" % type(coro))
+    raise TypeError(
+        "a coroutine or coroutine like object is required, not %r" % type(coro)
+    )
 
 
 def coro_get_frame(coro):

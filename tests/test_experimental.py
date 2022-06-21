@@ -9,7 +9,7 @@ async def test_callback():
         await await_with_signals(asyncio.sleep(0.1))
         return arg
 
-    mytask = MyTask(func("ok"))
+    mytask = TaskEx(func("ok"))
     await asyncio.sleep(0)
 
     val = ""
@@ -27,10 +27,10 @@ async def test_callback():
 @pytest.mark.parametrize("delay", [0, 0.1])
 async def test_callback_sleep(delay):
     async def func(arg):
-        await sleep_signals(delay)
+        await sleep_ex(delay)
         return arg
 
-    mytask = MyTask(func("ok"))
+    mytask = TaskEx(func("ok"))
     await asyncio.sleep(0)
 
     val = ""
@@ -51,7 +51,7 @@ async def test_callback_nohandler():
         # await tasksignalhandler(asyncio.sleep(0.1))
         return arg
 
-    mytask = MyTask(func("ok"))
+    mytask = TaskEx(func("ok"))
     await asyncio.sleep(0)
 
     val = ""
@@ -79,7 +79,7 @@ async def test_stack():
     async def func3(arg):
         return await func2(arg)
 
-    mytask = MyTask(func3("ok"))
+    mytask = TaskEx(func3("ok"))
     await asyncio.sleep(0)
 
     # s = mytask.print_stack()

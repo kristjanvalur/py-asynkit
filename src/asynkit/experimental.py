@@ -106,14 +106,14 @@ def __sleep0():
     yield from yield_with_signals(None)
 
 
-async def sleep_signals(delay, result=None):
+async def sleep_ex(delay, result=None):
     if delay == 0:
         await __sleep0()
         return result
     return await await_with_signals(asyncio.sleep(delay, result=result))
 
 
-class SignalsFuture:
+class FutureMixin:
     def __await__(self):
         """
         Special version which can
@@ -128,6 +128,10 @@ class SignalsFuture:
         return self.result()  # May raise too.
 
     __iter__ = __await__
+
+
+class FutureEx(FutureMixin, asyncio.Future):
+    pass
 
 
 def handle_task_signal(e):
@@ -255,7 +259,7 @@ class TaskMixin:
         return frames
 
 
-class MyTask(TaskMixin, asyncio.Task):
+class TaskEx(TaskMixin, asyncio.Task):
     pass
 
 

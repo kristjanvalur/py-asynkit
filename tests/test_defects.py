@@ -24,26 +24,32 @@ def myawait(coro):
             except StopIteration as e:
                 return e.value
 
+
 async def realawait(coro):
     return await coro
+
 
 async def bas(result):
     return await bar(result)
 
+
 async def foo1(result, n=2):
     if n:
-        return await foo1(result, n-1)
+        return await foo1(result, n - 1)
     return await bas(result)
+
 
 async def foo2(result, n=2):
     if n:
-        return await foo2(result, n-1)
+        return await foo2(result, n - 1)
     return await realawait(bar(result))
+
 
 async def foo3(result, n=2):
     if n:
-        return await foo3(result, n-1)
+        return await foo3(result, n - 1)
     return await myawait(bar(result))
+
 
 async def bar(result):
     try:
@@ -56,7 +62,8 @@ async def bar(result):
         traceback.print_stack(limit=5)
         result.append(True)
         result.append(traceback.format_stack())
-   
+
+
 @pytest.mark.parametrize("func", [foo1, foo2, foo3])
 async def test_regular(func):
     result = []
@@ -66,6 +73,7 @@ async def test_regular(func):
     ok, stack = result
     assert ok
     assert len(stack) > 5
+
 
 @pytest.mark.xfail()
 @pytest.mark.parametrize("func", [foo1, foo2, foo3])
