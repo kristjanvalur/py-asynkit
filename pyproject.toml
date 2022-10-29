@@ -33,6 +33,7 @@ pytest-cov = "^3.0.0"
 poethepoet = "^0.13.1"
 ruff = "~0.0.190"
 anyio = {extras = ["trio"], version = "^3.6.2"}
+uvloop = {git = "https://github.com/kristjanvalur/uvloop.git", branch = "kristjan/get_ready_queue"}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
