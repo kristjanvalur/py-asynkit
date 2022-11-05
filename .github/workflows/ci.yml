@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest]
-        python-version: ['3.7', '3.10', '3.11-dev']
+        python-version: ['3.7', '3.10', '3.11']
         include:
           - os: ubuntu-latest
             python-version: '3.10'
