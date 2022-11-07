@@ -25,7 +25,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install poetry
       run: pipx install poetry
-    - uses: actions/setup-python@v3
+    - uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
         # cache: 'poetry' # cache is causing problems
@@ -42,9 +42,9 @@ jobs:
     
 
   build-n-publish:
-    name: Build and publish Python 🐍 distributions 📦 to PyPI and TestPyPI
-    runs-on: ubuntu-18.04
-    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags') 
+    name: Build and publish Python distributions to PyPI and TestPyPI
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' 
     needs: tests
 
     steps:
@@ -60,14 +60,14 @@ jobs:
     - name: Build a binary wheel and a source tarball
       run: poetry build
 
-    - name: Publish distribution 📦 to Test PyPI
-      uses: pypa/gh-action-pypi-publish@master
+    - name: Publish distribution to Test PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
       with:
         password: ${{ secrets.TEST_PYPI_API_TOKEN }}
         repository_url: https://test.pypi.org/legacy/
         skip_existing: true
-    - name: Publish distribution 📦 to PyPI
+    - name: Publish distribution to PyPI
       if: startsWith(github.ref, 'refs/tags')
-      uses: pypa/gh-action-pypi-publish@master
+      uses: pypa/gh-action-pypi-publish@release/v1
       with:
         password: ${{ secrets.PYPI_API_TOKEN }}
