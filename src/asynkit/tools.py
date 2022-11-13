@@ -6,7 +6,7 @@ _ver = sys.version_info[:2]
 if _ver >= (3, 8):
     create_task = asyncio.create_task
 else: # pragma: no cover
-    def create_task(coro, name):
+    def create_task(coro, name=None):
         return asyncio.create_task(coro)
 
 
