@@ -39,7 +39,7 @@ def _coro_getattr(coro, suffix):
                 return False  # async generators are shown as ag_running=True, even when the code is not executiong.  Override that.
             # coroutine (async function)
             return getattr(coro, prefix + suffix)
-    raise TypeError("a coroutine or coroutine like object is required")
+    raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
 
 
 def coro_get_frame(coro):
@@ -61,7 +61,7 @@ def coro_is_new(coro):
     elif inspect.isasyncgen(coro):
         return not coro.ag_running and coro.ag_frame
     else:
-        raise TypeError(f"Given input type is not supported {type(coro)}")
+        raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
 
 
 def coro_is_suspended(coro):
@@ -75,7 +75,7 @@ def coro_is_suspended(coro):
     elif inspect.isasyncgen(coro):
         return coro.ag_running
     else:
-        raise TypeError(f"Given input type is not supported {type(coro)}")
+        raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
 
 def coro_is_finished(coro):
     """
