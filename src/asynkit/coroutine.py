@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import inspect
 import types
 from .tools import create_task
 
@@ -53,21 +54,28 @@ def coro_is_new(coro):
     Returns True if the coroutine has just been created and
     never not yet started
     """
-    frame = coro_get_frame(coro)
-    return frame is not None and frame.f_lasti < 0
+    if inspect.iscoroutine(coro):
+        return inspect.getcoroutinestate(coro) == inspect.CORO_CREATED
+    elif inspect.isgenerator(coro):
+        return inspect.getgeneratorstate(coro) == inspect.GEN_CREATED
+    elif inspect.isasyncgen(coro):
+        return not coro.ag_running and coro.ag_frame
+    else:
+        raise TypeError(f"Given input type is not supported {type(coro)}")
 
 
 def coro_is_suspended(coro):
     """
     Returns True if the coroutine has started but not exited
     """
-    frame = coro_get_frame(coro)
-    # frame is None if it has already exited
-    # the currently running coroutine is also not suspended by definition.
-    return (
-        frame is not None and frame.f_lasti >= 0 and not _coro_getattr(coro, "running")
-    )
-
+    if isinstance(coro, types.CoroutineType):
+        return inspect.getcoroutinestate(coro) == inspect.CORO_SUSPENDED
+    elif inspect.isgenerator(coro):
+        return inspect.getgeneratorstate(coro) == inspect.GEN_SUSPENDED
+    elif inspect.isasyncgen(coro):
+        return coro.ag_running
+    else:
+        raise TypeError(f"Given input type is not supported {type(coro)}")
 
 def coro_is_finished(coro):
     """
