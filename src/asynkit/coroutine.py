@@ -68,7 +68,7 @@ def coro_is_suspended(coro):
     """
     Returns True if the coroutine has started but not exited
     """
-    if isinstance(coro, types.CoroutineType):
+    if inspect.iscoroutine(coro):
         return inspect.getcoroutinestate(coro) == inspect.CORO_SUSPENDED
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_SUSPENDED
