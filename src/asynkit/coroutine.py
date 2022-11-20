@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import inspect
+import sys
 import types
 from .tools import create_task
 
@@ -15,6 +16,8 @@ __all__ = [
     "coro_is_suspended",
     "coro_is_finished",
 ]
+
+PYHTON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 """
 Tools and utilities for advanced management of coroutines
@@ -59,7 +62,10 @@ def coro_is_new(coro):
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_CREATED
     elif inspect.isasyncgen(coro):
-        return not coro.ag_running and coro.ag_frame
+        if PYHTON_37:
+            return coro.ag_frame and coro.ag_frame.f_lasti < 0
+        else:
+            return coro.ag_frame and not coro.ag_running
     else:
         raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
 
@@ -73,9 +79,15 @@ def coro_is_suspended(coro):
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_SUSPENDED
     elif inspect.isasyncgen(coro):
-        return coro.ag_running
+        if PYHTON_37:
+            # frame is None if it has already exited
+            # the currently running coroutine is also not suspended by definition.
+            return coro.ag_frame and coro.ag_frame.f_lasti >= 0 and not coro.ag_running
+        else:
+            return coro.ag_running
     else:
         raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
+
 
 def coro_is_finished(coro):
     """
