@@ -82,7 +82,7 @@ def coro_is_suspended(coro):
         if PYHTON_37:
             # frame is None if it has already exited
             # the currently running coroutine is also not suspended by definition.
-            return coro.ag_frame and coro.ag_frame.f_lasti >= 0 and not coro.ag_running
+            return coro.ag_frame and coro.ag_frame.f_lasti >= 0
         else:
             return coro.ag_running
     else:
