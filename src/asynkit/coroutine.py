@@ -17,7 +17,7 @@ __all__ = [
     "coro_is_finished",
 ]
 
-PYHTON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
+PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 """
 Tools and utilities for advanced management of coroutines
@@ -62,7 +62,7 @@ def coro_is_new(coro):
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_CREATED
     elif inspect.isasyncgen(coro):
-        if PYHTON_37:
+        if PYTHON_37:
             return coro.ag_frame and coro.ag_frame.f_lasti < 0
         else:
             return coro.ag_frame and not coro.ag_running
@@ -79,7 +79,7 @@ def coro_is_suspended(coro):
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_SUSPENDED
     elif inspect.isasyncgen(coro):
-        if PYHTON_37:
+        if PYTHON_37:
             # frame is None if it has already exited
             # the currently running coroutine is also not suspended by definition.
             return coro.ag_frame and coro.ag_frame.f_lasti >= 0
