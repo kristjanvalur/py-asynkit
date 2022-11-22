@@ -1,5 +1,7 @@
 import asyncio
 import functools
+import inspect
+import sys
 import types
 from .tools import create_task
 
@@ -14,6 +16,8 @@ __all__ = [
     "coro_is_suspended",
     "coro_is_finished",
 ]
+
+PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 """
 Tools and utilities for advanced management of coroutines
@@ -38,7 +42,7 @@ def _coro_getattr(coro, suffix):
                 return False  # async generators are shown as ag_running=True, even when the code is not executiong.  Override that.
             # coroutine (async function)
             return getattr(coro, prefix + suffix)
-    raise TypeError("a coroutine or coroutine like object is required")
+    raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
 
 
 def coro_get_frame(coro):
@@ -53,20 +57,36 @@ def coro_is_new(coro):
     Returns True if the coroutine has just been created and
     never not yet started
     """
-    frame = coro_get_frame(coro)
-    return frame is not None and frame.f_lasti < 0
+    if inspect.iscoroutine(coro):
+        return inspect.getcoroutinestate(coro) == inspect.CORO_CREATED
+    elif inspect.isgenerator(coro):
+        return inspect.getgeneratorstate(coro) == inspect.GEN_CREATED
+    elif inspect.isasyncgen(coro):
+        if PYTHON_37:
+            return coro.ag_frame and coro.ag_frame.f_lasti < 0
+        else:
+            return coro.ag_frame and not coro.ag_running
+    else:
+        raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
 
 
 def coro_is_suspended(coro):
     """
     Returns True if the coroutine has started but not exited
     """
-    frame = coro_get_frame(coro)
-    # frame is None if it has already exited
-    # the currently running coroutine is also not suspended by definition.
-    return (
-        frame is not None and frame.f_lasti >= 0 and not _coro_getattr(coro, "running")
-    )
+    if inspect.iscoroutine(coro):
+        return inspect.getcoroutinestate(coro) == inspect.CORO_SUSPENDED
+    elif inspect.isgenerator(coro):
+        return inspect.getgeneratorstate(coro) == inspect.GEN_SUSPENDED
+    elif inspect.isasyncgen(coro):
+        if PYTHON_37:
+            # frame is None if it has already exited
+            # the currently running coroutine is also not suspended by definition.
+            return coro.ag_frame and coro.ag_frame.f_lasti >= 0
+        else:
+            return coro.ag_running
+    else:
+        raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
 
 
 def coro_is_finished(coro):
