@@ -77,7 +77,7 @@ asyncio.run(caller(asynkit.eager))
 assert log == ["a", 1, "b", "c", 2]
 ```
 
-`coro()` is actually a convenience function, invoking either `coro_eager()` or `async_eager()` (see below) depending on context.
+`eager()` is actually a convenience function, invoking either `coro_eager()` or `async_eager()` (see below) depending on context.
 Decorating your function makes sense if you __always__ intend
 To _await_ its result at some later point. Otherwise, just apply it at the point
 of invocation in each such case. 
