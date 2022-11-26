@@ -13,10 +13,12 @@ __all__ = [
     "eager",
     "eager_awaitable",
     "eager_callable",
+    "eager_coroutine",
     "coro_get_frame",
     "coro_is_new",
     "coro_is_suspended",
     "coro_is_finished",
+    "iscoroutine",
 ]
 
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
@@ -28,6 +30,13 @@ Tools and utilities for advanced management of coroutines
 
 # Helpers to find if a coroutine (or a generator as created by types.coroutine)
 # has started or finished
+
+def iscoroutine(coro):
+    """
+    a lenient inspection function to recognize a coroutine which
+    has been defined with the generator syntax.
+    """
+    return inspect.iscoroutine(coro) or inspect.isgenerator(coro)
 
 
 def _coro_getattr(coro, suffix):
@@ -244,10 +253,20 @@ def eager_callable(coro):
 def eager_awaitable(coro):
     """
     Eagerly start the coroutine, then return an awaitable which can be passed
-    to other apis which expect an awaitable for Task creation
+    to other apis which expect an awaitable for Task creation.  Use only
+    if your API can accept a Future
     """
     cs = CoroStart(coro)
     return cs.as_awaitable()
+
+def eager_coroutine(coro):
+    """
+    Eagerly start the coroutine, then return an coroutine which can be passed
+    to other apis which expect an coroutine for Task creation
+    """
+    cs = CoroStart(coro)
+    return cs.resume()
+
 
 
 def coro_eager(coro):
