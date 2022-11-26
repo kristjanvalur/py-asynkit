@@ -5,11 +5,22 @@ import asynkit
 import types
 
 
+@pytest.mark.parametrize("block", [True, False])
 class TestEager:
     async def coro1(self, log):
         log.append(1)
         await asyncio.sleep(0)
         log.append(2)
+
+    async def coro1_nb(self, log):
+        log.append(1)
+        log.append(2)
+
+    def get_coro1(self, block):
+        if block:
+            return self.coro1, [1, "a", 2]
+        else:
+            return self.coro1_nb, [1, 2, "a"]
 
     @asynkit.func_eager
     async def coro2(self, log):
@@ -18,133 +29,149 @@ class TestEager:
         log.append(2)
 
     @asynkit.eager
-    async def coro3(self, log):
+    async def coro3(self, log, block):
         log.append(1)
-        await asyncio.sleep(0)
+        if block:
+            await asyncio.sleep(0)
         log.append(2)
 
-    async def coro4(self, log):
+    async def coro6(self, log, block):
         log.append(1)
-        log.append(2)
-
-    async def coro5(self, log):
-        log.append(1)
-        raise RuntimeError("foo")
-
-    async def coro6(self, log):
-        log.append(1)
-        await asyncio.sleep(0)
+        if block:
+            await asyncio.sleep(0)
         log.append(2)
         raise RuntimeError("foo")
 
-    async def test_no_eager(self):
+    async def test_no_eager(self, block):
         log = []
-        future = self.coro1(log)
+        coro, _ = self.get_coro1(block)
         log.append("a")
-        await future
+        await coro(log)
         assert log == ["a", 1, 2]
 
-    async def test_coro_eager(self):
+    async def test_coro_eager(self, block):
         log = []
-        future = asynkit.coro_eager(self.coro1(log))
+        coro, expect = self.get_coro1(block)
+        future = asynkit.coro_eager(coro(log))
         log.append("a")
         await future
-        assert log == [1, "a", 2]
+        assert log == expect
 
-    async def test_func_eager(self):
+    async def test_func_eager(self, block):
         log = []
         future = self.coro2(log)
         log.append("a")
         await future
         assert log == [1, "a", 2]
 
-    async def test_eager(self):
+    async def test_eager(self, block):
         """Test the `coro` helper, used both as wrapper and decorator"""
         log = []
-        future = asynkit.eager(self.coro1(log))
+        coro, expect = self.get_coro1(block)
+        future = asynkit.eager(coro(log))
         log.append("a")
         await future
-        assert log == [1, "a", 2]
+        assert log == expect
         log = []
-        future = self.coro3(log)
+        future = self.coro3(log, block)
         log.append("a")
         await future
-        assert log == [1, "a", 2]
+        assert log == expect
 
-    async def test_eager_noblock(self):
-        """Test `eager` when coroutine does not block"""
+    async def test_eager_future(self, block):
         log = []
-        future = asynkit.eager(self.coro4(log))
-        log.append("a")
-        await future
-        assert log == [1, 2, "a"]
-
-    async def test_eager_future(self):
-        log = []
-        awaitable = asynkit.eager(self.coro4(log))
+        awaitable = asynkit.eager(self.coro1_nb(log))
         assert inspect.isawaitable(awaitable)
         assert asyncio.isfuture(awaitable)
         await awaitable
 
-    async def test_eager_exception_nonblocking(self):
+    async def test_eager_exception(self, block):
         log = []
-        awaitable = asynkit.eager(self.coro5(log))
-        assert log == [1]
-        with pytest.raises(RuntimeError):
-            await awaitable
-
-    async def test_eager_exception_blocking(self):
-        log = []
-        awaitable = asynkit.eager(self.coro6(log))
-        assert log == [1]
+        awaitable = asynkit.eager(self.coro6(log, block))
+        if block:
+            assert log == [1]
+        else:
+            assert log == [1,2]
         with pytest.raises(RuntimeError):
             await awaitable
         assert log == [1, 2]
 
-    def test_eager_invalid(self):
+    def test_eager_invalid(self, block):
         with pytest.raises(TypeError):
             asynkit.eager(self)
 
-    async def test_coro_start(self):
+    async def test_coro_start(self, block):
         log = []
-        cs = asynkit.CoroStart(self.coro1(log), auto_start=False)
+        coro, expect = self.get_coro1(block)
+        cs = asynkit.CoroStart(coro(log), auto_start=False)
         cs.start()
-        assert cs.is_suspended()
+        assert cs.is_suspended() == block
         log.append("a")
         await cs.as_task_or_future()
-        assert log == [1, "a", 2]
+        assert log == expect
 
-    async def test_coro_start_autostart(self):
+    async def test_coro_start_autostart(self, block):
         log = []
-        cs = asynkit.CoroStart(self.coro1(log))
-        assert cs.is_suspended()
+        coro, expect = self.get_coro1(block)
+
+        cs = asynkit.CoroStart(coro(log))
+        assert cs.is_suspended() == block
         log.append("a")
         await cs.as_task_or_future()
-        assert log == [1, "a", 2]
+        assert log == expect
 
-    async def test_eager_awaitable(self):
+    async def test_eager_coroutine(self, block):
+        """
+        Test that an eager coroutine can be passed to a Task creation api
+        and the eagerness happens right away.
+        """
+        log = []
+        coro, expect = self.get_coro1(block)
+        task = asyncio.Task(asynkit.eager_coroutine(coro(log)))
+        log.append("a")
+        await task
+        assert log == expect
+
+    async def test_eager_awaitable(self, block):
         """
         Test that an eager awaitable can be passed to a Task creation api
         and the eagerness happens right away.
         """
         log = []
-        task = asyncio.Task(asynkit.eager_awaitable(self.coro1(log)))
+        coro, expect = self.get_coro1(block)
+
+        def fake_api(awaitable):
+            if asynkit.iscoroutine(awaitable):
+                return asyncio.Task(awaitable)
+
+            async def helper(awaitable):
+                return await (awaitable)
+
+            return asyncio.Task(helper(awaitable))
+
+        async def helper(awaitable):
+            return await awaitable
+
+        task = fake_api(asynkit.eager_awaitable(coro(log)))
         log.append("a")
         await task
-        assert log == [1, "a", 2]
+        assert log == expect
 
-    async def test_eager_callable(self):
+    async def test_eager_callable(self, block):
         """
         Test that an eager callable can be passed to a Task creation api which
         excepts callables, and eager execution is observed.
         """
         log = []
+        coro, expect = self.get_coro1(block)
+
         async def helper(callable, *args, **kwargs):
             return await callable(*args, **kwargs)
-        task = asyncio.Task(helper(asynkit.eager_callable(self.coro1(log))))
+
+        task = asyncio.Task(helper(asynkit.eager_callable(coro(log))))
         log.append("a")
         await task
-        assert log == [1, "a", 2]
+        assert log == expect
 
 
 wrap = asynkit.coroutine.coro_await
@@ -283,4 +310,3 @@ async def test_current():
 
     coro = foo()
     await coro
-
