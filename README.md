@@ -105,10 +105,11 @@ the following methods:
 
 - `start()` runs the coroutine until it either suspends, returns, or raises an exception. It is usually automatically
   invoked by the class Initializer
-- `resume()` is an async function which continues the execution of the coroutine from the initial state.
-- `is_suspended()` returns true if the coroutine start resulted in it becoming suspended.
-- `as_future()` returns a _future_ with the coroutine's results. If it finished, this is just a plain `Future`,
-  otherwise, it is a `Task`.
+- `done()` returns true if the coroutine start resulted in it completing.
+- `as_coroutine()` returns an coroutine with the coroutine's results.
+- `as_future()` returns a `Future`.  If the coroutine is finished, the returned object is a plain `Future`,
+  otherwise a `Task` (as created by the optional `create_task` parameter). This is suitable for uses such as
+  `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.  
 
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will run using that
 context.
