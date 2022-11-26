@@ -111,7 +111,7 @@ class TestEager:
         cs.start()
         assert cs.is_suspended()
         log.append("a")
-        await cs.as_future()
+        await cs.as_task_or_future()
         assert log == [1, "a", 2]
 
     async def test_coro_start_autostart(self):
@@ -119,7 +119,31 @@ class TestEager:
         cs = asynkit.CoroStart(self.coro1(log))
         assert cs.is_suspended()
         log.append("a")
-        await cs.as_future()
+        await cs.as_task_or_future()
+        assert log == [1, "a", 2]
+
+    async def test_eager_awaitable(self):
+        """
+        Test that an eager awaitable can be passed to a Task creation api
+        and the eagerness happens right away.
+        """
+        log = []
+        task = asyncio.Task(asynkit.eager_awaitable(self.coro1(log)))
+        log.append("a")
+        await task
+        assert log == [1, "a", 2]
+
+    async def test_eager_callable(self):
+        """
+        Test that an eager callable can be passed to a Task creation api which
+        excepts callables, and eager execution is observed.
+        """
+        log = []
+        async def helper(callable, *args, **kwargs):
+            return await callable(*args, **kwargs)
+        task = asyncio.Task(helper(asynkit.eager_callable(self.coro1(log))))
+        log.append("a")
+        await task
         assert log == [1, "a", 2]
 
 
@@ -259,3 +283,4 @@ async def test_current():
 
     coro = foo()
     await coro
+

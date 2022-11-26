@@ -96,6 +96,24 @@ is an _awaitable_.
 
 `async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
+### `eager_awaitable()`, `eager_callable()`
+
+These helpers can be added to async function calls when they need to be provided to
+some `Task` creation APIs.  The target function will be eagerly started, before its
+resumption is handed to said API.  For instance:
+
+```python
+async def myfunc(a):
+    ...
+# an api accepting awaitables
+t1 = api.start_task(myfunc(a))  # traditional start
+t2 = api.start_task(eager_awaitable(myfunc(a)))  # eager start
+
+# an api accepting callables
+t3 = api.start_task_function(myfunc, a)  # traditional
+t4 = api.start_task_function(eager_callable(myfunc(a)))  # eager
+```
+
 ### `CoroStart`
 
 This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function.  It has
@@ -105,8 +123,12 @@ the following methods:
   invoked by the class Initializer
 - `resume()` is an async function which continues the execution of the coroutine from the initial state.
 - `is_suspended()` returns true if the coroutine start resulted in it becoming suspended.
-- `as_future()` returns a _future_ with the coroutine's results.  If it finished, this is just a plain `Future`,
+- `as_awaitable()` returns an _awaitable_ with the coroutine's results.  If it finished, this is just a plain `Future`,
+  otherwise, it is a coroutine.
+- `as_task_or_future()` returns an _awaitable_ with the coroutine's results.  If it finished, this is just a plain `Future`,
   otherwise, it is a `Task`.
+- `as_callable()` returns a callable which, when called, returns `as_awaitable()`.  This is useful in situation where
+  a _callable_ is required for invocation.
 
 ## Event loop tools
 

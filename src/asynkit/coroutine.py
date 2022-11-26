@@ -11,6 +11,8 @@ __all__ = [
     "coro_eager",
     "func_eager",
     "eager",
+    "eager_awaitable",
+    "eager_callable",
     "coro_get_frame",
     "coro_is_new",
     "coro_is_suspended",
@@ -42,7 +44,9 @@ def _coro_getattr(coro, suffix):
                 return False  # async generators are shown as ag_running=True, even when the code is not executiong.  Override that.
             # coroutine (async function)
             return getattr(coro, prefix + suffix)
-    raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
+    raise TypeError(
+        f"a coroutine or coroutine like object is required. Got: {type(coro)}"
+    )
 
 
 def coro_get_frame(coro):
@@ -67,7 +71,9 @@ def coro_is_new(coro):
         else:
             return coro.ag_frame and not coro.ag_running
     else:
-        raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
+        raise TypeError(
+            f"a coroutine or coroutine like object is required. Got: {type(coro)}"
+        )
 
 
 def coro_is_suspended(coro):
@@ -86,7 +92,9 @@ def coro_is_suspended(coro):
         else:
             return coro.ag_running
     else:
-        raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
+        raise TypeError(
+            f"a coroutine or coroutine like object is required. Got: {type(coro)}"
+        )
 
 
 def coro_is_finished(coro):
@@ -136,11 +144,28 @@ class CoroStart:
         """
         return self.exception is None
 
-    def as_future(self):
+    def as_awaitable(self):
         """
-        Convert the continuation of the coroutine to a future.
+        Convert the continuation of the coroutine to an awaitable.
         If the coroutine has completed, it is wrapped in a `Future` object, otherwise
-        a `Task` is returned.
+        a coroutine is returned.
+        """
+        exception = self.exception
+        if exception is not None:
+            future = asyncio.Future()
+            if isinstance(exception, StopIteration):
+                future.set_result(exception.value)
+            else:
+                future.set_exception(exception)
+            return future
+        else:
+            return self.resume()
+
+    def as_task_or_future(self):
+        """
+        Convert the continuation of the coroutine to an asyncio.task or future.
+        If the coroutine has completed, it is wrapped in a `Future` object, otherwise
+        a `Task` is returned.  The return value is awaitable
         """
         exception = self.exception
         if exception is not None:
@@ -152,6 +177,16 @@ class CoroStart:
             return future
         else:
             return create_task(self.resume())
+
+    def as_callable(self):
+        """
+        returns a method which, when called, returns an awaitable
+        """
+
+        def helper():
+            return self.as_awaitable()
+
+        return helper
 
     @types.coroutine
     def resume(self):
@@ -190,10 +225,29 @@ class CoroStart:
 async def coro_await(coro):
     """
     A simple await, using the partial run primitives, equivalent to
-    `async def coro_await(coro): return await coro`
+    `async def coro_await(coro): return await coro`.  Provided for
+    testing purposes.
     """
     cs = CoroStart(coro)
     return await cs.resume()
+
+
+def eager_callable(coro):
+    """
+    Eagerly start the coroutine, then return a callable which can be passed
+    to other apis which expect a callable for Task creation
+    """
+    cs = CoroStart(coro)
+    return cs.as_callable()
+
+
+def eager_awaitable(coro):
+    """
+    Eagerly start the coroutine, then return an awaitable which can be passed
+    to other apis which expect an awaitable for Task creation
+    """
+    cs = CoroStart(coro)
+    return cs.as_awaitable()
 
 
 def coro_eager(coro):
@@ -208,7 +262,7 @@ def coro_eager(coro):
 
     # start the coroutine.  Run it to the first block, exception or return value.
     cs = CoroStart(coro)
-    return cs.as_future()
+    return cs.as_task_or_future()
 
 
 def func_eager(func):
