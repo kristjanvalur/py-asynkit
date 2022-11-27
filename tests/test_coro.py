@@ -107,7 +107,7 @@ class TestEager:
         cs.start()
         assert cs.is_suspended() == block
         log.append("a")
-        await cs.as_task_or_future()
+        await cs.as_awaitable()
         assert log == expect
 
     async def test_coro_start_autostart(self, block):
@@ -117,7 +117,7 @@ class TestEager:
         cs = asynkit.CoroStart(coro(log))
         assert cs.is_suspended() == block
         log.append("a")
-        await cs.as_task_or_future()
+        await cs.as_awaitable()
         assert log == expect
 
     async def test_eager_coroutine(self, block):
