@@ -1,8 +1,12 @@
 import asyncio
 import inspect
-import pytest
-import asynkit
 import types
+from unittest.mock import Mock
+
+import pytest
+
+import asynkit
+import asynkit.tools
 
 
 @pytest.mark.parametrize("block", [True, False])
@@ -91,7 +95,7 @@ class TestEager:
         if block:
             assert log == [1]
         else:
-            assert log == [1,2]
+            assert log == [1, 2]
         with pytest.raises(RuntimeError):
             await awaitable
         assert log == [1, 2]
@@ -99,26 +103,6 @@ class TestEager:
     def test_eager_invalid(self, block):
         with pytest.raises(TypeError):
             asynkit.eager(self)
-
-    async def test_coro_start(self, block):
-        log = []
-        coro, expect = self.get_coro1(block)
-        cs = asynkit.CoroStart(coro(log), auto_start=False)
-        cs.start()
-        assert cs.is_suspended() == block
-        log.append("a")
-        await cs.as_awaitable()
-        assert log == expect
-
-    async def test_coro_start_autostart(self, block):
-        log = []
-        coro, expect = self.get_coro1(block)
-
-        cs = asynkit.CoroStart(coro(log))
-        assert cs.is_suspended() == block
-        log.append("a")
-        await cs.as_awaitable()
-        assert log == expect
 
     async def test_eager_coroutine(self, block):
         """
@@ -172,6 +156,119 @@ class TestEager:
         log.append("a")
         await task
         assert log == expect
+
+
+@pytest.mark.parametrize("block", [True, False])
+class TestCoroStart:
+    async def coro1(self, log):
+        log.append(1)
+        await asyncio.sleep(0)
+        log.append(2)
+
+    async def coro1_nb(self, log):
+        log.append(1)
+        log.append(2)
+
+    def get_coro1(self, block):
+        if block:
+            return self.coro1, [1, "a", 2]
+        else:
+            return self.coro1_nb, [1, 2, "a"]
+
+    def test_start(self, block):
+        coro, expect = self.get_coro1(block)
+        log = []
+        cs = asynkit.CoroStart(coro(log), auto_start=False)
+        assert cs.is_new()
+        # assert not cs.is_suspended()
+        assert not cs.is_finished()
+        assert log == []
+
+    def test_auto_start(self, block):
+        coro, expect = self.get_coro1(block)
+        log = []
+        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        assert not cs.is_new()
+        if block:
+            assert cs.is_suspended()
+            assert not cs.is_finished()
+            assert log == [1]
+        else:
+            assert not cs.is_suspended()
+            assert cs.is_finished()
+            assert log == [1, 2]
+
+    async def test_as_coroutine(self, block):
+        coro, expect = self.get_coro1(block)
+        log = []
+        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        cr = cs.as_coroutine()
+        assert asynkit.iscoroutine(cr)
+        log.append("a")
+        await cr
+        assert log == expect
+
+    async def test_as_awaitable_none(self, block):
+        coro, expect = self.get_coro1(block)
+        log = []
+        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        aw = cs.as_awaitable(return_future=False, create_task=None)
+        assert asynkit.iscoroutine(aw)
+        log.append("a")
+        await aw
+        assert log == expect
+
+    async def test_as_awaitable_future(self, block):
+        coro, expect = self.get_coro1(block)
+        log = []
+        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        aw = cs.as_awaitable(return_future=True, create_task=None)
+        if block:
+            assert asynkit.iscoroutine(aw)
+        else:
+            assert isinstance(aw, asyncio.Future)
+        log.append("a")
+        await aw
+        assert log == expect
+
+    async def test_as_awaitable_task(self, block):
+        coro, expect = self.get_coro1(block)
+        log = []
+        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        aw = cs.as_awaitable(return_future=False, create_task=asynkit.tools.create_task)
+        if block:
+            assert isinstance(aw, asyncio.Task)
+        else:
+            assert asynkit.iscoroutine(aw)
+        log.append("a")
+        await aw
+        assert log == expect
+
+    async def test_as_awaitable_both(self, block):
+        coro, expect = self.get_coro1(block)
+        log = []
+        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        aw = cs.as_awaitable(return_future=True, create_task=asynkit.tools.create_task)
+        if block:
+            assert isinstance(aw, asyncio.Task)
+        else:
+            assert isinstance(aw, asyncio.Future)
+        log.append("a")
+        await aw
+        assert log == expect
+
+    async def test_task_factory(self, block):
+        coro, expect = self.get_coro1(block)
+        log = []
+        mock = Mock()
+        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        aw = cs.as_awaitable(return_future=False, create_task=mock)
+        if block:
+            mock.assert_called()
+            assert len(mock.call_args[0]) == 1
+        else:
+            mock.assert_not_called()
+            assert asynkit.iscoroutine(aw)
 
 
 wrap = asynkit.coroutine.coro_await
