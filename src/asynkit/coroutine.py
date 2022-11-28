@@ -197,37 +197,24 @@ class CoroStart:
                 except StopIteration as exc:
                     return exc.value
 
-    def as_awaitable(self, *, return_future=True, create_task=tools.create_task):
+    def as_awaitable(self, *, create_task=tools.create_task):
         """
         Convert the continuation of the coroutine to an awaitable.
-        `return_future` allows a Future to be returned for completed coroutine
-        `return_task` allows a Task to be wrapped around the
-        If the coroutine has completed, it is wrapped in a `Future` object, otherwise
-        a coroutine is returned.
+        This is either a coroutine, if the task finished, or a Task,
+        created using the provided `create_task` function.
         """
-        exception = self.exception
-        if exception is not None:
-            if return_future:
-                future = asyncio.Future()
-                if isinstance(exception, StopIteration):
-                    future.set_result(exception.value)
-                else:
-                    future.set_exception(exception)
-                return future
-        elif create_task:
+        if self.exception is None and create_task:
             return create_task(self.as_coroutine())
         return self.as_coroutine()
 
-    def as_callable(self, *, return_future=True):
+    def as_callable(self):
         """
-        A helper method which returns a callable, which when called, returns `as_awaitable`.
+        A helper method which returns a callable, which when called, returns `as_coroutine`.
         Used for APIs which expect async callables.
         """
 
         def helper():
-            return self.as_awaitable(
-                return_future=return_future, create_task=None
-            )
+            return self.as_coroutine()
 
         return helper
 
@@ -267,7 +254,7 @@ def eager_coroutine(coro):
     to other apis which expect an coroutine for Task creation
     """
     cs = CoroStart(coro)
-    return cs.as_awaitable(return_future=False, create_task=None)
+    return cs.as_awaitable(create_task=None)
 
 
 def coro_eager(coro):

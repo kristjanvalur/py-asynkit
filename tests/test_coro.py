@@ -86,7 +86,6 @@ class TestEager:
         log = []
         awaitable = asynkit.eager(self.coro1_nb(log))
         assert inspect.isawaitable(awaitable)
-        assert asyncio.isfuture(awaitable)
         await awaitable
 
     async def test_eager_exception(self, block):
@@ -212,21 +211,8 @@ class TestCoroStart:
         coro, expect = self.get_coro1(block)
         log = []
         cs = asynkit.CoroStart(coro(log), auto_start=True)
-        aw = cs.as_awaitable(return_future=False, create_task=None)
+        aw = cs.as_awaitable(create_task=None)
         assert asynkit.iscoroutine(aw)
-        log.append("a")
-        await aw
-        assert log == expect
-
-    async def test_as_awaitable_future(self, block):
-        coro, expect = self.get_coro1(block)
-        log = []
-        cs = asynkit.CoroStart(coro(log), auto_start=True)
-        aw = cs.as_awaitable(return_future=True, create_task=None)
-        if block:
-            assert asynkit.iscoroutine(aw)
-        else:
-            assert isinstance(aw, asyncio.Future)
         log.append("a")
         await aw
         assert log == expect
@@ -235,24 +221,11 @@ class TestCoroStart:
         coro, expect = self.get_coro1(block)
         log = []
         cs = asynkit.CoroStart(coro(log), auto_start=True)
-        aw = cs.as_awaitable(return_future=False, create_task=asynkit.tools.create_task)
+        aw = cs.as_awaitable(create_task=asynkit.tools.create_task)
         if block:
             assert isinstance(aw, asyncio.Task)
         else:
             assert asynkit.iscoroutine(aw)
-        log.append("a")
-        await aw
-        assert log == expect
-
-    async def test_as_awaitable_both(self, block):
-        coro, expect = self.get_coro1(block)
-        log = []
-        cs = asynkit.CoroStart(coro(log), auto_start=True)
-        aw = cs.as_awaitable(return_future=True, create_task=asynkit.tools.create_task)
-        if block:
-            assert isinstance(aw, asyncio.Task)
-        else:
-            assert isinstance(aw, asyncio.Future)
         log.append("a")
         await aw
         assert log == expect
@@ -262,7 +235,7 @@ class TestCoroStart:
         log = []
         mock = Mock()
         cs = asynkit.CoroStart(coro(log), auto_start=True)
-        aw = cs.as_awaitable(return_future=False, create_task=mock)
+        aw = cs.as_awaitable(create_task=mock)
         if block:
             mock.assert_called()
             assert len(mock.call_args[0]) == 1
