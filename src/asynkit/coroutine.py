@@ -133,9 +133,12 @@ class CoroStart:
         if auto_start:
             self.start()
 
-    @property
     def started(self):
         return self.start_result is not None
+
+    def done(self):
+        """returns true if the coroutine finished without blocking"""
+        return self.start_result and self.start_result[1]
 
     def start(self):
         """
@@ -151,6 +154,14 @@ class CoroStart:
             self.start_result = (None, exception)
             return True
         return False
+
+    def result(self):
+        if not self.done():
+            raise asyncio.InvalidStateError("CoroStart: coroutine not done()")
+        exc = self.start_result[1]
+        if isinstance(exc, StopIteration):
+            return exc.value
+        raise exc
 
     def as_coroutine(self):
         """
@@ -204,7 +215,8 @@ class CoroStart:
         This is either a coroutine, if the task finished, or a Task,
         created using the provided `create_task` function.
         """
-        if self.start_result and self.start_result[1] is None and create_task:
+        # if task isn't started, or it didn't finish early, create the task
+        if create_task and not self.done():
             return create_task(self.as_coroutine())
         return self.as_coroutine()
 
