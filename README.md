@@ -115,21 +115,26 @@ context.
 
 ## Context helper
 
-`coro_await` is a helper function to await a coroutine, optionally with a `contextvars.Context`
-object to make active:
+`coro_await()` is a helper function to await a coroutine, optionally with a `contextvars.Context`
+object to activate:
 
 ```python
 var1 = contextvars.ContextVar("myvar")
 
 async def my_method():
     var1.set("foo")
+    
 async def main():
+    context=contextvars.copy_context()
     var1.set("bar")
-    await asynkit.coro_await(my_method(), context=contextvars.copy_context())
+    await asynkit.coro_await(my_method(), context=context)
+    # the coroutine didn't modify _our_ context
     assert var1.get() == "bar"
+    # ... but it did modify the copied context
+    assert context.get(var1) == "foo"
 ```
 
-this is similar to `contextvars.Context.run()` but works for async functions.
+This is similar to `contextvars.Context.run()` but works for async functions.
 
 ## Event loop tools
 
