@@ -3,6 +3,10 @@ import functools
 import inspect
 import sys
 import types
+import typing
+from contextvars import Context
+from typing import Optional, Union
+
 from .tools import create_task
 
 __all__ = [
@@ -18,6 +22,8 @@ __all__ = [
 ]
 
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
+
+Coroutine = Union[typing.Coroutine, typing.Generator]
 
 """
 Tools and utilities for advanced management of coroutines
@@ -42,7 +48,9 @@ def _coro_getattr(coro, suffix):
                 return False  # async generators are shown as ag_running=True, even when the code is not executiong.  Override that.
             # coroutine (async function)
             return getattr(coro, prefix + suffix)
-    raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
+    raise TypeError(
+        f"a coroutine or coroutine like object is required. Got: {type(coro)}"
+    )
 
 
 def coro_get_frame(coro):
@@ -67,7 +75,9 @@ def coro_is_new(coro):
         else:
             return coro.ag_frame and not coro.ag_running
     else:
-        raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
+        raise TypeError(
+            f"a coroutine or coroutine like object is required. Got: {type(coro)}"
+        )
 
 
 def coro_is_suspended(coro):
@@ -86,7 +96,9 @@ def coro_is_suspended(coro):
         else:
             return coro.ag_running
     else:
-        raise TypeError(f"a coroutine or coroutine like object is required. Got: {type(coro)}")
+        raise TypeError(
+            f"a coroutine or coroutine like object is required. Got: {type(coro)}"
+        )
 
 
 def coro_is_finished(coro):
@@ -103,14 +115,22 @@ class CoroStart:
     until its first suspension point, and then resumed.  This facilitates
     later execution of coroutines, encapsulating them in Tasks only at the point when
     they initially become suspended.
+    `context`: A context object to run the coroutine in
     """
 
-    __slots__ = ["coro", "future", "exception"]
+    __slots__ = ["coro", "future", "exception", "context"]
 
-    def __init__(self, coro, auto_start=True):
-        self.coro = coro
+    def __init__(
+        self,
+        coro: Coroutine,
+        *,
+        auto_start: bool = True,
+        context: Optional[Context] = None,
+    ):
+        self.coro: Coroutine = coro
         self.future = None
         self.exception = None
+        self.context: Optional[Context] = context
         if auto_start:
             self.start()
 
@@ -118,10 +138,15 @@ class CoroStart:
         """
         Start the coroutine execution.  It runs the coroutine to its first suspension point
         or until it raises an exception or returns a value, whichever comes first.
+        Returns `True` if the coroutine finished without blocking.
         """
         assert coro_is_new(self.coro)
         try:
-            self.future = self.coro.send(None)
+            self.future = (
+                self.context.run(self.coro.send, None)
+                if self.context
+                else self.coro.send(None)
+            )
         except BaseException as exception:
             # Coroutine returned without blocking
             self.exception = exception
@@ -177,22 +202,32 @@ class CoroStart:
                 raise
             except BaseException as exc:
                 try:
-                    out_value = self.coro.throw(exc)
+                    out_value = (
+                        self.context.run(self.coro.throw, exc)
+                        if self.context
+                        else self.coro.throw(exc)
+                    )
                 except StopIteration as exc:
                     return exc.value
             else:
                 try:
-                    out_value = self.coro.send(in_value)
+                    out_value = (
+                        self.context.run(self.coro.send, in_value)
+                        if self.context
+                        else self.coro.send(in_value)
+                    )
                 except StopIteration as exc:
                     return exc.value
 
 
-async def coro_await(coro):
+async def coro_await(coro: Coroutine, *, context: Optional[Context] = None):
     """
     A simple await, using the partial run primitives, equivalent to
     `async def coro_await(coro): return await coro`
+    `context` can be provided for the coroutine to run in instead
+    of the currently active context.
     """
-    cs = CoroStart(coro)
+    cs = CoroStart(coro, context=context)
     return await cs.resume()
 
 
