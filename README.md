@@ -93,6 +93,8 @@ If the coroutine finished in step 1 above, the Future is a plain future and the
 result is immediately available.  Otherwise, a Task is created continuing from
 the point where the coroutine initially suspended.  In either case, the result
 is an _awaitable_.
+The coroutine is executed in its own context, just as would happen if it were
+directly turned into a `Task`.
 
 `async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
@@ -107,6 +109,27 @@ the following methods:
 - `is_suspended()` returns true if the coroutine start resulted in it becoming suspended.
 - `as_future()` returns a _future_ with the coroutine's results.  If it finished, this is just a plain `Future`,
   otherwise, it is a `Task`.
+
+CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will run using that
+context.
+
+## Context helper
+
+`coro_await` is a helper function to await a coroutine, optionally with a `contextvars.Context`
+object to make active:
+
+```python
+var1 = contextvars.ContextVar("myvar")
+
+async def my_method():
+    var1.set("foo")
+async def main():
+    var1.set("bar")
+    await asynkit.coro_await(my_method(), context=contextvars.copy_context())
+    assert var1.get() == "bar"
+```
+
+this is similar to `contextvars.Context.run()` but works for async functions.
 
 ## Event loop tools
 
