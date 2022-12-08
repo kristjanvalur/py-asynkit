@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - "release/**"
+      - "dev/**"
     tags: [v*]
   pull_request:
   workflow_dispatch:
@@ -37,6 +38,15 @@ jobs:
       if: ${{ matrix.os == 'windows-latest' }}
       run: poetry run pytest --proactor
     
+  testall:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    name: Tests (matrix)
+    needs: tests
+    steps:
+      - name: Check test matrix status
+        if: ${{ needs.tests.result != 'success' }}
+        run: exit 1
 
   build-n-publish:
     name: Build and publish Python distributions to PyPI and TestPyPI
@@ -46,13 +56,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install poetry
-      run: pipx install poetry
     - name: Set up Python 3.9
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v4
       with:
         python-version: 3.9
         cache: 'poetry'
+    - name: Install poetry
+      uses: abatilo/actions-poetry@v2
 
     - name: Build a binary wheel and a source tarball
       run: poetry build
