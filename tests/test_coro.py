@@ -1,8 +1,12 @@
 import asyncio
 import inspect
-import pytest
-import asynkit
 import types
+from contextvars import ContextVar, copy_context
+from typing import Any
+
+import pytest
+
+import asynkit
 
 
 class TestEager:
@@ -166,6 +170,43 @@ class TestCoro:
         await asyncio.sleep(0)
         task.cancel()
         assert await task is d
+
+
+contextvar1:ContextVar = ContextVar("contextvar1")
+
+
+@pytest.mark.parametrize("block", [True, False])
+class TestContext:
+    async def coro_block(self, var: ContextVar, val: Any):
+        var.set(val)
+        await asyncio.sleep(0)
+        assert var.get() is val
+
+    async def coro_noblock(self, var: ContextVar, val: Any):
+        var.set(val)
+        assert var.get() is val
+
+    def get_coro(self, block):
+        return self.coro_block if block else self.coro_noblock
+
+    async def test_no_context(self, block):
+        coro = self.get_coro(block)
+        contextvar1.set("bar")
+        await asynkit.coro_await(coro(contextvar1, "foo"))
+
+        assert contextvar1.get() == "foo"
+
+    async def test_private_context(self, block):
+        coro = self.get_coro(block)
+        contextvar1.set("bar")
+        context = copy_context()
+        await asynkit.coro_await(coro(contextvar1, "foo"), context=context)
+        assert contextvar1.get() == "bar"
+
+        def check():
+            assert contextvar1.get() == "foo"
+
+        context.run(check)
 
 
 @pytest.mark.parametrize("kind", ["cr", "gi", "ag"])

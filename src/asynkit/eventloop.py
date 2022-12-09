@@ -1,9 +1,11 @@
 import asyncio
+import asyncio.base_events
 import contextlib
 import sys
-from asyncio import events
+from asyncio import events, Handle
+from typing import TYPE_CHECKING, Deque, Any
 
-from .tools import deque_pop, create_task, task_from_handle
+from .tools import create_task, deque_pop, task_from_handle
 
 __all__ = [
     "SchedulingMixin",
@@ -22,8 +24,16 @@ __all__ = [
     "blocked_tasks",
 ]
 
+if TYPE_CHECKING:
 
-class SchedulingMixin:
+    class _Base(asyncio.base_events.BaseEventLoop):
+        _ready: Deque[Handle]
+
+else:
+    _Base = object
+
+
+class SchedulingMixin(_Base):
     """
     A mixin class adding features to the base event loop.
     """
@@ -101,7 +111,7 @@ class SchedulingSelectorEventLoop(asyncio.SelectorEventLoop, SchedulingMixin):
     pass
 
 
-if hasattr(asyncio, "ProactorEventLoop"):
+if not TYPE_CHECKING and hasattr(asyncio, "ProactorEventLoop"):
 
     class SchedulingProactorEventLoop(asyncio.ProactorEventLoop, SchedulingMixin):
         pass

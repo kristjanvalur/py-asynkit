@@ -13,6 +13,9 @@ classifiers = [
     "Framework :: AsyncIO"
 ]
 include=["src/asynkit/py.typed"]
+[tool.poetry.group.dev.dependencies]
+mypy = "^0.991"
+
 
 
 [tool.poe.tasks]
