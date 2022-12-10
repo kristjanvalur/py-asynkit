@@ -8,24 +8,32 @@ import pytest
 
 import asynkit
 
+eager_var = ContextVar("eager_var")
+
 
 class TestEager:
     async def coro1(self, log):
         log.append(1)
+        eager_var.set("a")
         await asyncio.sleep(0)
         log.append(2)
+        eager_var.set("b")
 
     @asynkit.func_eager
     async def coro2(self, log):
         log.append(1)
+        eager_var.set("a")
         await asyncio.sleep(0)
         log.append(2)
+        eager_var.set("b")
 
     @asynkit.eager
     async def coro3(self, log):
         log.append(1)
+        eager_var.set("a")
         await asyncio.sleep(0)
         log.append(2)
+        eager_var.set("b")
 
     async def coro4(self, log):
         log.append(1)
@@ -43,28 +51,35 @@ class TestEager:
 
     async def test_no_eager(self):
         log = []
+        eager_var.set("X")
         future = self.coro1(log)
         log.append("a")
         await future
         assert log == ["a", 1, 2]
+        assert eager_var.get() == "b"
 
     async def test_coro_eager(self):
         log = []
+        eager_var.set("X")
         future = asynkit.coro_eager(self.coro1(log))
         log.append("a")
         await future
         assert log == [1, "a", 2]
+        assert eager_var.get() == "X"
 
     async def test_func_eager(self):
         log = []
+        eager_var.set("X")
         future = self.coro2(log)
         log.append("a")
         await future
         assert log == [1, "a", 2]
+        assert eager_var.get() == "X"
 
     async def test_eager(self):
         """Test the `coro` helper, used both as wrapper and decorator"""
         log = []
+        eager_var.set("X")
         future = asynkit.eager(self.coro1(log))
         log.append("a")
         await future
@@ -74,6 +89,7 @@ class TestEager:
         log.append("a")
         await future
         assert log == [1, "a", 2]
+        assert eager_var.get() == "X"
 
     async def test_eager_noblock(self):
         """Test `eager` when coroutine does not block"""
@@ -172,7 +188,7 @@ class TestCoro:
         assert await task is d
 
 
-contextvar1:ContextVar = ContextVar("contextvar1")
+contextvar1: ContextVar = ContextVar("contextvar1")
 
 
 @pytest.mark.parametrize("block", [True, False])

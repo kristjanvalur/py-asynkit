@@ -4,7 +4,7 @@ import inspect
 import sys
 import types
 import typing
-from contextvars import Context
+from contextvars import Context, copy_context
 from typing import Optional, Union
 
 from .tools import create_task
@@ -242,7 +242,7 @@ def coro_eager(coro):
     """
 
     # start the coroutine.  Run it to the first block, exception or return value.
-    cs = CoroStart(coro)
+    cs = CoroStart(coro, context=copy_context())
     return cs.as_future()
 
 
