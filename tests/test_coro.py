@@ -307,7 +307,7 @@ async def test_current():
     coro = None
 
     async def foo():
-        f = asynkit.coroutine.coro_get_frame(coro)
+        asynkit.coroutine.coro_get_frame(coro)
 
         # a running coroutine is neither new, suspended nor finished.
         assert not asynkit.coro_is_new(coro)

@@ -45,7 +45,9 @@ def _coro_getattr(coro, suffix):
     for prefix in ("cr_", "gi_", "ag_"):
         if hasattr(coro, prefix + suffix):
             if prefix == "ag_" and suffix == "running":
-                return False  # async generators are shown as ag_running=True, even when the code is not executiong.  Override that.
+                # async generators are shown as ag_running=True, even when
+                # the code is not executing. Override that.
+                return False
             # coroutine (async function)
             return getattr(coro, prefix + suffix)
     raise TypeError(
@@ -55,7 +57,8 @@ def _coro_getattr(coro, suffix):
 
 def coro_get_frame(coro):
     """
-    Get the current frame of a coroutine or coroutine like object (generator, legacy coroutines)
+    Get the current frame of a coroutine or coroutine like object
+    (generator, legacy coroutines)
     """
     return _coro_getattr(coro, "frame")
 
@@ -112,7 +115,7 @@ def coro_is_finished(coro):
 class CoroStart:
     """
     A class to encapsulate the state of a corourine which is manually started
-    until its first suspension point, and then resumed.  This facilitates
+    until its first suspension point, and then resumed. This facilitates
     later execution of coroutines, encapsulating them in Tasks only at the point when
     they initially become suspended.
     `context`: A context object to run the coroutine in
@@ -136,9 +139,9 @@ class CoroStart:
 
     def start(self):
         """
-        Start the coroutine execution.  It runs the coroutine to its first suspension point
-        or until it raises an exception or returns a value, whichever comes first.
-        Returns `True` if the coroutine finished without blocking.
+        Start the coroutine execution. It runs the coroutine to its first suspension
+        point or until it raises an exception or returns a value, whichever comes
+        first. Returns `True` if the coroutine finished without blocking.
         """
         assert coro_is_new(self.coro)
         try:
@@ -234,14 +237,14 @@ async def coro_await(coro: Coroutine, *, context: Optional[Context] = None):
 def coro_eager(coro):
     """
     Make the coroutine "eager":
-    Start the coroutine.  If it blocks, create a task to continue
+    Start the coroutine. If it blocks, create a task to continue
     execution and return immediately to the caller.
     The return value is either a non-blocking awaitable returning any
     result or exception, or a Task object.
     This implements a depth-first kind of Task execution.
     """
 
-    # start the coroutine.  Run it to the first block, exception or return value.
+    # start the coroutine. Run it to the first block, exception or return value.
     cs = CoroStart(coro, context=copy_context())
     return cs.as_future()
 

@@ -18,7 +18,7 @@ $ pip install asynkit
 Did you ever wish that your _coroutines_ started right away, and only returned control to
 the caller once they become blocked?  Like the way the `async` and `await` keywords work in the __C#__ language?
 
-Now they can.  Just decorate or convert them with `acynkit.eager`:
+Now they can. Just decorate or convert them with `acynkit.eager`:
 
 ```python
 @asynkit.eager
@@ -37,12 +37,12 @@ async def my_complex_thing():
 
 By decorating your function with `eager`, the coroutine will start executing __right away__ and
 control will return to the calling function as soon as it _suspends_, _returns_, or _raises_
-an exception.  In case it is suspended, a _Task_ is created and returned, ready to resume
+an exception. In case it is suspended, a _Task_ is created and returned, ready to resume
 execution from that point.
 
 Notice how, in either case, control is returned __directly__ back to the
-calling function, maintaining synchronous execution.  In effect, conventional code
-calling order is maintained as much as possible.  We call this _depth-first-execution_.
+calling function, maintaining synchronous execution. In effect, conventional code
+calling order is maintained as much as possible. We call this _depth-first-execution_.
 
 This allows you to prepare and dispatch long running operations __as soon as possible__ while
 still being able to asynchronously wait for the result.
@@ -90,8 +90,8 @@ of invocation in each such case.
 2. It returns `CoroStart.as_future()`.
 
 If the coroutine finished in step 1 above, the Future is a plain future and the
-result is immediately available.  Otherwise, a Task is created continuing from
-the point where the coroutine initially suspended.  In either case, the result
+result is immediately available. Otherwise, a Task is created continuing from
+the point where the coroutine initially suspended. In either case, the result
 is an _awaitable_.
 The coroutine is executed in its own context, just as would happen if it were
 directly turned into a `Task`.
@@ -100,14 +100,14 @@ directly turned into a `Task`.
 
 ### `CoroStart`
 
-This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function.  It has
+This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. It has
 the following methods:
 
 - `start()` runs the coroutine until it either suspends, returns, or raises an exception. It is usually automatically
   invoked by the class Initializer
 - `resume()` is an async function which continues the execution of the coroutine from the initial state.
 - `is_suspended()` returns true if the coroutine start resulted in it becoming suspended.
-- `as_future()` returns a _future_ with the coroutine's results.  If it finished, this is just a plain `Future`,
+- `as_future()` returns a _future_ with the coroutine's results. If it finished, this is just a plain `Future`,
   otherwise, it is a `Task`.
 
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will run using that
@@ -143,7 +143,7 @@ scheduling of tasks.
 
 ### `SchedulingMixin` mixin class
 
-This class adds some handy scheduling functions to the event loop.  They primarily
+This class adds some handy scheduling functions to the event loop. They primarily
 work with the _ready queue_, a queue of callbacks representing tasks ready
 to be executed.
 
@@ -195,15 +195,15 @@ after a specific task.
 ### `task_reinsert(task, pos)`
 
 Takes a _runnable_ task (for example just created with `asyncio.create_task()` or similar) and
-reinserts it at a given position in the queue.  
+reinserts it at a given position in the queue. 
 Similarly as for `sleep_insert()`, this can be useful to achieve
 certain scheduling goals.
 
 ### `task_switch(task, result=None, sleep_pos=None)`
 
 Immediately moves the given task to the head of the ready queue and switches to it, assuming it is runnable.
-When this call returns, returns `result`.  if `sleep_pos is not None`, the current task will be
-put to sleep at that position, using `sleep_insert()`.  Otherwise the current task is put at the end
+When this call returns, returns `result`. If `sleep_pos is not None`, the current task will be
+put to sleep at that position, using `sleep_insert()`. Otherwise the current task is put at the end
 of the ready queue.
 
 ### `task_is_blocked(task)`
@@ -221,8 +221,8 @@ awaits execution.
 Implements depth-first task scheduling.
 
 Similar to `asyncio.create_task()` this creates a task but starts it running right away, and positions the caller to be woken
-up right after it blocks.  The effect is similar to using `asynkit.eager()` but
-it achieves its goals solely by modifying the runnable queue.  A `Task` is always
+up right after it blocks. The effect is similar to using `asynkit.eager()` but
+it achieves its goals solely by modifying the runnable queue. A `Task` is always
 created, unlike `eager`, which only creates a task if the target blocks.
 
 ## Runnable task helpers
@@ -245,9 +245,9 @@ Returns a set of the tasks that are currently blocked on some future in the give
 
 ## Coroutine helpers
 
-A couple of functions are provided to introspect the state of coroutine objects.  They
+A couple of functions are provided to introspect the state of coroutine objects. They
 work on both regular __async__ coroutines, __classic__ coroutines (using `yield from`) and
-__async generators__.  
+__async generators__.
 
 ### `coro_is_new(coro)`
 

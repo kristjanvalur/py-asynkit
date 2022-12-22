@@ -11,6 +11,23 @@ on:
   workflow_dispatch:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v2
+      - name: Install dependencies
+        run: poetry install
+      - name: Run Ruff
+        run: poetry run poe lint
+      - name: Run Black
+        run: poetry run poe black --check
+
   tests:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -55,8 +72,9 @@ jobs:
     name: Build and publish Python distributions to PyPI and TestPyPI
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags') 
-    needs: tests
-
+    needs:
+      - tests
+      - lint
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python 3.9
