@@ -82,15 +82,128 @@ async def assert_exhausted(g):
     assert r is None
 
 
-@pytest.mark.parametrize("gen_type", ["std", "oob"], ids=["async gen", "Generator"])
+@pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
+def normalgen(request):
+    if request.param == "std":
+        return standard()
+    else:
+        g = Generator()
+        return g.init(top(g))
+
+
+@pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
+def failgen(request):
+    if request.param == "std":
+        return standardfail()
+    else:
+        g = Generator()
+        return g.init(topfail(g))
+
+
+@pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
+def catchgen1(request):
+    if request.param == "std":
+
+        async def gen():
+            try:
+                yield 1
+            except EOFError:
+                yield 2
+
+        return gen()
+    else:
+        g = Generator()
+
+        async def gen():
+            try:
+                await g.ayield(1)
+            except EOFError:
+                await g.ayield(2)
+
+        return g.init(gen())
+
+
+@pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
+def catchgen2(request):
+    if request.param == "std":
+
+        async def gen():
+            try:
+                yield 1
+            except EOFError:
+                pass
+
+        return gen()
+    else:
+        g = Generator()
+
+        async def gen():
+            try:
+                await g.ayield(1)
+            except EOFError:
+                pass
+
+        return g.init(gen())
+
+
+@pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
+def closegen1(request):
+    if request.param == "std":
+
+        async def gen():
+            try:
+                yield 1
+            except GeneratorExit:
+                yield 2
+                raise
+
+        return gen()
+    else:
+        g = Generator()
+
+        async def gen():
+            try:
+                await g.ayield(1)
+            except GeneratorExit:
+                await g.ayield(2)
+                raise
+
+        return g.init(gen())
+
+
+@pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
+def closegen2(request):
+    if request.param == "std":
+
+        async def gen():
+            try:
+                for i in range(10):
+                    yield i
+            except GeneratorExit:
+                pass
+
+        return gen()
+    else:
+        g = Generator()
+
+        async def gen():
+            try:
+                for i in range(10):
+                    await g.ayield(i)
+            except GeneratorExit:
+                pass
+
+        return g.init(gen())
+
+
 class TestGenerator:
-    async def test_generator_iter(self, gen_type):
-        g = self.normal(gen_type)
+    async def test_generator_iter(self, normalgen):
+        g = normalgen
         results = [f async for f in g]
         assert results == [11, 12, 13, 21, 22, 23]
 
-    async def test_generator_send(self, gen_type):
-        g = self.normal(gen_type)
+    async def test_generator_send(self, normalgen):
+        g = normalgen
         r = await g.asend(None)
         assert r == 11
         r = await g.asend(0)
@@ -98,51 +211,109 @@ class TestGenerator:
         r = await g.asend(100)
         assert r == 113
 
-    def normal(self, gen_type):
-        if gen_type == "std":
-            return standard()
-        g = Generator()
-        return g.init(top(g))
-
-    def fail(self, gen_type):
-        if gen_type == "std":
-            return standardfail()
-        g = Generator()
-        return g.init(topfail(g))
-
-    async def test_send_to_new(self, gen_type):
+    async def test_send_to_new(self, normalgen):
         # test send to new generator
-        g = self.normal(gen_type)
+        g = normalgen
         with pytest.raises(TypeError):
             await g.asend("foo")
         # but it should be iterable
         assert await g.__anext__() == 11
 
-    async def test_send_exhausted(self, gen_type):
+    async def test_send_exhausted(self, normalgen):
         # test exhausted generator
-        g = self.normal(gen_type)
+        g = normalgen
         [f async for f in g]
         # generator should now be exhausted
         await assert_exhausted(g)
 
-    async def test_throw(self, gen_type):
+    async def test_throw(self, normalgen):
         # test exhaustion after throw
-        g = self.normal(gen_type)
+        g = normalgen
         with pytest.raises(ZeroDivisionError):
             await g.athrow(ZeroDivisionError)
         await assert_exhausted(g)
 
-    async def test_throw_live(self, gen_type):
+    async def test_throw_catch1(self, catchgen1):
+        # test exhaustion after throw
+        g = catchgen1
+        n = await g.__anext__()
+        assert n == 1
+        n = await g.athrow(EOFError())
+        assert n == 2
+
+    async def test_throw_catch2(self, catchgen2):
+        # test exhaustion after throw
+        g = catchgen2
+        n = await g.__anext__()
+        assert n == 1
+        with pytest.raises(StopAsyncIteration):
+            n = await g.athrow(EOFError())
+
+    async def test_throw_live(self, normalgen):
         # test exhaustion after throw while live
-        g = self.normal(gen_type)
+        g = normalgen
         await g.__anext__()
         with pytest.raises(ZeroDivisionError):
             await g.athrow(ZeroDivisionError)
         await assert_exhausted(g)
 
-    async def test_fail(self, gen_type):
+    async def test_fail(self, failgen):
         # test generator which throws an error
-        g = self.fail(gen_type)
+        g = failgen
         with pytest.raises(ZeroDivisionError):
             [f async for f in g]
         await assert_exhausted(g)
+
+    async def test_close_on_exhausted(self, normalgen):
+        g = normalgen
+        [f async for f in g]
+        n = await g.aclose()
+        assert n is None
+
+    async def test_close_on_failed(self, failgen):
+        g = failgen
+        with pytest.raises(ZeroDivisionError):
+            [f async for f in g]
+        n = await g.aclose()
+        assert n is None
+
+    async def test_close_on_active(self, normalgen):
+        g = normalgen
+        n = await g.__anext__()
+        assert n == 11
+        n = await g.aclose()
+        assert n is None
+        with pytest.raises(StopAsyncIteration):
+            await g.__anext__()
+
+    async def test_close_twice_on_active(self, normalgen):
+        g = normalgen
+        n = await g.__anext__()
+        assert n == 11
+        n = await g.aclose()
+        assert n is None
+        await g.aclose()
+        with pytest.raises(StopAsyncIteration):
+            await g.__anext__()
+
+    async def test_close_yield(self, closegen1):
+        g = closegen1
+        n = await g.__anext__()
+        assert n == 1
+        with pytest.raises(RuntimeError) as err:
+            await g.aclose()
+        assert "ignored GeneratorExit" in str(err)
+        # generator is still active and will continue now
+        with pytest.raises(GeneratorExit):
+            await g.__anext__()
+
+    async def test_close_exit(self, closegen2):
+        g = closegen2
+        n = await g.__anext__()
+        assert n == 0
+        await g.aclose()
+        # and again
+        await g.aclose()
+        # generator is clos
+        with pytest.raises(StopAsyncIteration):
+            await g.__anext__()

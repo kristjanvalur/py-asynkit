@@ -1,5 +1,5 @@
 import types
-from typing import Any, Coroutine, Optional, Tuple
+from typing import Any, Coroutine, Optional, Tuple, Generator as GeneratorType
 
 from .coroutine import coro_is_finished
 
@@ -19,7 +19,9 @@ class Monitor:
         return self
 
     @types.coroutine
-    def oob_await(self, message: Optional[Any] = None) -> Tuple[bool, Any]:
+    def oob_await(
+        self, message: Optional[Any] = None
+    ) -> GeneratorType[Tuple[bool, Any], Any, Any]:
         """
         Await with oob (Out Of Band data)
         returns a tuple `(is_oob, data)` where if `is_oob` is true, `data`
@@ -83,7 +85,6 @@ class Generator(Monitor):
             raise StopAsyncIteration()
         is_oob, result = await self.oob_await(value)
         if not is_oob:
-            self.exited = True
             raise StopAsyncIteration()
         return result
 
@@ -92,12 +93,18 @@ class Generator(Monitor):
             return None
         is_oob, result = await self.oob_throw(type, value, traceback)
         if not is_oob:
-            self.exited = True
             raise StopAsyncIteration()
         return result
 
     async def aclose(self):
-        await self.athrow(GeneratorExit)
+        if coro_is_finished(self.coro):
+            return
+        try:
+            is_oob, result = await self.oob_throw(GeneratorExit)
+        except (GeneratorExit):
+            return
+        if is_oob:
+            raise RuntimeError("async generator ignored GeneratorExit")
 
     async def ayield(self, value: Any) -> Any:
         """
