@@ -83,7 +83,13 @@ class Generator(Monitor):
     async def asend(self, value):
         if coro_is_finished(self.coro):
             raise StopAsyncIteration()
-        is_oob, result = await self.oob_await(value)
+        try:
+            is_oob, result = await self.oob_await(value)
+        except StopAsyncIteration as err:
+            # similar to pep479, StopAsyncIteration must not bubble out
+            # the case for StopIteration is already handled by coro.send()
+            # but raises a different "coroutine raised ..." RuntimeError.
+            raise RuntimeError('async generator raised StopAsyncIteration') from err
         if not is_oob:
             raise StopAsyncIteration()
         return result
@@ -91,7 +97,10 @@ class Generator(Monitor):
     async def athrow(self, type, value=None, traceback=None):
         if coro_is_finished(self.coro):
             return None
-        is_oob, result = await self.oob_throw(type, value, traceback)
+        try:
+            is_oob, result = await self.oob_throw(type, value, traceback)
+        except StopAsyncIteration as err:
+            raise RuntimeError('async generator raised StopAsyncIteration') from err
         if not is_oob:
             raise StopAsyncIteration()
         return result
@@ -101,6 +110,8 @@ class Generator(Monitor):
             return
         try:
             is_oob, result = await self.oob_throw(GeneratorExit)
+        except StopAsyncIteration as err:
+            raise RuntimeError('async generator raised StopAsyncIteration') from err
         except (GeneratorExit):
             return
         if is_oob:

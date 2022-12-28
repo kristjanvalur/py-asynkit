@@ -196,6 +196,33 @@ def closegen2(request):
         return g.init(gen())
 
 
+@pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
+def gen479(request):
+    if request.param == "std":
+
+        async def gen(err):
+            for i in range(2):
+                try:
+                    yield i
+                except (EOFError, GeneratorExit):
+                    pass
+                raise err()
+
+        return gen
+    else:
+        g = Generator()
+
+        async def gen(err):
+            for i in range(2):
+                try:
+                    await g.ayield(i)
+                except (EOFError, GeneratorExit):
+                    pass
+                raise err()
+
+        return lambda e: g.init(gen(e))
+
+
 class TestGenerator:
     async def test_generator_iter(self, normalgen):
         g = normalgen
@@ -317,3 +344,27 @@ class TestGenerator:
         # generator is clos
         with pytest.raises(StopAsyncIteration):
             await g.__anext__()
+
+    async def test_pep_479(self, gen479):
+        for et in (StopIteration, StopAsyncIteration):
+            g = gen479(et)
+            n = await g.__anext__()
+            assert n == 0
+            with pytest.raises(RuntimeError) as err:
+                await g.__anext__()
+            assert isinstance(err.value.__cause__, et)
+            assert err.match(r"(async generator|coroutine) raised " + et.__name__)
+
+            g = gen479(et)
+            await g.__anext__()
+            with pytest.raises(RuntimeError) as err:
+                await g.athrow(EOFError())
+            assert isinstance(err.value.__cause__, et)
+            assert err.match(r"(async generator|coroutine) raised " + et.__name__)
+
+            g = gen479(et)
+            await g.__anext__()
+            with pytest.raises(RuntimeError) as err:
+                await g.aclose()
+            assert isinstance(err.value.__cause__, et)
+            assert err.match(r"(async generator|coroutine) raised " + et.__name__)
