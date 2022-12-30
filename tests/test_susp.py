@@ -5,24 +5,73 @@ import pytest
 from asynkit.susp import Generator, Monitor
 
 
-async def test_monitor():
-    async def helper(m):
-        back = await m.oob("foo")
-        await asyncio.sleep(0)
-        back = await m.oob(back + "foo")
-        await asyncio.sleep(0)
-        return back + "foo"
+class TestMonitor:
+    async def test_monitor(self):
+        """
+        Test basic monitor functionality
+        """
 
-    m = Monitor()
-    is_oob, back = await m.init(helper(m)).oob_await(None)
-    assert is_oob
-    assert back == "foo"
-    is_oob, back = await m.oob_await("hoo")
-    assert is_oob
-    assert back == "hoofoo"
-    is_oob, back = await m.oob_await("how")
-    assert not is_oob
-    assert back == "howfoo"
+        async def helper(m):
+            back = await m.oob("foo")
+            await asyncio.sleep(0)
+            back = await m.oob(back + "foo")
+            await asyncio.sleep(0)
+            return back + "foo"
+
+        m = Monitor()
+        c = helper(m)
+        is_oob, back = await m.oob_await(c, None)
+        assert is_oob
+        assert back == "foo"
+        is_oob, back = await m.oob_await(c, "hoo")
+        assert is_oob
+        assert back == "hoofoo"
+        is_oob, back = await m.oob_await(c, "how")
+        assert not is_oob
+        assert back == "howfoo"
+
+    async def test_throw(self):
+        async def helper(m):
+            return m
+        m = Monitor()
+        c = helper(m)
+        with pytest.raises(EOFError):
+            await m.oob_throw(c, EOFError())
+        
+    async def test_monitor_detached(self):
+        """
+        Test that we get an error if no one is listening
+        """
+
+        async def helper(m):
+            back = await m.oob(1)
+            assert back is None
+            await asyncio.sleep(0)
+            back = await m.oob(2)
+            assert back is None
+
+        m = Monitor()
+        c = helper(m)
+        with pytest.raises(RuntimeError) as err:
+            await c
+        assert err.match(r"not active")
+
+    async def test_monitor_re_enter(self):
+        """
+        Test that the closest monitor listener receives
+        the messages
+        """
+
+        async def helper(m):
+            with pytest.raises(RuntimeError) as err:
+                await m.aawait(helper(m))
+            assert err.match(r"cannot be re-entered")
+            return 3
+
+        m = Monitor()
+        c = helper(m)
+        t = await m.aawait(c, None)
+        assert t == (False, 3)
 
 
 async def top(g):
