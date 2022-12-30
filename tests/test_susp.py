@@ -14,7 +14,7 @@ async def test_monitor():
         return back + "foo"
 
     m = Monitor()
-    is_oob, back = await m.init(helper(m)).oob_await()
+    is_oob, back = await m.init(helper(m)).oob_await(None)
     assert is_oob
     assert back == "foo"
     is_oob, back = await m.oob_await("hoo")

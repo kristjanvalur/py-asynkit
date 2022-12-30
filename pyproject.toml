@@ -23,6 +23,7 @@ covbranch = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 
 [tool.poetry.dependencies]
 python = "^3.7"
+typing-extensions = "^4.4.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^0.991"
