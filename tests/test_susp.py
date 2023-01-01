@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from asynkit.susp import Generator, Monitor
+from asynkit.susp import GeneratorObject, Monitor
 
 
 class TestMonitor:
@@ -138,7 +138,7 @@ def normalgen(request):
     if request.param == "std":
         return standard()
     else:
-        g = Generator()
+        g = GeneratorObject()
         return g.init(top(g))
 
 
@@ -147,7 +147,7 @@ def failgen(request):
     if request.param == "std":
         return standardfail()
     else:
-        g = Generator()
+        g = GeneratorObject()
         return g.init(topfail(g))
 
 
@@ -163,7 +163,7 @@ def catchgen1(request):
 
         return gen()
     else:
-        g = Generator()
+        g = GeneratorObject()
 
         async def gen():
             try:
@@ -186,7 +186,7 @@ def catchgen2(request):
 
         return gen()
     else:
-        g = Generator()
+        g = GeneratorObject()
 
         async def gen():
             try:
@@ -210,7 +210,7 @@ def closegen1(request):
 
         return gen()
     else:
-        g = Generator()
+        g = GeneratorObject()
 
         async def gen():
             try:
@@ -235,7 +235,7 @@ def closegen2(request):
 
         return gen()
     else:
-        g = Generator()
+        g = GeneratorObject()
 
         async def gen():
             try:
@@ -261,7 +261,7 @@ def gen479(request):
 
         return gen
     else:
-        g = Generator()
+        g = GeneratorObject()
 
         async def gen(err):
             for i in range(2):
@@ -445,7 +445,7 @@ class TestGenerator:
                     # print('received', message)
 
             def consumer():
-                g = Generator()
+                g = GeneratorObject()
                 return g.init(gf(g))
 
         agenerator = consumer()

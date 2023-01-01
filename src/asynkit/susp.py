@@ -1,8 +1,11 @@
 import types
 from types import TracebackType
-from typing import Any, AsyncIterator, Coroutine
-from typing import Generator as GeneratorType
 from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Coroutine,
+    Generator,
     Generic,
     Optional,
     Tuple,
@@ -11,7 +14,6 @@ from typing import (
     Union,
     cast,
     overload,
-    Callable,
 )
 
 from typing_extensions import Literal
@@ -23,6 +25,10 @@ V = TypeVar("V")
 
 
 class Monitor(Generic[T, V]):
+    """
+    A class to await a coroutine while receiving and sending OOB (out of band)
+    data to the coroutine and leaving it suspended.
+    """
 
     # return type of the await
     S = TypeVar("S")
@@ -41,7 +47,7 @@ class Monitor(Generic[T, V]):
         coro: Coroutine[Any, Any, Any],
         callable: Callable[..., Any],
         args: Tuple[Any, ...],
-    ) -> GeneratorType[Any, Any, OOB[T]]:
+    ) -> Generator[Any, Any, OOB[T]]:
         if self.state != 0:
             raise RuntimeError("Monitor cannot be re-entered")
         self.state = 1
@@ -118,7 +124,7 @@ class Monitor(Generic[T, V]):
         return await self._oob_generic(coro, coro.throw, (type, value, traceback))
 
     @types.coroutine
-    def oob(self, data: T) -> GeneratorType[T, V, V]:
+    def oob(self, data: T) -> Generator[T, V, V]:
         """
         Send Out Of Band data to a higher up caller which is using `oob_await()`
         """
@@ -129,7 +135,7 @@ class Monitor(Generic[T, V]):
         return (yield data)
 
 
-class Generator(AsyncIterator[T]):
+class GeneratorObject(AsyncIterator[T]):
     __slots__ = ["monitor", "coro", "running"]
 
     def __init__(self, coro: Optional[Coroutine[Any, Any, Any]] = None) -> None:
@@ -137,7 +143,7 @@ class Generator(AsyncIterator[T]):
         self.coro = coro
         self.running = False
 
-    def init(self, coro: Coroutine[Any, Any, Any]) -> "Generator[T]":
+    def init(self, coro: Coroutine[Any, Any, Any]) -> "GeneratorObject[T]":
         self.coro = coro
         return self
 
