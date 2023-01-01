@@ -136,18 +136,34 @@ class Monitor(Generic[T, V]):
         return (yield data)
 
 
-class GeneratorObject(AsyncIterator[T]):
+class GeneratorObject(Generic[T]):
+    __slots__ = ["monitor"]
+
+    def __init__(
+        self,
+    ) -> None:
+        self.monitor: Monitor[T, Any] = Monitor()
+
+    def __call__(self, coro: Coroutine[Any, Any, Any]) -> "GeneratorObjectIter[T]":
+        return GeneratorObjectIter(self.monitor, coro)
+
+    async def ayield(self, value: Any) -> Any:
+        """
+        Asynchronously yield the value to the Generator object
+        """
+        return await self.monitor.oob(value)
+
+
+class GeneratorObjectIter(AsyncIterator[T]):
     __slots__ = ["monitor", "coro", "running", "finalizer", "__weakref__"]
 
-    def __init__(self, coro: Optional[Coroutine[Any, Any, Any]] = None) -> None:
-        self.monitor: Monitor[T, Any] = Monitor()
+    def __init__(
+        self, monitor: Monitor[T, Any], coro: Coroutine[Any, Any, Any]
+    ) -> None:
+        self.monitor = monitor
         self.coro = coro
         self.running = False
         self.finalizer: Optional[Callable[[Any], None]] = None
-
-    def init(self, coro: Coroutine[Any, Any, Any]) -> "GeneratorObject[T]":
-        self.coro = coro
-        return self
 
     def __aiter__(self) -> AsyncIterator[T]:
         return self
@@ -168,7 +184,6 @@ class GeneratorObject(AsyncIterator[T]):
     async def asend(self, value: Any) -> T:
         if self.running:
             raise RuntimeError("asend(): asynchronous generator is already running")
-        assert self.coro is not None
         if coro_is_finished(self.coro):
             raise StopAsyncIteration()
         elif coro_is_new(self.coro):
@@ -227,7 +242,6 @@ class GeneratorObject(AsyncIterator[T]):
                 ("athrow" if type is not None else "aclose")
                 + "(): asynchronous generator is already running"
             )
-        assert self.coro is not None
         if coro_is_finished(self.coro):
             return None
         elif coro_is_new(self.coro):
@@ -256,9 +270,3 @@ class GeneratorObject(AsyncIterator[T]):
                 raise RuntimeError("async generator ignored GeneratorExit")
 
         return cast(T, result)
-
-    async def ayield(self, value: Any) -> Any:
-        """
-        Asynchronously yield the value to the Generator object
-        """
-        return await self.monitor.oob(value)

@@ -1,5 +1,4 @@
 import asyncio
-import gc
 import sys
 
 import pytest
@@ -140,7 +139,7 @@ def normalgen(request):
         return standard()
     else:
         g = GeneratorObject()
-        return g.init(top(g))
+        return g(top(g))
 
 
 @pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
@@ -149,7 +148,7 @@ def failgen(request):
         return standardfail()
     else:
         g = GeneratorObject()
-        return g.init(topfail(g))
+        return g(topfail(g))
 
 
 @pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
@@ -172,7 +171,7 @@ def catchgen1(request):
             except EOFError:
                 await g.ayield(2)
 
-        return g.init(gen())
+        return g(gen())
 
 
 @pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
@@ -195,7 +194,7 @@ def catchgen2(request):
             except EOFError:
                 pass
 
-        return g.init(gen())
+        return g(gen())
 
 
 @pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
@@ -220,7 +219,7 @@ def closegen1(request):
                 await g.ayield(2)
                 raise
 
-        return g.init(gen())
+        return g(gen())
 
 
 @pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
@@ -245,7 +244,7 @@ def closegen2(request):
             except GeneratorExit:
                 pass
 
-        return g.init(gen())
+        return g(gen())
 
 
 @pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
@@ -272,7 +271,7 @@ def gen479(request):
                     pass
                 raise err()
 
-        return lambda e: g.init(gen(e))
+        return lambda e: g(gen(e))
 
 
 class TestGenerator:
@@ -447,7 +446,7 @@ class TestGenerator:
 
             def consumer():
                 g = GeneratorObject()
-                return g.init(gf(g))
+                return g(gf(g))
 
         agenerator = consumer()
         await agenerator.asend(None)
@@ -503,7 +502,7 @@ class TestGenerator:
 
             def generator():
                 go = GeneratorObject()
-                return go.init(genfunc(go))
+                return go(genfunc(go))
 
         # Test that cleanup occurs by GC
         g = generator()
@@ -512,7 +511,6 @@ class TestGenerator:
         assert i == 0
         assert not closed
         g = None
-        gc.collect()
         await asyncio.sleep(0.01)
         assert closed
 
