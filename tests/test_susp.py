@@ -1,4 +1,5 @@
 import asyncio
+import sys
 
 import pytest
 
@@ -33,11 +34,12 @@ class TestMonitor:
     async def test_throw(self):
         async def helper(m):
             return m
+
         m = Monitor()
         c = helper(m)
         with pytest.raises(EOFError):
             await m.oob_throw(c, EOFError())
-        
+
     async def test_monitor_detached(self):
         """
         Test that we get an error if no one is listening
@@ -417,3 +419,57 @@ class TestGenerator:
                 await g.aclose()
             assert isinstance(err.value.__cause__, et)
             assert err.match(r"(async generator|coroutine) raised " + et.__name__)
+
+    @pytest.mark.parametrize("gentype", ["std", "oob"], ids=["async gen", "Generator"])
+    async def test_issue_74956(self, gentype):
+        # simultanous use of generator by different coroutines is not
+        # allowed.
+        # https://github.com/python/cpython/issues/74956
+        # skipped for std generator in 3.7 version
+        if gentype == "std":
+            if sys.version_info < (3, 8):
+                pytest.skip("broken prior to 3.8")
+
+            async def consumer():
+                while True:
+                    await asyncio.sleep(0)
+                    yield
+                    # print('received', message)
+
+        else:
+
+            async def gf(g):
+                while True:
+                    await asyncio.sleep(0)
+                    await g.ayield(None)
+                    # print('received', message)
+
+            def consumer():
+                g = Generator()
+                return g.init(gf(g))
+
+        agenerator = consumer()
+        await agenerator.asend(None)
+        fa = asyncio.create_task(agenerator.asend("A"))
+        fb = asyncio.create_task(agenerator.asend("B"))
+        await fa
+        with pytest.raises(RuntimeError) as err:
+            await fb
+        assert err.match("already running")
+
+        agenerator = consumer()
+        await agenerator.asend(None)
+        fa = asyncio.create_task(agenerator.asend("A"))
+        fb = asyncio.create_task(agenerator.athrow(EOFError))
+        await fa
+        with pytest.raises(RuntimeError) as err:
+            await fb
+        assert err.match("already running")
+
+        await agenerator.asend(None)
+        fa = asyncio.create_task(agenerator.asend("A"))
+        fb = asyncio.create_task(agenerator.aclose())
+        await fa
+        with pytest.raises(RuntimeError) as err:
+            await fb
+        assert err.match("already running")

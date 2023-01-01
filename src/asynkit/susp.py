@@ -130,9 +130,12 @@ class Monitor(Generic[T, V]):
 
 
 class Generator(AsyncIterator[T]):
+    __slots__ = ["monitor", "coro", "running"]
+
     def __init__(self, coro: Optional[Coroutine[Any, Any, Any]] = None) -> None:
         self.monitor: Monitor[T, Any] = Monitor()
         self.coro = coro
+        self.running = False
 
     def init(self, coro: Coroutine[Any, Any, Any]) -> "Generator[T]":
         self.coro = coro
@@ -148,6 +151,9 @@ class Generator(AsyncIterator[T]):
         assert self.coro is not None
         if coro_is_finished(self.coro):
             raise StopAsyncIteration()
+        if self.running:
+            raise RuntimeError("asend(): asynchronous generator is already running")
+        self.running = True
         try:
             is_oob, result = await self.monitor.oob_await(self.coro, value)
         except StopAsyncIteration as err:
@@ -155,6 +161,8 @@ class Generator(AsyncIterator[T]):
             # the case for StopIteration is already handled by coro.send()
             # but raises a different "coroutine raised ..." RuntimeError.
             raise RuntimeError("async generator raised StopAsyncIteration") from err
+        finally:
+            self.running = False
         if not is_oob:
             raise StopAsyncIteration()
         return cast(T, result)
@@ -186,12 +194,17 @@ class Generator(AsyncIterator[T]):
         assert self.coro is not None
         if coro_is_finished(self.coro):
             return None
+        if self.running:
+            raise RuntimeError("athrow(): asynchronous generator is already running")
+        self.running = True
         try:
             is_oob, result = await self.monitor.oob_throw(
                 self.coro, cast(Type[BaseException], type), value, traceback
             )
         except StopAsyncIteration as err:
             raise RuntimeError("async generator raised StopAsyncIteration") from err
+        finally:
+            self.running = False
         if not is_oob:
             raise StopAsyncIteration()
         return cast(T, result)
@@ -200,12 +213,17 @@ class Generator(AsyncIterator[T]):
         assert self.coro is not None
         if coro_is_finished(self.coro):
             return
+        if self.running:
+            raise RuntimeError("aclose(): asynchronous generator is already running")
+        self.running = True
         try:
             is_oob, result = await self.monitor.oob_throw(self.coro, GeneratorExit)
         except StopAsyncIteration as err:
             raise RuntimeError("async generator raised StopAsyncIteration") from err
         except (GeneratorExit):
             return
+        finally:
+            self.running = False
         if is_oob:
             raise RuntimeError("async generator ignored GeneratorExit")
 
