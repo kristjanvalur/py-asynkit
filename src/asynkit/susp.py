@@ -211,8 +211,22 @@ class GeneratorObject(AsyncIterator[T]):
         value: Union[BaseException, object] = None,
         traceback: Optional[TracebackType] = None,
     ) -> Optional[T]:
+        return await self._athrow(type, value, traceback)
+
+    async def aclose(self) -> None:
+        await self._athrow(None, None, None)
+
+    async def _athrow(
+        self,
+        type: Optional[Union[BaseException, Type[BaseException]]],
+        value: Union[BaseException, object],
+        traceback: Optional[TracebackType],
+    ) -> Optional[T]:
         if self.running:
-            raise RuntimeError("athrow(): asynchronous generator is already running")
+            raise RuntimeError(
+                ("athrow" if type is not None else "aclose")
+                + "(): asynchronous generator is already running"
+            )
         assert self.coro is not None
         if coro_is_finished(self.coro):
             return None
@@ -220,34 +234,28 @@ class GeneratorObject(AsyncIterator[T]):
             self._first_iter()
         self.running = True
         try:
-            is_oob, result = await self.monitor.oob_throw(
-                self.coro, cast(Type[BaseException], type), value, traceback
-            )
+            if type is not None:
+                is_oob, result = await self.monitor.oob_throw(
+                    self.coro, cast(Type[BaseException], type), value, traceback
+                )
+            else:
+                is_oob, result = await self.monitor.oob_throw(self.coro, GeneratorExit)
         except StopAsyncIteration as err:
             raise RuntimeError("async generator raised StopAsyncIteration") from err
+        except GeneratorExit:
+            if type is None:
+                return None
+            raise
         finally:
             self.running = False
-        if not is_oob:
-            raise StopAsyncIteration()
-        return cast(T, result)
+        if type is not None:
+            if not is_oob:
+                raise StopAsyncIteration()
+        else:
+            if is_oob:
+                raise RuntimeError("async generator ignored GeneratorExit")
 
-    async def aclose(self) -> None:
-        assert self.coro is not None
-        if coro_is_finished(self.coro):
-            return
-        if self.running:
-            raise RuntimeError("aclose(): asynchronous generator is already running")
-        self.running = True
-        try:
-            is_oob, result = await self.monitor.oob_throw(self.coro, GeneratorExit)
-        except StopAsyncIteration as err:
-            raise RuntimeError("async generator raised StopAsyncIteration") from err
-        except (GeneratorExit):
-            return
-        finally:
-            self.running = False
-        if is_oob:
-            raise RuntimeError("async generator ignored GeneratorExit")
+        return cast(T, result)
 
     async def ayield(self, value: Any) -> Any:
         """
