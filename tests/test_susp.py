@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import sys
 
 import pytest
@@ -473,3 +474,54 @@ class TestGenerator:
         with pytest.raises(RuntimeError) as err:
             await fb
         assert err.match("already running")
+
+    @pytest.mark.parametrize("gentype", ["std", "oob"], ids=["async gen", "Generator"])
+    async def test_loop_cleanup(self, gentype):
+
+        closed = False
+        if gentype == "std":
+
+            async def generator():
+                nonlocal closed
+                for i in range(10):
+                    try:
+                        yield i
+                    except GeneratorExit:
+                        closed = True
+                        raise
+
+        else:
+
+            async def genfunc(go):
+                nonlocal closed
+                for i in range(10):
+                    try:
+                        await go.ayield(i)
+                    except GeneratorExit:
+                        closed = True
+                        raise
+
+            def generator():
+                go = GeneratorObject()
+                return go.init(genfunc(go))
+
+        # Test that cleanup occurs by GC
+        g = generator()
+        async for i in g:
+            break
+        assert i == 0
+        assert not closed
+        g = None
+        gc.collect()
+        await asyncio.sleep(0.01)
+        assert closed
+
+        # test that cleanup occurs with explicit gen shutdown
+        closed = False
+        g = generator()
+        async for i in g:
+            break
+        assert i == 0
+        assert not closed
+        await asyncio.get_running_loop().shutdown_asyncgens()
+        assert closed

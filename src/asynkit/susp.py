@@ -1,3 +1,4 @@
+import sys
 import types
 from types import TracebackType
 from typing import (
@@ -18,7 +19,7 @@ from typing import (
 
 from typing_extensions import Literal
 
-from .coroutine import coro_is_finished
+from .coroutine import coro_is_finished, coro_is_new
 
 T = TypeVar("T")
 V = TypeVar("V")
@@ -136,12 +137,13 @@ class Monitor(Generic[T, V]):
 
 
 class GeneratorObject(AsyncIterator[T]):
-    __slots__ = ["monitor", "coro", "running"]
+    __slots__ = ["monitor", "coro", "running", "finalizer", "__weakref__"]
 
     def __init__(self, coro: Optional[Coroutine[Any, Any, Any]] = None) -> None:
         self.monitor: Monitor[T, Any] = Monitor()
         self.coro = coro
         self.running = False
+        self.finalizer: Optional[Callable[[Any], None]] = None
 
     def init(self, coro: Coroutine[Any, Any, Any]) -> "GeneratorObject[T]":
         self.coro = coro
@@ -153,12 +155,24 @@ class GeneratorObject(AsyncIterator[T]):
     async def __anext__(self) -> T:
         return await self.asend(None)
 
+    def __del__(self) -> None:
+        if self.finalizer:
+            self.finalizer(self)
+
+    def _first_iter(self) -> None:
+        hooks = sys.get_asyncgen_hooks()
+        if hooks.firstiter is not None:
+            cast(Callable[[Any], None], hooks.firstiter)(self)
+        self.finalizer = cast(Optional[Callable[[Any], None]], hooks.finalizer)
+
     async def asend(self, value: Any) -> T:
+        if self.running:
+            raise RuntimeError("asend(): asynchronous generator is already running")
         assert self.coro is not None
         if coro_is_finished(self.coro):
             raise StopAsyncIteration()
-        if self.running:
-            raise RuntimeError("asend(): asynchronous generator is already running")
+        elif coro_is_new(self.coro):
+            self._first_iter()
         self.running = True
         try:
             is_oob, result = await self.monitor.oob_await(self.coro, value)
@@ -197,11 +211,13 @@ class GeneratorObject(AsyncIterator[T]):
         value: Union[BaseException, object] = None,
         traceback: Optional[TracebackType] = None,
     ) -> Optional[T]:
+        if self.running:
+            raise RuntimeError("athrow(): asynchronous generator is already running")
         assert self.coro is not None
         if coro_is_finished(self.coro):
             return None
-        if self.running:
-            raise RuntimeError("athrow(): asynchronous generator is already running")
+        elif coro_is_new(self.coro):
+            self._first_iter()
         self.running = True
         try:
             is_oob, result = await self.monitor.oob_throw(
