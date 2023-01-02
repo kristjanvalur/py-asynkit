@@ -2,23 +2,31 @@ import asyncio
 import inspect
 import types
 from unittest.mock import Mock
+from contextvars import ContextVar, copy_context
+from typing import Any
 
 import pytest
 
 import asynkit
 import asynkit.tools
 
+eager_var = ContextVar("eager_var")
+
 
 @pytest.mark.parametrize("block", [True, False])
 class TestEager:
     async def coro1(self, log):
         log.append(1)
+        eager_var.set("a")
         await asyncio.sleep(0)
         log.append(2)
+        eager_var.set("b")
 
     async def coro1_nb(self, log):
         log.append(1)
+        eager_var.set("a")
         log.append(2)
+        eager_var.set("b")
 
     def get_coro1(self, block):
         if block:
@@ -29,8 +37,10 @@ class TestEager:
     @asynkit.func_eager
     async def coro2(self, log):
         log.append(1)
+        eager_var.set("a")
         await asyncio.sleep(0)
         log.append(2)
+        eager_var.set("b")
 
     @asynkit.eager
     async def coro3(self, log, block):
@@ -48,29 +58,36 @@ class TestEager:
 
     async def test_no_eager(self, block):
         log = []
+        eager_var.set("X")
         coro, _ = self.get_coro1(block)
         log.append("a")
         await coro(log)
         assert log == ["a", 1, 2]
+        assert eager_var.get() == "b"
 
     async def test_coro_eager(self, block):
         log = []
+        eager_var.set("X")
         coro, expect = self.get_coro1(block)
         future = asynkit.coro_eager(coro(log))
         log.append("a")
         await future
         assert log == expect
+        assert eager_var.get() == "X"
 
     async def test_func_eager(self, block):
         log = []
+        eager_var.set("X")
         future = self.coro2(log)
         log.append("a")
         await future
         assert log == [1, "a", 2]
+        assert eager_var.get() == "X"
 
     async def test_eager(self, block):
         """Test the `coro` helper, used both as wrapper and decorator"""
         log = []
+        eager_var.set("X")
         coro, expect = self.get_coro1(block)
         future = asynkit.eager(coro(log))
         log.append("a")
@@ -81,6 +98,7 @@ class TestEager:
         log.append("a")
         await future
         assert log == expect
+        assert eager_var.get() == "X"
 
     async def test_eager_future(self, block):
         log = []
@@ -357,6 +375,43 @@ class TestCoro:
         assert await task is d
 
 
+contextvar1: ContextVar = ContextVar("contextvar1")
+
+
+@pytest.mark.parametrize("block", [True, False])
+class TestContext:
+    async def coro_block(self, var: ContextVar, val: Any):
+        var.set(val)
+        await asyncio.sleep(0)
+        assert var.get() is val
+
+    async def coro_noblock(self, var: ContextVar, val: Any):
+        var.set(val)
+        assert var.get() is val
+
+    def get_coro(self, block):
+        return self.coro_block if block else self.coro_noblock
+
+    async def test_no_context(self, block):
+        coro = self.get_coro(block)
+        contextvar1.set("bar")
+        await asynkit.coro_await(coro(contextvar1, "foo"))
+
+        assert contextvar1.get() == "foo"
+
+    async def test_private_context(self, block):
+        coro = self.get_coro(block)
+        contextvar1.set("bar")
+        context = copy_context()
+        await asynkit.coro_await(coro(contextvar1, "foo"), context=context)
+        assert contextvar1.get() == "bar"
+
+        def check():
+            assert contextvar1.get() == "foo"
+
+        context.run(check)
+
+
 @pytest.mark.parametrize("kind", ["cr", "gi", "ag"])
 class TestCoroState:
     def get_coro(self, kind):
@@ -439,7 +494,7 @@ async def test_current():
     coro = None
 
     async def foo():
-        f = asynkit.coroutine.coro_get_frame(coro)
+        asynkit.coroutine.coro_get_frame(coro)
 
         # a running coroutine is neither new, suspended nor finished.
         assert not asynkit.coro_is_new(coro)

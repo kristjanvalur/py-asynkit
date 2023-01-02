@@ -86,7 +86,7 @@ class TestCreateTask:
     async def recursive(self, max_depth, log, depth=0, label="0"):
         """
         A faux task, recursively creating two new tasks, converting them
-        and waiting for them.  At the bottom, the tasks sleep for a bit.
+        and waiting for them. At the bottom, the tasks sleep for a bit.
         They append their execution order to a log.
         """
         log.append(label + "a")
@@ -100,9 +100,9 @@ class TestCreateTask:
                     return [label]
             else:
                 # create two child requests and "convert" them
-                a = self.recursive(max_depth, log, depth + 1, label + f":0")
+                a = self.recursive(max_depth, log, depth + 1, label + ":0")
                 a = await self.convert(a)
-                b = self.recursive(max_depth, log, depth + 1, label + f":1")
+                b = self.recursive(max_depth, log, depth + 1, label + ":1")
                 b = await self.convert(b)
 
                 # we don't use gather here, because the use case is to do processing
@@ -115,7 +115,7 @@ class TestCreateTask:
     async def test_okay_one(self, method):
         self.setup(method)
         log = []
-        r = await self.recursive(1, log)
+        await self.recursive(1, log)
         log2 = []
         self.getlog(1, log2)
         assert self.splitlog(log) == self.splitlog(log2)
@@ -123,13 +123,13 @@ class TestCreateTask:
     async def test_okay_two(self, method):
         self.setup(method)
         log = []
-        r = await self.recursive(2, log)
+        await self.recursive(2, log)
         log2 = []
         self.getlog(2, log2)
         if method == "descend":
-            # task order becomes uncertain on unwind, split by 0:1:1B until we understand
-            # why
-            item = '0:1:1B'
+            # task order becomes uncertain on unwind,
+            # split by 0:1:1B until we understand why
+            item = "0:1:1B"
             assert self.splitlog(log, item) == self.splitlog(log2, item)
         elif method != "start":
             assert self.splitlog(log) == self.splitlog(log2)

@@ -5,17 +5,38 @@ on:
     branches:
       - master
       - "release/**"
+      - "dev/**"
     tags: [v*]
   pull_request:
   workflow_dispatch:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v2
+      - name: Install dependencies
+        run: poetry install
+      - name: Run Ruff
+        run: poetry run poe lint
+      - name: Run Black
+        run: poetry run poe black --check
+
   tests:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ["windows-latest", "ubuntu-latest"]
+        os: ["ubuntu-latest"]
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        include:
+          - os: windows-latest
+            python-version: '3.7'
 
     name: Run unittests on Python ${{ matrix.python-version }} on ${{ matrix.os }}
     steps:
@@ -37,22 +58,31 @@ jobs:
       if: ${{ matrix.os == 'windows-latest' }}
       run: poetry run pytest --proactor
     
+  testall:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    name: Tests (matrix)
+    needs: tests
+    steps:
+      - name: Check test matrix status
+        if: ${{ needs.tests.result != 'success' }}
+        run: exit 1
 
   build-n-publish:
     name: Build and publish Python distributions to PyPI and TestPyPI
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' 
-    needs: tests
-
+    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags') 
+    needs:
+      - tests
+      - lint
     steps:
     - uses: actions/checkout@v3
-    - name: Install poetry
-      run: pipx install poetry
     - name: Set up Python 3.9
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v4
       with:
         python-version: 3.9
-        cache: 'poetry'
+    - name: Install poetry
+      uses: abatilo/actions-poetry@v2
 
     - name: Build a binary wheel and a source tarball
       run: poetry build

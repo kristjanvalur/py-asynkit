@@ -25,8 +25,8 @@ class TestReadyRotate:
         await asyncio.gather(*self.tasks)
         return self.log
 
-    def rotate(self, l, r):
-        d = deque(l)
+    def rotate(self, seq, r):
+        d = deque(seq)
         d.rotate(r)
         return list(d)
 
@@ -49,7 +49,7 @@ class TestReadyRotate:
 class TestCallInsertReady:
     """
     Test that we can insert callbacks at given places in the runnable
-    queue.  Compare the order of execution with a list that has been
+    queue. Compare the order of execution with a list that has been
     similarly inserted into via list.insert()
     """
 
@@ -204,7 +204,7 @@ async def test_task_switch(pos):
     assert len(log) == 7
 
     expect = list(range(6))
-    p = expect.pop(pos)
+    expect.pop(pos)
     expect.insert(0, pos)
     expect.append("me")
     assert log == expect
@@ -230,7 +230,7 @@ async def test_task_switch_insert(pos):
     assert len(log) == 7
 
     expect = list(range(6))
-    p = expect.pop(pos)
+    expect.pop(pos)
     expect.insert(0, pos)
     expect.insert(1, "me")
     assert log == expect
@@ -370,8 +370,8 @@ class TestTasks:
 
 class TestRegularLoop:
     """
-    Test that we get AttributeErrors when using scheduling functions on an eventloop that does
-    not support scheduling
+    Test that we get AttributeErrors when using scheduling functions on an
+    eventloop that does not support scheduling
     """
 
     @pytest.fixture
@@ -514,8 +514,8 @@ class TestTaskIsBlocked:
         await asyncio.sleep(0)
         assert asynkit.task_is_blocked(task)
         assert asynkit.task_is_blocked(task2)
-        # cancel the second task.  But the awaiting task doesn't become unblocked
-        # befre the second task has had a chance to finish, by being run for a bit.
+        # cancel the second task. But the awaiting task doesn't become unblocked
+        # before the second task has had a chance to finish, by being run for a bit.
         task2.cancel()
         assert not asynkit.task_is_blocked(task2)
         assert not task2.done()

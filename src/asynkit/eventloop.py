@@ -1,9 +1,11 @@
 import asyncio
+import asyncio.base_events
 import contextlib
 import sys
-from asyncio import events
+from asyncio import events, Handle
+from typing import TYPE_CHECKING, Deque
 
-from .tools import deque_pop, create_task, task_from_handle
+from .tools import create_task, deque_pop, task_from_handle
 
 __all__ = [
     "SchedulingMixin",
@@ -22,8 +24,16 @@ __all__ = [
     "blocked_tasks",
 ]
 
+if TYPE_CHECKING:
 
-class SchedulingMixin:
+    class _Base(asyncio.base_events.BaseEventLoop):
+        _ready: Deque[Handle]
+
+else:
+    _Base = object
+
+
+class SchedulingMixin(_Base):
     """
     A mixin class adding features to the base event loop.
     """
@@ -37,8 +47,9 @@ class SchedulingMixin:
 
         The leftmost part of the ready queue is the callback called next.
 
-        A negative value will rotate the queue to the left, placing the next entry at the end.
-        A Positive values will move callbacks from the end to the front, making them next in line.
+        A negative value will rotate the queue to the left, placing the next
+        entry at the end. A Positive values will move callbacks from the end
+        to the front, making them next in line.
         """
         self._ready.rotate(n)
 
@@ -59,11 +70,12 @@ class SchedulingMixin:
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.
 
-        This operates on the ready queue.  A value of 0 will insert it at the front
+        This operates on the ready queue. A value of 0 will insert it at the front
         to be called next, a value of 1 will insert it after the first element.
 
-        Negative values will insert before the entries counting from the end.  A value of -1 will place
-        it in the next-to-last place.  use `call_soon` to place it _at_ the end.
+        Negative values will insert before the entries counting from the end.
+        A value of -1 will place it in the next-to-last place.
+        Use `call_soon` to place it _at_ the end.
         """
         handle = self.call_soon(callback, *args, context=context)
         handle2 = self.ready_pop(-1)
@@ -73,7 +85,7 @@ class SchedulingMixin:
 
     def ready_find_task(self, task):
         """
-        Look for a runnable task in the ready queue.  Return its index if found,
+        Look for a runnable task in the ready queue. Return its index if found,
         else -1
         """
         # we search in reverse, since the task is likely to have been
@@ -86,7 +98,7 @@ class SchedulingMixin:
 
     def ready_get_tasks(self):
         """
-        Find all runnable tasks in the ready queue.  Return a list of
+        Find all runnable tasks in the ready queue. Return a list of
         (task, index) tuples.
         """
         result = []
@@ -101,7 +113,7 @@ class SchedulingSelectorEventLoop(asyncio.SelectorEventLoop, SchedulingMixin):
     pass
 
 
-if hasattr(asyncio, "ProactorEventLoop"):
+if not TYPE_CHECKING and hasattr(asyncio, "ProactorEventLoop"):
 
     class SchedulingProactorEventLoop(asyncio.ProactorEventLoop, SchedulingMixin):
         pass
@@ -135,7 +147,7 @@ async def sleep_insert(pos, result=None):
     """Coroutine that completes after `pos` other callbacks have been run.
 
     This effectively pauses the current coroutine and places it at position `pos`
-    in the ready queue.  This position may subsequently change due to other
+    in the ready queue. This position may subsequently change due to other
     scheduling operations
     """
     loop = events.get_running_loop()
@@ -162,7 +174,7 @@ def task_reinsert(task, pos):
 
 async def task_switch(task, result=None, sleep_pos=None):
     """Switch immediately to the given task.
-    The target task is moved to the head of the queue.  If 'sleep_pos'
+    The target task is moved to the head of the queue. If 'sleep_pos'
     is None, then the current task is scheduled at the end of the
     queue, otherwise it is inserted at the given position, typically
     at position 1, right after the target task.
@@ -205,7 +217,7 @@ def task_is_runnable(task):
 async def create_task_descend(coro, *, name=None):
     """Creates a task for the coroutine and starts it immediately.
     The current task is paused, to be resumed next when the new task
-    initially blocks.  The new task is returned.
+    initially blocks. The new task is returned.
     This facilitates a depth-first task execution pattern.
     """
     task = create_task(coro, name=name)
@@ -215,8 +227,9 @@ async def create_task_descend(coro, *, name=None):
 
 async def create_task_start(coro, *, name=None):
     """Creates a task for the coroutine and starts it soon.
-    The current task is paused for one round of the event loop, giving the new task a chance
-    to eventually run, before control is returned. The new task is returned.
+    The current task is paused for one round of the event loop, giving the
+    new task a chance to eventually run, before control is returned.
+    The new task is returned.
     """
     task = create_task(coro, name=name)
     await asyncio.sleep(0)
