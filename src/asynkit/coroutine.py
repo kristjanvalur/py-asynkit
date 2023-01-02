@@ -15,7 +15,6 @@ __all__ = [
     "coro_eager",
     "func_eager",
     "eager",
-    "eager_awaitable",
     "eager_callable",
     "eager_coroutine",
     "coro_get_frame",
@@ -249,17 +248,6 @@ class CoroStart:
             return create_task(self.as_coroutine())
         return self.as_coroutine()
 
-    def as_callable(self):
-        """
-        A helper method which returns a callable, which when called, returns `as_coroutine`.
-        Used for APIs which expect async callables.
-        """
-
-        def helper():
-            return self.as_coroutine()
-
-        return helper
-
 
 async def coro_await(coro: Coroutine, *, context: Optional[Context] = None):
     """
@@ -272,32 +260,26 @@ async def coro_await(coro: Coroutine, *, context: Optional[Context] = None):
     return await cs.as_coroutine()
 
 
-def eager_callable(coro, *, context: Optional[Context] = None):
+def eager_callable(coro):
     """
     Eagerly start the coroutine, then return a callable which can be passed
     to other apis which expect a callable for Task creation
     """
-    cs = CoroStart(coro, context=context)
-    return cs.as_callable()
+    cs = CoroStart(coro, context=copy_context())
+
+    def helper():
+        return cs.as_coroutine()
+
+    return helper
 
 
-def eager_awaitable(coro, *, context: Optional[Context] = None):
-    """
-    Eagerly start the coroutine, then return an awaitable which can be passed
-    to other apis which expect an awaitable for Task creation.  Use only
-    if your API can accept a Future
-    """
-    cs = CoroStart(coro, context=context)
-    return cs.as_awaitable(create_task=None)
-
-
-def eager_coroutine(coro, *, context: Optional[Context] = None):
+def eager_coroutine(coro):
     """
     Eagerly start the coroutine, then return an coroutine which can be passed
     to other apis which expect an coroutine for Task creation
     """
-    cs = CoroStart(coro, context=context)
-    return cs.as_awaitable(create_task=None)
+    cs = CoroStart(coro, context=copy_context())
+    return cs.as_coroutine()
 
 
 def coro_eager(coro):

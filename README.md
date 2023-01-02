@@ -98,7 +98,7 @@ directly turned into a `Task`.
 
 `async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
-### `eager_awaitable()`, `eager_callable()`
+### `eager_coroutine()`, `eager_callable()`
 
 These helpers can be added to async function calls when they need to be provided to
 some `Task` creation APIs.  The target function will be eagerly started, before its
@@ -109,7 +109,7 @@ async def myfunc(a):
     ...
 # an api accepting awaitables
 t1 = api.start_task(myfunc(a))  # traditional start
-t2 = api.start_task(eager_awaitable(myfunc(a)))  # eager start
+t2 = api.start_task(eager_coroutine(myfunc(a)))  # eager start
 
 # an api accepting callables
 t3 = api.start_task_function(myfunc, a)  # traditional
@@ -127,8 +127,6 @@ the following methods:
 - `as_coroutine()` returns an coroutine with the coroutine's results.
 - `as_awaitable()` returns an _awaitable_ with the coroutine's results.  If it finished, this is just a plain coroutine,
   otherwise, it is a `Task`.
-- `as_callable()` returns a callable which, when called, returns `as_coroutine()`.  This is useful in situation where
-  a _callable_ is required for invocation.
 
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will run using that
 context.

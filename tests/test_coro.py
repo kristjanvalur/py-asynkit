@@ -20,12 +20,14 @@ class TestEager:
         eager_var.set("a")
         await asyncio.sleep(0)
         log.append(2)
+        assert eager_var.get() == "a"
         eager_var.set("b")
 
     async def coro1_nb(self, log):
         log.append(1)
         eager_var.set("a")
         log.append(2)
+        assert eager_var.get() == "a"
         eager_var.set("b")
 
     def get_coro1(self, block):
@@ -40,6 +42,7 @@ class TestEager:
         eager_var.set("a")
         await asyncio.sleep(0)
         log.append(2)
+        assert eager_var.get() == "a"
         eager_var.set("b")
 
     @asynkit.eager
@@ -128,35 +131,12 @@ class TestEager:
         """
         log = []
         coro, expect = self.get_coro1(block)
+        eager_var.set("X")
         task = asyncio.Task(asynkit.eager_coroutine(coro(log)))
         log.append("a")
         await task
         assert log == expect
-
-    async def test_eager_awaitable(self, block):
-        """
-        Test that an eager awaitable can be passed to a Task creation api
-        and the eagerness happens right away.
-        """
-        log = []
-        coro, expect = self.get_coro1(block)
-
-        def fake_api(awaitable):
-            if asynkit.iscoroutine(awaitable):
-                return asyncio.Task(awaitable)
-
-            async def helper(awaitable):
-                return await (awaitable)
-
-            return asyncio.Task(helper(awaitable))
-
-        async def helper(awaitable):
-            return await awaitable
-
-        task = fake_api(asynkit.eager_awaitable(coro(log)))
-        log.append("a")
-        await task
-        assert log == expect
+        assert eager_var.get() == "X"
 
     async def test_eager_callable(self, block):
         """
@@ -169,10 +149,12 @@ class TestEager:
         async def helper(callable, *args, **kwargs):
             return await callable(*args, **kwargs)
 
+        eager_var.set("X")
         task = asyncio.Task(helper(asynkit.eager_callable(coro(log))))
         log.append("a")
         await task
         assert log == expect
+        assert eager_var.get() == "X"
 
 
 @pytest.mark.parametrize("block", [True, False])
