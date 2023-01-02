@@ -87,7 +87,7 @@ of invocation in each such case.
 `coro_eager()` is the magic coroutine wrapper providing the __eager__ behaviour:
 
 1. It runs `CoroStart.start()` on the coroutine.
-2. It returns `CoroStart.as_future()`.
+2. It returns `CoroStart.as_awaitable()`.
 
 If the coroutine finished in step 1 above, the Future is a plain future and the
 result is immediately available.  Otherwise, a Task is created continuing from
@@ -121,13 +121,11 @@ the following methods:
 
 - `start()` runs the coroutine until it either suspends, returns, or raises an exception. It is usually automatically
   invoked by the class Initializer
-- `resume()` is an async function which continues the execution of the coroutine from the initial state.
-- `is_suspended()` returns true if the coroutine start resulted in it becoming suspended.
-- `as_awaitable()` returns an _awaitable_ with the coroutine's results.  If it finished, this is just a plain `Future`,
-  otherwise, it is a coroutine.
-- `as_task_or_future()` returns an _awaitable_ with the coroutine's results.  If it finished, this is just a plain `Future`,
+- `done()` returns true if the coroutine start resulted in it completing.
+- `as_coroutine()` returns an coroutine with the coroutine's results.
+- `as_awaitable()` returns an _awaitable_ with the coroutine's results.  If it finished, this is just a plain coroutine,
   otherwise, it is a `Task`.
-- `as_callable()` returns a callable which, when called, returns `as_awaitable()`.  This is useful in situation where
+- `as_callable()` returns a callable which, when called, returns `as_coroutine()`.  This is useful in situation where
   a _callable_ is required for invocation.
 
 ## Event loop tools
