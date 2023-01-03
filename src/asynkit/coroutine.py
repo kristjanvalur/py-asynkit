@@ -3,10 +3,23 @@ import functools
 import inspect
 import sys
 import types
-import typing
 from contextvars import Context, copy_context
 from types import FrameType
-from typing import AsyncGenerator, Optional, Union
+from typing import (
+    Any,
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Generator,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
+
+from typing_extensions import ParamSpec
 
 from .tools import create_task
 
@@ -24,8 +37,11 @@ __all__ = [
 
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
-Coroutine = Union[typing.Coroutine, typing.Generator]
-CoroutineLike = Union[typing.Coroutine, typing.Generator, AsyncGenerator]
+T = TypeVar("T")
+P = ParamSpec("P")
+T_co = TypeVar("T_co", covariant=True)
+CoroLike = Union[Coroutine[Any, Any, T], Generator[Any, Any, T]]
+Suspendable = Union[Coroutine, Generator, AsyncGenerator]
 
 """
 Tools and utilities for advanced management of coroutines
@@ -36,7 +52,7 @@ Tools and utilities for advanced management of coroutines
 # has started or finished
 
 
-def _coro_getattr(coro, suffix):
+def _coro_getattr(coro: Suspendable, suffix: str) -> Any:
     """
     Get an attribute of a coroutine or coroutine like object
     """
@@ -53,15 +69,15 @@ def _coro_getattr(coro, suffix):
     )
 
 
-def coro_get_frame(coro: CoroutineLike) -> FrameType:
+def coro_get_frame(coro: Suspendable) -> FrameType:
     """
     Get the current frame of a coroutine or coroutine like object
     (generator, legacy coroutines)
     """
-    return _coro_getattr(coro, "frame")
+    return cast(FrameType, _coro_getattr(coro, "frame"))
 
 
-def coro_is_new(coro: CoroutineLike):
+def coro_is_new(coro: Suspendable) -> bool:
     """
     Returns True if the coroutine has just been created and
     never not yet started
@@ -72,16 +88,16 @@ def coro_is_new(coro: CoroutineLike):
         return inspect.getgeneratorstate(coro) == inspect.GEN_CREATED
     elif inspect.isasyncgen(coro):
         if PYTHON_37:  # pragma: no cover
-            return coro.ag_frame and coro.ag_frame.f_lasti < 0
+            return coro.ag_frame is not None and coro.ag_frame.f_lasti < 0
         else:
-            return coro.ag_frame and not coro.ag_running
+            return coro.ag_frame is not None and not coro.ag_running
     else:
         raise TypeError(
             f"a coroutine or coroutine like object is required. Got: {type(coro)}"
         )
 
 
-def coro_is_suspended(coro: CoroutineLike):
+def coro_is_suspended(coro: Suspendable) -> bool:
     """
     Returns True if the coroutine has started but not exited
     """
@@ -93,7 +109,7 @@ def coro_is_suspended(coro: CoroutineLike):
         if PYTHON_37:  # pragma: no cover
             # frame is None if it has already exited
             # the currently running coroutine is also not suspended by definition.
-            return coro.ag_frame and coro.ag_frame.f_lasti >= 0
+            return coro.ag_frame is not None and coro.ag_frame.f_lasti >= 0
         else:
             # This is true only if we are inside an anext() or athrow(), not if the
             # inner coroutine is itself doing an await before yielding a value.
@@ -104,7 +120,7 @@ def coro_is_suspended(coro: CoroutineLike):
         )
 
 
-def coro_is_finished(coro: CoroutineLike) -> bool:
+def coro_is_finished(coro: Suspendable) -> bool:
     """
     Returns True if the coroutine has finished execution, either by
     returning or throwing an exception
@@ -112,7 +128,7 @@ def coro_is_finished(coro: CoroutineLike) -> bool:
     return coro_get_frame(coro) is None
 
 
-class CoroStart:
+class CoroStart(Awaitable[T_co]):
     """
     A class to encapsulate the state of a coroutine which is manually started
     until its first suspension point, and then resumed. This facilitates
@@ -125,15 +141,15 @@ class CoroStart:
 
     def __init__(
         self,
-        coro: Coroutine,
+        coro: CoroLike[T_co],
         *,
         context: Optional[Context] = None,
     ):
-        self.coro: Coroutine = coro
+        self.coro = coro
         self.context = context
-        self.start_result = self._start()
+        self.start_result: Optional[tuple[Any, Optional[BaseException]]] = self._start()
 
-    def _start(self):
+    def _start(self) -> tuple[Any, Optional[BaseException]]:
         """
         Start the coroutine execution. It runs the coroutine to its first suspension
         point or until it raises an exception or returns a value, whichever comes
@@ -149,21 +165,22 @@ class CoroStart:
             # Coroutine returned without blocking
             return (None, exception)
 
-    def __await__(self):
+    def __await__(self) -> Generator[Any, Any, T_co]:
         """
         Resume the excecution of the started coroutine.  CoroStart is an
         _awaitable_.
         """
-        if not self.start_result:
+        if self.start_result is None:
             # exhausted coroutine, triger the "cannot reuse" error
             self.coro.send(None)
+            raise RuntimeError()  # pragma: no cover
 
         out_value, exc = self.start_result
         self.start_result = None
         # process any exception generated by the initial start
         if exc:
             if isinstance(exc, StopIteration):
-                return exc.value
+                return cast(T_co, exc.value)
             raise exc
 
         # yield up the initial future from `coro_start`.
@@ -178,12 +195,12 @@ class CoroStart:
             except BaseException as exc:
                 try:
                     out_value = (
-                        self.context.run(self.coro.throw, exc)
+                        self.context.run(self.coro.throw, exc)  # type: ignore
                         if self.context
                         else self.coro.throw(exc)
                     )
                 except StopIteration as exc:
-                    return exc.value
+                    return cast(T_co, exc.value)
             else:
                 try:
                     out_value = (
@@ -192,22 +209,22 @@ class CoroStart:
                         else self.coro.send(in_value)
                     )
                 except StopIteration as exc:
-                    return exc.value
+                    return cast(T_co, exc.value)
 
-    def close(self):
+    def close(self) -> None:
         self.coro.close()
         self.start_result = None
 
-    def done(self):
+    def done(self) -> bool:
         """returns true if the coroutine finished without blocking"""
-        return self.start_result[1] is not None
+        return self.start_result is not None and self.start_result[1] is not None
 
-    def result(self):
+    def result(self) -> Any:
         """
         Returns the result or raises the exception
         """
-        exc = self.start_result[1]
-        if exc is None:
+        exc = self.start_result and self.start_result[1]
+        if not exc:
             raise asyncio.InvalidStateError("CoroStart: coroutine not done()")
         if isinstance(exc, StopIteration):
             return exc.value
@@ -224,14 +241,14 @@ class CoroStart:
             return None
         return exc
 
-    async def as_coroutine(self):
+    async def as_coroutine(self) -> Any:
         """
         Continue execution of the coroutine that was started by start()
         Returns a coroutine which can be awaited
         """
         return await self
 
-    def as_future(self):
+    def as_future(self) -> asyncio.Future[Any]:
         """
         if `done()` convert the result of the coroutine into a `Future`
         and return it.  Otherwise raise a `RuntimeError`
@@ -247,7 +264,7 @@ class CoroStart:
         return future
 
 
-async def coro_await(coro: Coroutine, *, context: Optional[Context] = None):
+async def coro_await(coro: CoroLike[T], *, context: Optional[Context] = None) -> T:
     """
     A simple await, using the partial run primitives, equivalent to
     `async def coro_await(coro): return await coro`
@@ -258,7 +275,9 @@ async def coro_await(coro: Coroutine, *, context: Optional[Context] = None):
     return await cs
 
 
-def coro_eager(coro, *, create_task=create_task, name="eager"):
+def coro_eager(
+    coro: Coroutine[Any, Any, T], *, create_task=create_task, name="eager"
+) -> asyncio.Future[T]:
     """
     Make the coroutine "eager":
     Start the coroutine. If it blocks, create a task to continue
@@ -275,20 +294,41 @@ def coro_eager(coro, *, create_task=create_task, name="eager"):
     return create_task(cs.as_coroutine(), name=name)
 
 
-def func_eager(func, *, create_task=create_task, name="eager"):
+def func_eager(
+    func: Callable[P, Coroutine[Any, Any, T]], *, create_task=create_task, name="eager"
+) -> Callable[P, asyncio.Future[T]]:
     """
     Decorator to automatically apply the `coro_eager` to the
     coroutine generated by invoking the given async function
     """
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> asyncio.Future[T]:
         return coro_eager(func(*args, **kwargs), create_task=create_task, name=name)
 
     return wrapper
 
 
-def eager(arg, *, create_task=create_task, name="eager"):
+@overload
+def eager(
+    arg: Coroutine[Any, Any, T], *, create_task=create_task, name="eager"
+) -> asyncio.Future[T]:
+    ...
+
+
+@overload
+def eager(
+    arg: Callable[P, Coroutine[Any, Any, T]], *, create_task=create_task, name="eager"
+) -> Callable[P, asyncio.Future[T]]:
+    ...
+
+
+def eager(
+    arg: Union[Coroutine[Any, Any, T], Callable[P, Coroutine[Any, Any, T]]],
+    *,
+    create_task=create_task,
+    name="eager",
+) -> Union[asyncio.Future[T], Callable[P, asyncio.Future[T]]]:
     """
     Convenience function invoking either `coro_eager` or `func_eager`
     to either decorate an async function or convert a coroutine returned by

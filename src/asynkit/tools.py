@@ -1,13 +1,23 @@
 import asyncio
 import sys
+from typing import Any, Coroutine, Generator, Optional, TypeVar, Union
 
 _ver = sys.version_info[:2]
+
+T = TypeVar("T")
+CoroLike = Union[Coroutine[Any, Any, T], Generator[Any, Any, T]]
+
 
 if _ver >= (3, 8):
     create_task = asyncio.create_task
 else:  # pragma: no cover
 
-    def create_task(coro, name=None):
+    # can't really try to replicate the type definitions here.
+    def create_task(  # type: ignore
+        coro: CoroLike[T],
+        *,
+        name: Optional[str] = None,
+    ) -> asyncio.Future[T]:
         return asyncio.create_task(coro)
 
 

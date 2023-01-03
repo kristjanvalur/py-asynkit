@@ -20,6 +20,7 @@ black = "black ."
 test = "pytest"
 cov = "pytest --cov=asynkit --cov-report term-missing"
 covbranch = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
+mypy = "mypy --strict src/asynkit/coroutine.py"
 
 [tool.poetry.dependencies]
 python = "^3.7"
