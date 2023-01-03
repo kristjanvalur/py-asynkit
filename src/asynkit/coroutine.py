@@ -44,10 +44,6 @@ def _coro_getattr(coro, suffix):
     # 3. async generator
     for prefix in ("cr_", "gi_", "ag_"):
         if hasattr(coro, prefix + suffix):
-            if prefix == "ag_" and suffix == "running":
-                # async generators are shown as ag_running=True, even when
-                # the code is not executing. Override that.
-                return False
             # coroutine (async function)
             return getattr(coro, prefix + suffix)
     raise TypeError(
@@ -73,7 +69,7 @@ def coro_is_new(coro):
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_CREATED
     elif inspect.isasyncgen(coro):
-        if PYTHON_37:
+        if PYTHON_37:  # pragma: no cover
             return coro.ag_frame and coro.ag_frame.f_lasti < 0
         else:
             return coro.ag_frame and not coro.ag_running
@@ -92,11 +88,13 @@ def coro_is_suspended(coro):
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_SUSPENDED
     elif inspect.isasyncgen(coro):
-        if PYTHON_37:
+        if PYTHON_37:  # pragma: no cover
             # frame is None if it has already exited
             # the currently running coroutine is also not suspended by definition.
             return coro.ag_frame and coro.ag_frame.f_lasti >= 0
         else:
+            # This is true only if we are inside an anext() or athrow(), not if the
+            # inner coroutine is itself doing an await before yielding a value.
             return coro.ag_running
     else:
         raise TypeError(
@@ -172,8 +170,7 @@ class CoroStart:
         while True:
             try:
                 in_value = yield out_value
-            except GeneratorExit:  # pragma: no coverage
-                # asyncio lib does not appear to ever close coroutines.
+            except GeneratorExit:
                 self.coro.close()
                 raise
             except BaseException as exc:

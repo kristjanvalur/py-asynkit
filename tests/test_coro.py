@@ -457,3 +457,65 @@ async def test_current():
 
     coro = foo()
     await coro
+
+
+async def test_coro_get_frame():
+    async def coroutine():
+        await asyncio.sleep(0)
+
+    c = coroutine()
+    assert asynkit.coroutine.coro_get_frame(c) is not None
+    await c
+
+    @types.coroutine
+    def generator():
+        yield from asyncio.sleep(0)
+
+    c = generator()
+    assert asynkit.coroutine.coro_get_frame(c) is not None
+    await c
+
+    async def asyncgen():
+        yield 1
+
+    c = asyncgen()
+    assert asynkit.coroutine.coro_get_frame(c) is not None
+    await c.aclose()
+
+    with pytest.raises(TypeError):
+        asynkit.coroutine.coro_get_frame("str")
+
+
+async def test_coro_is_suspended():
+    async def coroutine():
+        await asyncio.sleep(0)
+
+    c = coroutine()
+    assert not asynkit.coroutine.coro_is_suspended(c)
+    c.send(None)
+    assert asynkit.coroutine.coro_is_suspended(c)
+    c.close()
+
+    @types.coroutine
+    def generator():
+        yield from asyncio.sleep(0)
+
+    c = generator()
+    assert not asynkit.coroutine.coro_is_suspended(c)
+    c.send(None)
+    assert asynkit.coroutine.coro_is_suspended(c)
+    c.close()
+
+    async def asyncgen():
+        await asyncio.sleep(0)
+        yield 1
+
+    c = asyncgen()
+    assert not asynkit.coroutine.coro_is_suspended(c)
+    cs = asynkit.CoroStart(c.__anext__())
+    assert asynkit.coroutine.coro_is_suspended(c)
+    assert await cs == 1
+    await c.aclose()
+
+    with pytest.raises(TypeError):
+        asynkit.coroutine.coro_is_suspended("str")
