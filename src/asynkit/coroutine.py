@@ -151,7 +151,7 @@ class CoroStart:
 
     def __await__(self):
         """
-        Resume the exceution of the started coroutine.  CoroStart is an
+        Resume the excecution of the started coroutine.  CoroStart is an
         _awaitable_.
         """
         if not self.start_result:
@@ -194,6 +194,10 @@ class CoroStart:
                     )
                 except StopIteration as exc:
                     return exc.value
+
+    def close(self):
+        self.coro.close()
+        self.start_result = None
 
     def done(self):
         """returns true if the coroutine finished without blocking"""

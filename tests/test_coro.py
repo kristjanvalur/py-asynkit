@@ -184,6 +184,32 @@ class TestCoroStart:
             await cs
         assert err.match("cannot reuse already awaited")
 
+    async def test_close(self, block):
+
+        # first test regular coroutine
+        async def normal():
+            await asyncio.sleep(0)
+
+        coro = normal()
+        coro.send(None)
+        coro.close()
+        coro.close()
+        with pytest.raises(RuntimeError) as err:
+            await coro
+        assert err.match("cannot reuse already")
+
+        # and now our own
+        corofn, expect = self.get_coro1(block)
+        log = []
+        coro = corofn(log)
+        cs = asynkit.CoroStart(coro)
+        log.append("a")
+        cs.close()
+        cs.close()
+        with pytest.raises(RuntimeError) as err:
+            await cs
+        assert err.match("cannot reuse already")
+
     async def test_start_err(self, block):
         log = []
         cs = asynkit.CoroStart(self.coro2(log))
