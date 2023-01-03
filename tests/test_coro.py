@@ -163,6 +163,27 @@ class TestCoroStart:
             assert asynkit.coro_is_finished(coro)
             assert log == [1, 2]
 
+    async def test_await(self, block):
+        corofn, expect = self.get_coro1(block)
+        log = []
+        coro = corofn(log)
+        cs = asynkit.CoroStart(coro)
+        log.append("a")
+        assert await cs == expect
+        assert log == expect
+
+    async def test_await_twice(self, block):
+        corofn, expect = self.get_coro1(block)
+        log = []
+        coro = corofn(log)
+        cs = asynkit.CoroStart(coro)
+        log.append("a")
+        assert await cs == expect
+        assert log == expect
+        with pytest.raises(RuntimeError) as err:
+            await cs
+        assert err.match("cannot reuse already awaited")
+
     async def test_start_err(self, block):
         log = []
         cs = asynkit.CoroStart(self.coro2(log))
@@ -216,15 +237,6 @@ class TestCoroStart:
         else:
             assert isinstance(fut, asyncio.Future)
             mock.assert_not_called()
-
-    async def test_continue_twice_err(self, block):
-        """Test that getting the coroutine twice is an error"""
-        coro, _ = self.get_coro1(block)
-        log = []
-        cs = asynkit.CoroStart(coro(log))
-        cs.as_coroutine()
-        with pytest.raises(RuntimeError):
-            cs.as_coroutine()
 
     async def test_result(self, block):
         coro, _ = self.get_coro1(block)
