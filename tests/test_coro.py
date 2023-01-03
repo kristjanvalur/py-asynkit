@@ -243,9 +243,10 @@ class TestCoroStart:
         coro, expect = self.get_coro1(block)
         log = []
         cs = asynkit.CoroStart(coro(log))
-        fut = cs.as_future(create_task=lambda t: "foo")
+        fut = cs.as_future(create_task=lambda t: t)
         if block:
-            assert fut == "foo"
+            assert inspect.iscoroutine(fut)
+            await fut
         else:
             assert not isinstance(fut, asyncio.Task)
             assert fut.done()
@@ -260,6 +261,9 @@ class TestCoroStart:
             assert isinstance(fut, Mock)
             mock.assert_called()
             assert len(mock.call_args[0]) == 1
+            coro = mock.call_args[0][0]
+            assert inspect.iscoroutine(coro)
+            await coro
         else:
             assert isinstance(fut, asyncio.Future)
             mock.assert_not_called()
