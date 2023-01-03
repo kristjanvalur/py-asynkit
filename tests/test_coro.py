@@ -147,21 +147,11 @@ class TestCoroStart:
         else:
             return self.coro1_nb, [1, 2, "a"]
 
-    def test_start(self, block):
-        corofn, expect = self.get_coro1(block)
-        log = []
-        coro = corofn(log)
-        cs = asynkit.CoroStart(coro, auto_start=False)
-        assert not cs.started()
-        assert asynkit.coro_is_new(coro)
-        assert log == []
-
     def test_auto_start(self, block):
         corofn, expect = self.get_coro1(block)
         log = []
         coro = corofn(log)
-        cs = asynkit.CoroStart(coro, auto_start=True)
-        assert cs.started()
+        cs = asynkit.CoroStart(coro)
         if block:
             assert not cs.done()
             assert asynkit.coro_is_suspended(coro)
@@ -176,7 +166,6 @@ class TestCoroStart:
     async def test_start_err(self, block):
         log = []
         cs = asynkit.CoroStart(self.coro2(log))
-        assert cs.started()
         assert cs.done()
         with pytest.raises(ZeroDivisionError):
             await cs.as_coroutine()
@@ -184,7 +173,7 @@ class TestCoroStart:
     async def test_as_coroutine(self, block):
         coro, expect = self.get_coro1(block)
         log = []
-        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        cs = asynkit.CoroStart(coro(log))
         cr = cs.as_coroutine()
         assert inspect.iscoroutine(cr)
         log.append("a")
@@ -218,7 +207,7 @@ class TestCoroStart:
         coro, expect = self.get_coro1(block)
         log = []
         mock = Mock()
-        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        cs = asynkit.CoroStart(coro(log))
         fut = cs.as_future(create_task=mock)
         if block:
             assert isinstance(fut, Mock)
@@ -228,42 +217,14 @@ class TestCoroStart:
             assert isinstance(fut, asyncio.Future)
             mock.assert_not_called()
 
-    async def test_start_twice_err(self, block):
-        """test that starting twice is an error"""
-        coro, _ = self.get_coro1(block)
-        log = []
-        cs = asynkit.CoroStart(coro(log), auto_start=True)
-        with pytest.raises(RuntimeError):
-            cs.start()
-
     async def test_continue_twice_err(self, block):
         """Test that getting the coroutine twice is an error"""
         coro, _ = self.get_coro1(block)
         log = []
-        cs = asynkit.CoroStart(coro(log), auto_start=True)
+        cs = asynkit.CoroStart(coro(log))
         cs.as_coroutine()
         with pytest.raises(RuntimeError):
             cs.as_coroutine()
-
-    async def test_start_run_unstarted(self, block):
-        """Test that we can get the coroutine before we start it"""
-        coro, expect = self.get_coro1(block)
-        log = []
-        cs = asynkit.CoroStart(coro(log), auto_start=False)
-        cr = cs.as_coroutine()
-        cs.start()
-        log.append("a")
-        await cr
-        assert log == expect
-
-    async def test_start_run_unstarted_err(self, block):
-        """Test that we get exception when awaiting an unstarted coroutine"""
-        coro, _ = self.get_coro1(block)
-        log = []
-        cs = asynkit.CoroStart(coro(log), auto_start=False)
-        cr = cs.as_coroutine()
-        with pytest.raises(RuntimeError):
-            await cr
 
     async def test_result(self, block):
         coro, _ = self.get_coro1(block)

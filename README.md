@@ -86,7 +86,7 @@ of invocation in each such case.
 
 `coro_eager()` is the magic coroutine wrapper providing the __eager__ behaviour:
 
-1. It runs `CoroStart.start()` on the coroutine.
+1. It initializes a `CoroStart()` object for the coroutine, starting it.
 2. It returns `CoroStart.as_future()`.
 
 If the coroutine finished in step 1 above, the Future is a plain future and the
@@ -100,18 +100,17 @@ directly turned into a `Task`.
 
 ### `CoroStart`
 
-This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. It has
-the following methods:
+This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. 
+When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
+an exception. It has the following methods:
 
-- `start()` runs the coroutine until it either suspends, returns, or raises an exception. It is usually automatically
-  invoked by the class Initializer
 - `done()` returns true if the coroutine start resulted in it completing.
 - `as_coroutine()` returns an coroutine with the coroutine's results.
 - `as_future()` returns a `Future`.  If the coroutine is finished, the returned object is a plain `Future`,
   otherwise a `Task` (as created by the optional `create_task` parameter). This is suitable for uses such as
   `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.  
 
-CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will run using that
+CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
 
 ## Context helper

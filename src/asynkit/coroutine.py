@@ -127,47 +127,37 @@ class CoroStart:
         self,
         coro: Coroutine,
         *,
-        auto_start: bool = True,
         context: Optional[Context] = None,
     ):
         self.coro: Coroutine = coro
         self.context = context
-        self.start_result = None  # the (future, exception) tuple
         self.wrapped = False
-        if auto_start:
-            self.start()
+        self.start_result = self._start()
 
-    def started(self):
-        return self.start_result is not None
-
-    def done(self):
-        """returns true if the coroutine finished without blocking"""
-        return self.start_result and self.start_result[1]
-
-    def start(self):
+    def _start(self):
         """
         Start the coroutine execution. It runs the coroutine to its first suspension
         point or until it raises an exception or returns a value, whichever comes
         first. Returns `True` if the coroutine finished without blocking.
         """
-        if self.start_result:
-            raise RuntimeError("CoroStart already started")
         try:
-            self.start_result = (
+            return (
                 self.context.run(self.coro.send, None)
                 if self.context
                 else self.coro.send(None)
             ), None
         except BaseException as exception:
             # Coroutine returned without blocking
-            self.start_result = (None, exception)
-            return True
-        return False
+            return (None, exception)
+
+    def done(self):
+        """returns true if the coroutine finished without blocking"""
+        return self.start_result[1] is not None
 
     def result(self):
-        if not self.done():
-            raise asyncio.InvalidStateError("CoroStart: coroutine not done()")
         exc = self.start_result[1]
+        if exc is None:
+            raise asyncio.InvalidStateError("CoroStart: coroutine not done()")
         if isinstance(exc, StopIteration):
             return exc.value
         raise exc
