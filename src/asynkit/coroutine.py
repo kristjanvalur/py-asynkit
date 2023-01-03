@@ -7,7 +7,7 @@ import typing
 from contextvars import Context, copy_context
 from typing import Optional, Union
 
-from .tools import create_task
+from . import tools
 
 __all__ = [
     "CoroStart",
@@ -44,10 +44,6 @@ def _coro_getattr(coro, suffix):
     # 3. async generator
     for prefix in ("cr_", "gi_", "ag_"):
         if hasattr(coro, prefix + suffix):
-            if prefix == "ag_" and suffix == "running":
-                # async generators are shown as ag_running=True, even when
-                # the code is not executing. Override that.
-                return False
             # coroutine (async function)
             return getattr(coro, prefix + suffix)
     raise TypeError(
@@ -73,7 +69,7 @@ def coro_is_new(coro):
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_CREATED
     elif inspect.isasyncgen(coro):
-        if PYTHON_37:
+        if PYTHON_37:  # pragma: no cover
             return coro.ag_frame and coro.ag_frame.f_lasti < 0
         else:
             return coro.ag_frame and not coro.ag_running
@@ -92,11 +88,13 @@ def coro_is_suspended(coro):
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_SUSPENDED
     elif inspect.isasyncgen(coro):
-        if PYTHON_37:
+        if PYTHON_37:  # pragma: no cover
             # frame is None if it has already exited
             # the currently running coroutine is also not suspended by definition.
             return coro.ag_frame and coro.ag_frame.f_lasti >= 0
         else:
+            # This is true only if we are inside an anext() or athrow(), not if the
+            # inner coroutine is itself doing an await before yielding a value.
             return coro.ag_running
     else:
         raise TypeError(
@@ -114,79 +112,52 @@ def coro_is_finished(coro):
 
 class CoroStart:
     """
-    A class to encapsulate the state of a corourine which is manually started
+    A class to encapsulate the state of a coroutine which is manually started
     until its first suspension point, and then resumed. This facilitates
     later execution of coroutines, encapsulating them in Tasks only at the point when
     they initially become suspended.
     `context`: A context object to run the coroutine in
     """
 
-    __slots__ = ["coro", "future", "exception", "context"]
+    __slots__ = ["coro", "context", "start_result"]
 
     def __init__(
         self,
         coro: Coroutine,
         *,
-        auto_start: bool = True,
         context: Optional[Context] = None,
     ):
         self.coro: Coroutine = coro
-        self.future = None
-        self.exception = None
-        self.context: Optional[Context] = context
-        if auto_start:
-            self.start()
+        self.context = context
+        self.start_result = self._start()
 
-    def start(self):
+    def _start(self):
         """
         Start the coroutine execution. It runs the coroutine to its first suspension
         point or until it raises an exception or returns a value, whichever comes
         first. Returns `True` if the coroutine finished without blocking.
         """
-        assert coro_is_new(self.coro)
         try:
-            self.future = (
+            return (
                 self.context.run(self.coro.send, None)
                 if self.context
                 else self.coro.send(None)
-            )
+            ), None
         except BaseException as exception:
             # Coroutine returned without blocking
-            self.exception = exception
-            return True
-        return False
+            return (None, exception)
 
-    def is_suspended(self):
+    def __await__(self):
         """
-        After a coroutine was started using `start()`, returns true if it
-        is now in a suspended state, as opposed to it having completed
-        without suspending.
+        Resume the excecution of the started coroutine.  CoroStart is an
+        _awaitable_.
         """
-        return self.exception is None
+        if not self.start_result:
+            # exhausted coroutine, triger the "cannot reuse" error
+            self.coro.send(None)
 
-    def as_future(self):
-        """
-        Convert the continuation of the coroutine to a future.
-        If the coroutine has completed, it is wrapped in a `Future` object, otherwise
-        a `Task` is returned.
-        """
-        exception = self.exception
-        if exception is not None:
-            future = asyncio.Future()
-            if isinstance(exception, StopIteration):
-                future.set_result(exception.value)
-            else:
-                future.set_exception(exception)
-            return future
-        else:
-            return create_task(self.resume())
-
-    @types.coroutine
-    def resume(self):
-        """
-        Continue execution of the coroutine that was started by start()
-        """
-        out_value, exc = self.future, self.exception
+        out_value, exc = self.start_result
+        self.start_result = None
         # process any exception generated by the initial start
         if exc:
             if isinstance(exc, StopIteration):
@@ -199,8 +170,7 @@ class CoroStart:
         while True:
             try:
                 in_value = yield out_value
-            except GeneratorExit:  # pragma: no coverage
-                # asyncio lib does not appear to ever close coroutines.
+            except GeneratorExit:
                 self.coro.close()
                 raise
             except BaseException as exc:
@@ -222,6 +192,48 @@ class CoroStart:
                 except StopIteration as exc:
                     return exc.value
 
+    def close(self):
+        self.coro.close()
+        self.start_result = None
+
+    def done(self):
+        """returns true if the coroutine finished without blocking"""
+        return self.start_result[1] is not None
+
+    def result(self):
+        exc = self.start_result[1]
+        if exc is None:
+            raise asyncio.InvalidStateError("CoroStart: coroutine not done()")
+        if isinstance(exc, StopIteration):
+            return exc.value
+        raise exc
+
+    async def as_coroutine(self):
+        """
+        Continue execution of the coroutine that was started by start()
+        Returns a coroutine which can be awaited
+        """
+        return await self
+
+    def as_future(self, *, create_task=tools.create_task):
+        """
+        Convert the continuation of the coroutine into a Future.
+        If it is done(), a plain Future is created, otherwise
+        it is wrapped in a task by the provided `create_task` callable.
+        This is the best way to include the result in a `asyncio.gather()`
+        call or similar.
+        """
+        if self.done():
+            future = asyncio.get_running_loop().create_future()
+            exc = self.start_result[1]
+            if isinstance(exc, StopIteration):
+                future.set_result(exc.value)
+            else:
+                future.set_exception(exc)
+        else:
+            future = create_task(self.as_coroutine())
+        return future
+
 
 async def coro_await(coro: Coroutine, *, context: Optional[Context] = None):
     """
@@ -231,7 +243,7 @@ async def coro_await(coro: Coroutine, *, context: Optional[Context] = None):
     of the currently active context.
     """
     cs = CoroStart(coro, context=context)
-    return await cs.resume()
+    return await cs
 
 
 def coro_eager(coro):

@@ -24,7 +24,7 @@ __all__ = [
     "blocked_tasks",
 ]
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no coverage
 
     class _Base(asyncio.base_events.BaseEventLoop):
         _ready: Deque[Handle]
