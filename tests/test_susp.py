@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from asynkit.susp import GeneratorObject, Monitor
+from asynkit.susp import GeneratorObject, Monitor, OOBData
 
 
 class TestMonitor:
@@ -21,14 +21,13 @@ class TestMonitor:
 
         m = Monitor()
         c = helper(m)
-        is_oob, back = await m.oob_await(c, None)
-        assert is_oob
-        assert back == "foo"
-        is_oob, back = await m.oob_await(c, "hoo")
-        assert is_oob
-        assert back == "hoofoo"
-        is_oob, back = await m.oob_await(c, "how")
-        assert not is_oob
+        with pytest.raises(OOBData) as data:
+            await m.aawait(c)
+        assert data.value.data == "foo"
+        with pytest.raises(OOBData) as data:
+            await m.aawait(c, "hoo")
+        assert data.value.data == "hoofoo"
+        back = await m.aawait(c, "how")
         assert back == "howfoo"
 
     async def test_throw(self):
@@ -38,7 +37,7 @@ class TestMonitor:
         m = Monitor()
         c = helper(m)
         with pytest.raises(EOFError):
-            await m.oob_throw(c, EOFError())
+            await m.athrow(c, EOFError())
 
     async def test_monitor_detached(self):
         """
@@ -73,7 +72,7 @@ class TestMonitor:
         m = Monitor()
         c = helper(m)
         t = await m.aawait(c, None)
-        assert t == (False, 3)
+        assert t == 3
 
 
 async def top(g):

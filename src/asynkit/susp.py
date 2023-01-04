@@ -17,23 +17,28 @@ from typing import (
     overload,
 )
 
-from typing_extensions import Literal
 
 from .coroutine import coro_is_finished, coro_is_new
 
 T = TypeVar("T")
-V = TypeVar("V")
 
 
-class Monitor(Generic[T, V]):
+class OOBData(Exception):
+    """
+    An exception representing OutOfBound data sent to a Monitor
+    """
+
+    __slots__ = ["data"]
+
+    def __init__(self, data: Any):
+        self.data = data
+
+
+class Monitor(Generic[T]):
     """
     A class to await a coroutine while receiving and sending OOB (out of band)
     data to the coroutine and leaving it suspended.
     """
-
-    # return type of the await
-    S = TypeVar("S")
-    OOB = Union[Tuple[Literal[True], S], Tuple[Literal[False], Any]]
 
     __slots__ = [
         "state",
@@ -45,10 +50,10 @@ class Monitor(Generic[T, V]):
     @types.coroutine
     def _oob_generic(
         self,
-        coro: Coroutine[Any, Any, Any],
+        coro: Coroutine[Any, Any, T],
         callable: Callable[..., Any],
         args: Tuple[Any, ...],
-    ) -> Generator[Any, Any, OOB[T]]:
+    ) -> Generator[Any, Any, T]:
         if self.state != 0:
             raise RuntimeError("Monitor cannot be re-entered")
         self.state = 1
@@ -56,14 +61,17 @@ class Monitor(Generic[T, V]):
             try:
                 out_value = callable(*args)
             except StopIteration as exc:
-                return (False, exc.value)
+                return cast(T, exc.value)
+            except OOBData:
+                raise RuntimeError("coroutine raised OOBData")
 
             while True:
                 if self.state == -1:
                     self.state = 1
-                    return (True, out_value)
+                    raise OOBData(out_value)
                 try:
                     in_value = yield out_value
+
                 except GeneratorExit:  # pragma: no coverage
                     # asyncio lib does not appear to ever close coroutines.
                     coro.close()
@@ -72,62 +80,70 @@ class Monitor(Generic[T, V]):
                     try:
                         out_value = coro.throw(exc)
                     except StopIteration as exc:
-                        return (False, exc.value)
+                        return cast(T, exc.value)
                 else:
                     try:
                         out_value = coro.send(in_value)
                     except StopIteration as exc:
-                        return (False, exc.value)
+                        return cast(T, exc.value)
         finally:
             self.state = 0
 
     @types.coroutine
-    async def oob_await(
+    async def aawait(
         self,
-        coro: Coroutine[Any, Any, Any],
-        data: Optional[V],
-    ) -> OOB[T]:
+        coro: Coroutine[Any, Any, T],
+        data: Optional[Any] = None,
+    ) -> T:
         """
-        Await with oob (Out Of Band data)
-        returns a tuple `(is_oob, data)` where if `is_oob` is true, `data`
-        is the data passed to the `oob()` method.
-        Otherwise, it is the result of awaiting the function
+        Asynchronously await the coroutine result.  If the coroutine calls `oob()`
+        the function will throw a `OOBData` exception with the data in the `data`
+        attribute.  The caller must then re-try the `aawait`.
+        `data` must be None for the first time `aawait()` is called, but can be used
+        to pass data as the return value for the `oob()` call for a subsequent call.
         """
         return await self._oob_generic(coro, coro.send, (data,))
 
     @overload
-    async def oob_throw(
+    async def athrow(
         self,
-        coro: Coroutine[Any, Any, Any],
+        coro: Coroutine[Any, Any, T],
         type: Type[BaseException],
         value: Union[BaseException, object] = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> OOB[T]:
+    ) -> T:
         ...
 
     @overload
-    async def oob_throw(
+    async def athrow(
         self,
-        coro: Coroutine[Any, Any, Any],
+        coro: Coroutine[Any, Any, T],
         type: BaseException,
         value: None = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> OOB[T]:
+    ) -> T:
         ...
 
-    async def oob_throw(
+    async def athrow(
         self,
-        coro: Coroutine[Any, Any, Any],
+        coro: Coroutine[Any, Any, T],
         type: Union[BaseException, Type[BaseException]],
         value: Union[BaseException, object] = None,
         traceback: Optional[TracebackType] = None,
-    ) -> OOB[T]:
+    ) -> T:
+        """
+        Similar to `aawait()` but throws an exception into the coroutine at the
+        point where it is suspended.
+        """
         return await self._oob_generic(coro, coro.throw, (type, value, traceback))
 
     @types.coroutine
-    def oob(self, data: T) -> Generator[T, V, V]:
+    def oob(self, data: Any) -> Generator[Any, Any, Any]:
         """
-        Send Out Of Band data to a higher up caller which is using `oob_await()`
+        Send Out Of Band data to a higher up caller which is awaiting `aawait()` or
+        `athrow()`.  It will cause a `OOBData` exception to be generated for the caller
+        of those functions.  The return value once awaited will be whatever `data`
+        is passed in by a subsequent `aawait()` call.
         """
         if self.state != 1:
             raise RuntimeError("Monitor not active")
@@ -142,12 +158,12 @@ class GeneratorObject(Generic[T]):
     def __init__(
         self,
     ) -> None:
-        self.monitor: Monitor[T, Any] = Monitor()
+        self.monitor: Monitor[Any] = Monitor()
 
     def __call__(self, coro: Coroutine[Any, Any, Any]) -> "GeneratorObjectIter[T]":
         return GeneratorObjectIter(self.monitor, coro)
 
-    async def ayield(self, value: Any) -> Any:
+    async def ayield(self, value: T) -> Any:
         """
         Asynchronously yield the value to the Generator object
         """
@@ -157,9 +173,7 @@ class GeneratorObject(Generic[T]):
 class GeneratorObjectIter(AsyncIterator[T]):
     __slots__ = ["monitor", "coro", "running", "finalizer", "__weakref__"]
 
-    def __init__(
-        self, monitor: Monitor[T, Any], coro: Coroutine[Any, Any, Any]
-    ) -> None:
+    def __init__(self, monitor: Monitor[Any], coro: Coroutine[Any, Any, Any]) -> None:
         self.monitor = monitor
         self.coro = coro
         self.running = False
@@ -190,17 +204,18 @@ class GeneratorObjectIter(AsyncIterator[T]):
             self._first_iter()
         self.running = True
         try:
-            is_oob, result = await self.monitor.oob_await(self.coro, value)
+            await self.monitor.aawait(self.coro, value)
+        except OOBData as oob:
+            return cast(T, oob.data)
         except StopAsyncIteration as err:
             # similar to pep479, StopAsyncIteration must not bubble out
             # the case for StopIteration is already handled by coro.send()
             # but raises a different "coroutine raised ..." RuntimeError.
             raise RuntimeError("async generator raised StopAsyncIteration") from err
+        else:
+            raise StopAsyncIteration()
         finally:
             self.running = False
-        if not is_oob:
-            raise StopAsyncIteration()
-        return cast(T, result)
 
     @overload
     async def athrow(
@@ -249,24 +264,24 @@ class GeneratorObjectIter(AsyncIterator[T]):
         self.running = True
         try:
             if type is not None:
-                is_oob, result = await self.monitor.oob_throw(
+                await self.monitor.athrow(
                     self.coro, cast(Type[BaseException], type), value, traceback
                 )
             else:
-                is_oob, result = await self.monitor.oob_throw(self.coro, GeneratorExit)
+                await self.monitor.athrow(self.coro, GeneratorExit)
+        except OOBData as oob:
+            if type is None:
+                raise RuntimeError("async generator ignored GeneratorExit")
+            return cast(T, oob.data)
         except StopAsyncIteration as err:
             raise RuntimeError("async generator raised StopAsyncIteration") from err
         except GeneratorExit:
             if type is None:
                 return None
             raise
+        else:
+            if type is None:
+                return None  # aclose() resulted in coroutine exit
+            raise StopAsyncIteration()
         finally:
             self.running = False
-        if type is not None:
-            if not is_oob:
-                raise StopAsyncIteration()
-        else:
-            if is_oob:
-                raise RuntimeError("async generator ignored GeneratorExit")
-
-        return cast(T, result)
