@@ -31,7 +31,30 @@ class TestMonitor:
         assert back == "howfoo"
 
     async def test_throw(self):
+        """
+        Assert that throwing an error into the coroutine after the first OOB
+        value works.
+        """
+
         async def helper(m):
+            with pytest.raises(EOFError):
+                await m.oob("foo")
+            return "bar"
+
+        m = Monitor()
+        c = helper(m)
+        with pytest.raises(OOBData) as oob:
+            await m.aawait(c)
+        assert oob.value.data == "foo"
+        assert await m.athrow(c, EOFError()) == "bar"
+
+    async def test_throw_new(self):
+        """
+        Assert that throwing an error into the un-run coroutine works
+        """
+
+        async def helper(m):
+            assert False
             return m
 
         m = Monitor()
@@ -59,8 +82,7 @@ class TestMonitor:
 
     async def test_monitor_re_enter(self):
         """
-        Test that the closest monitor listener receives
-        the messages
+        Verify that we get an error if trying to re-enter the monitor
         """
 
         async def helper(m):
