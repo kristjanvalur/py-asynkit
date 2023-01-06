@@ -1,6 +1,6 @@
 import asyncio
-from types import coroutine
 import time
+from types import coroutine
 
 # compare speed of returning a Future and a coroutine to get a non-blocking value
 

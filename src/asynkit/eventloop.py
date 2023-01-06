@@ -2,7 +2,7 @@ import asyncio
 import asyncio.base_events
 import contextlib
 import sys
-from asyncio import events, Handle
+from asyncio import Handle, events
 from typing import TYPE_CHECKING, Deque
 
 from .tools import create_task, deque_pop, task_from_handle
