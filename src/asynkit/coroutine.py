@@ -201,12 +201,26 @@ class CoroStart:
         return self.start_result[1] is not None
 
     def result(self):
+        """
+        Returns the result or raises the exception
+        """
         exc = self.start_result[1]
         if exc is None:
             raise asyncio.InvalidStateError("CoroStart: coroutine not done()")
         if isinstance(exc, StopIteration):
             return exc.value
         raise exc
+
+    def exception(self) -> Optional[BaseException]:
+        """
+        Returns the exception or None
+        """
+        exc = self.start_result[1]
+        if exc is None:
+            raise asyncio.InvalidStateError("CoroStart: coroutine not done()")
+        if isinstance(exc, StopIteration):
+            return None
+        return exc
 
     async def as_coroutine(self):
         """
