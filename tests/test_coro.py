@@ -11,7 +11,7 @@ from anyio import Event, create_task_group, sleep
 import asynkit
 import asynkit.tools
 
-eager_var = ContextVar("eager_var")
+eager_var: ContextVar = ContextVar("eager_var")
 
 pytestmark = pytest.mark.anyio
 
