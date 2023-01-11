@@ -4,7 +4,7 @@ from types import TracebackType
 
 import pytest
 from anyio import create_task_group
-from anyio.abc import TaskGroup, TaskStatus, CancelScope
+from anyio.abc import TaskGroup, TaskStatus
 
 from asynkit import CoroStart
 
@@ -40,7 +40,7 @@ class TaskStatusForwarder(TaskStatus):
 
     def get_value(self) -> Any:
         if not self.done:
-            raise RuntimeError("started() wasn't called")
+            raise RuntimeError("Child exited without calling task_status.started()")
         return self.value
 
 
@@ -54,29 +54,52 @@ class EagerTaskGroup(TaskGroup):
 
     def __init__(self, tg: TaskGroup):
         self._task_group = tg
+        self.cancel_scope = tg.cancel_scope
 
-    @property
-    def cancel_scope(self) -> CancelScope:
-        return self._task_group.cancel_scope
-
-    async def start(
+    def start(
         self,
         func: Callable[..., Coroutine[Any, Any, Any]],
         *args: object,
         name: Optional[object] = None
-    ) -> Any:
+    ) -> Coroutine[Any, Any, Any]:
         ts = TaskStatusForwarder()
         cs = CoroStart(func(*args, task_status=ts))
         if cs.done():
-            cs.result()
-            return ts.get_value()
+            # if started() was called, but there is an exception,
+            # we must return the started value, but leave the exception
+            # to be raised by a thread.
+            if ts.done:
+                if cs.exception():
+                    # return the value, start task to raise error
+                    async def task_helper(*, task_status: TaskStatus) -> Any:
+                        task_status.started(ts.get_value())
+                        cs.result()
+
+                    result = self._task_group.start(task_helper, name=name)
+                else:
+                    # return the value or raise missing-value exception
+                    async def helper() -> Any:
+                        return ts.get_value()
+
+                    result = helper()
+            else:
+                # we are finished, without calling Done.  We need to raise,
+                # either any exception which occurred, or the
+                # "started() not called" thing.
+                async def helper() -> Any:
+                    cs.result()
+                    ts.get_value()
+
+                result = helper()
+
         else:
 
-            def helper(task_status: TaskStatus) -> Coroutine[Any, Any, Any]:
+            def task_helper(*, task_status: TaskStatus) -> Coroutine[Any, Any, Any]:
                 ts.set_forward(task_status)
                 return cs.as_coroutine()
 
-            return self._task_group.start(helper, name=name)
+            result = self._task_group.start(task_helper, name=name)
+        return result
 
     def start_soon(
         self,
