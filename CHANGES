@@ -1,2 +1,3 @@
+* Release 0.5.0
 * make CoroStart() _awaitable_.  Simplify and make more robust.  remove auto_start.
 * Add support for context variables in CoroStart()
