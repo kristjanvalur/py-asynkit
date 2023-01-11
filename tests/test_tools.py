@@ -1,7 +1,18 @@
 import asyncio
 from collections import deque
+
 import pytest
+
 import asynkit.tools
+
+from .conftest import SchedulingEventLoopPolicy
+
+pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture
+def anyio_backend(request):
+    return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
 
 
 def test_deque_pop():

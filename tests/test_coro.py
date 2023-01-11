@@ -6,19 +6,29 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
+from anyio import Event, create_task_group, sleep
 
 import asynkit
 import asynkit.tools
 
-eager_var = ContextVar("eager_var")
+eager_var: ContextVar = ContextVar("eager_var")
+
+pytestmark = pytest.mark.anyio
 
 
 @pytest.mark.parametrize("block", [True, False])
 class TestEager:
+    @pytest.fixture
+    def anyio_backend(self):
+        """
+        eager behaviour creates Tasks and thus does not work directly with Trio
+        """
+        return "asyncio"
+
     async def coro1(self, log):
         log.append(1)
         eager_var.set("a")
-        await asyncio.sleep(0)
+        await sleep(0)
         log.append(2)
         assert eager_var.get() == "a"
         eager_var.set("b")
@@ -40,7 +50,7 @@ class TestEager:
     async def coro2(self, log):
         log.append(1)
         eager_var.set("a")
-        await asyncio.sleep(0)
+        await sleep(0)
         log.append(2)
         assert eager_var.get() == "a"
         eager_var.set("b")
@@ -49,13 +59,13 @@ class TestEager:
     async def coro3(self, log, block):
         log.append(1)
         if block:
-            await asyncio.sleep(0)
+            await sleep(0)
         log.append(2)
 
     async def coro6(self, log, block):
         log.append(1)
         if block:
-            await asyncio.sleep(0)
+            await sleep(0)
         log.append(2)
         raise RuntimeError("foo")
 
@@ -129,7 +139,7 @@ class TestEager:
 class TestCoroStart:
     async def coro1(self, log):
         log.append(1)
-        await asyncio.sleep(0)
+        await sleep(0.01)
         log.append(2)
         return log
 
@@ -147,7 +157,7 @@ class TestCoroStart:
         else:
             return self.coro1_nb, [1, 2, "a"]
 
-    def test_auto_start(self, block):
+    async def test_auto_start(self, block, anyio_backend):
         corofn, expect = self.get_coro1(block)
         log = []
         coro = corofn(log)
@@ -188,7 +198,7 @@ class TestCoroStart:
 
         # first test regular coroutine
         async def normal():
-            await asyncio.sleep(0)
+            await sleep(0)
 
         coro = normal()
         coro.send(None)
@@ -227,7 +237,8 @@ class TestCoroStart:
         await cr
         assert log == expect
 
-    async def test_as_future(self, block):
+    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
+    async def test_as_future(self, block, anyio_backend):
         coro, expect = self.get_coro1(block)
         log = []
         cs = asynkit.CoroStart(coro(log))
@@ -239,6 +250,7 @@ class TestCoroStart:
             assert not isinstance(fut, asyncio.Task)
             assert fut.done()
 
+    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
     async def test_as_future_custom(self, block):
         coro, expect = self.get_coro1(block)
         log = []
@@ -251,6 +263,7 @@ class TestCoroStart:
             assert not isinstance(fut, asyncio.Task)
             assert fut.done()
 
+    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
     async def test_task_factory(self, block):
         coro, expect = self.get_coro1(block)
         log = []
@@ -284,31 +297,39 @@ class TestCoroStart:
             cs.result()
 
 
-wrap = asynkit.coroutine.coro_await
+class TestCoroAwait:
+    """
+    These tests test the behaviour of a coroutine wrapped in `coro_await`
+    """
 
+    def wrap(self, coro):
+        return asynkit.coroutine.coro_await(coro)
 
-class TestCoro:
+    @pytest.fixture
+    def anyio_backend(self):
+        return "asyncio"
+
     async def test_return_nb(self):
         async def func(a):
             return a
 
         d = ["foo"]
-        assert await wrap(func(d)) is d
+        assert await self.wrap(func(d)) is d
 
     async def test_exception_nb(self):
         async def func():
             1 / 0
 
         with pytest.raises(ZeroDivisionError):
-            await wrap(func())
+            await self.wrap(func())
 
     async def test_coro_cancel(self):
         async def func():
-            await asyncio.sleep(0)
+            await sleep(0)
 
-        coro = wrap(func())
+        coro = self.wrap(func())
         task = asyncio.create_task(coro)
-        await asyncio.sleep(0)
+        await sleep(0)
         task.cancel()
 
         with pytest.raises(asyncio.CancelledError):
@@ -317,14 +338,14 @@ class TestCoro:
     async def test_coro_handle_cancel(self):
         async def func(a):
             try:
-                await asyncio.sleep(0)
+                await sleep(0)
             except asyncio.CancelledError:
                 return a
 
         d = ["a"]
-        coro = wrap(func(d))
+        coro = self.wrap(func(d))
         task = asyncio.create_task(coro)
-        await asyncio.sleep(0)
+        await sleep(0)
         task.cancel()
         assert await task is d
 
@@ -336,7 +357,7 @@ contextvar1: ContextVar = ContextVar("contextvar1")
 class TestContext:
     async def coro_block(self, var: ContextVar, val: Any):
         var.set(val)
-        await asyncio.sleep(0)
+        await sleep(0)
         assert var.get() is val
 
     async def coro_noblock(self, var: ContextVar, val: Any):
@@ -404,9 +425,9 @@ class TestCoroState:
 
     async def test_coro_new(self, kind):
         func = self.get_coro(kind)
-        f = asyncio.Future()
-        f.set_result(True)
-        coro = func(f)
+        e = Event()
+        e.set()
+        coro = func(e.wait())
         assert asynkit.coro_is_new(coro)
         assert not asynkit.coro_is_suspended(coro)
         assert not asynkit.coro_is_finished(coro)
@@ -414,26 +435,26 @@ class TestCoroState:
 
     async def test_coro_suspended(self, kind):
         func = self.get_coro(kind)
-        f = asyncio.Future()
-        coro = func(f)
+        e = Event()
+        coro = func(e.wait())
         wrap = self.wrap_coro(kind, coro)
-        t = asyncio.Task(wrap())
-        await asyncio.sleep(0)
-        assert not asynkit.coro_is_new(coro)
-        assert asynkit.coro_is_suspended(coro)
-        assert not asynkit.coro_is_finished(coro)
-        f.set_result(True)
-        await t
+        async with create_task_group() as tg:
+            tg.start_soon(wrap)
+            await sleep(0.01)  # need a non-zero wait for trio
+            assert not asynkit.coro_is_new(coro)
+            assert asynkit.coro_is_suspended(coro)
+            assert not asynkit.coro_is_finished(coro)
+            e.set()
 
     async def test_coro_finished(self, kind):
         func = self.get_coro(kind)
-        f = asyncio.Future()
-        coro = func(f)
+        e = Event()
+        coro = func(e.wait())
         wrap = self.wrap_coro(kind, coro)
-        t = asyncio.Task(wrap())
-        await asyncio.sleep(0)
-        f.set_result(True)
-        await t
+        async with create_task_group() as tg:
+            tg.start_soon(wrap)
+            await sleep(0)
+            e.set()
         assert not asynkit.coro_is_new(coro)
         assert not asynkit.coro_is_suspended(coro)
         assert asynkit.coro_is_finished(coro)
@@ -461,7 +482,7 @@ async def test_current():
 
 async def test_coro_get_frame():
     async def coroutine():
-        await asyncio.sleep(0)
+        await sleep(0)
 
     c = coroutine()
     assert asynkit.coroutine.coro_get_frame(c) is not None
@@ -469,7 +490,7 @@ async def test_coro_get_frame():
 
     @types.coroutine
     def generator():
-        yield from asyncio.sleep(0)
+        yield from sleep(0)
 
     c = generator()
     assert asynkit.coroutine.coro_get_frame(c) is not None
@@ -488,7 +509,7 @@ async def test_coro_get_frame():
 
 async def test_coro_is_suspended():
     async def coroutine():
-        await asyncio.sleep(0)
+        await sleep(0)
 
     c = coroutine()
     assert not asynkit.coroutine.coro_is_suspended(c)
@@ -498,7 +519,7 @@ async def test_coro_is_suspended():
 
     @types.coroutine
     def generator():
-        yield from asyncio.sleep(0)
+        yield from sleep(0)
 
     c = generator()
     assert not asynkit.coroutine.coro_is_suspended(c)
@@ -507,7 +528,7 @@ async def test_coro_is_suspended():
     c.close()
 
     async def asyncgen():
-        await asyncio.sleep(0)
+        await sleep(0)
         yield 1
 
     c = asyncgen()

@@ -3,7 +3,12 @@
 [![CI](https://github.com/kristjanvalur/py-asynkit/actions/workflows/ci.yml/badge.svg)](https://github.com/kristjanvalur/py-asynkit/actions/workflows/ci.yml)
 
 This module provides some handy tools for those wishing to have better control over the
-way Python's `asyncio` module does things
+way Python's `asyncio` module does things.
+
+- Helper tools for coroutines
+- `asyncio` event-loop extensions
+- "eager" execution of Tasks
+- Limited support for `anyio` and `trio`.
 
 ## Installation
 
@@ -264,3 +269,68 @@ Returns true if the object has finished executing, e.g. by returning or raising 
 ### `coro_get_frame(coro)`
 
 Returns the current frame object of the coroutine, if it has one, or `None`.
+
+## `anyio` support
+
+The library has been tested to work with the `anyio`.  However, not everything is supported on the `trio` backend.
+Currently only the `asyncio` backend can be assumed to work reliably.
+
+When using the asyncio backend, the module `asynkit.experimental.anyio` can be used, to provide "eager"-like
+behaviour to task creation.  It will return an `EagerTaskGroup` context manager:
+
+```python
+from asynkit.experimental.anyio import create_eager_task_group
+from anyio import run, sleep
+
+async def func(task_status):
+    print("hello")
+    task_status->started("world")
+    await sleep(0.01)
+    print("goodbye")
+
+async def main():
+
+    async with create_eager_task_group() as tg:
+        start = tg.start(func)
+        print("fine")
+        print(await start)
+    print ("world")
+
+run(main, backend="asyncio")
+```
+
+This will result in the following output:
+
+```
+hello
+fine
+world
+goodbye
+world
+```
+
+The first part of the function `func` is run even before calling `await` on the result from `EagerTaskGroup.start()`
+
+Similarly, `EagerTaskGroup.start_soon()` will run the provided coroutine up to its first blocking point before
+returning.
+
+### `trio` limitations
+
+`trio` differs significantly from `asyncio` and therefore enjoys only limited support.
+
+- The event loop is completely different and proprietary and so the event loop extensions don't work
+  for `trio`.
+
+- `CoroStart` when used with `Task` objects, such as by using `EagerTaskGroup`,
+  does not work reliably with `trio`.
+  This is because the syncronization primitives
+  are not based on `Future` objects but rather perform `Task`-based actions both before going to sleep
+  and upon waking up.  If a `CoroStart` initially blocks on a primitive such as `Event.wait()` or
+  `sleep(x)` it will be surprised and throw an error when it wakes up on in a different
+  `Task` than when it was in when it fell asleep.
+
+`CoroStart` works by intercepting a `Future` being passed up via the `await` protocol to 
+the event loop to perform the task scheduling.  If any part of the task scheduling has happened
+before this, and the _continuation_ happens on a different `Task` then things may break
+in various ways.   For `asyncio`, the event loop never sees the `Future` object until
+`as_coroutine()` has been called and awaited, and so if this happens in a new task, all is good.

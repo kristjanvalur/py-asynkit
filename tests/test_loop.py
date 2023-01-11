@@ -1,7 +1,18 @@
-from collections import deque
 import asyncio
+from collections import deque
+
 import pytest
+
 import asynkit
+
+from .conftest import SchedulingEventLoopPolicy
+
+pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture
+def anyio_backend(request):
+    return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
 
 
 class TestReadyRotate:
@@ -374,6 +385,7 @@ class TestRegularLoop:
     eventloop that does not support scheduling
     """
 
+    # for pytest-asyncio
     @pytest.fixture
     def event_loop(request):
         loop = asyncio.SelectorEventLoop()
@@ -381,6 +393,11 @@ class TestRegularLoop:
             yield loop
         finally:
             loop.close()
+
+    # for pytest-anyio
+    @pytest.fixture
+    def anyio_backend(self, request):
+        return ("asyncio", {"policy": asyncio.DefaultEventLoopPolicy()})
 
     async def test_sleep_insert(self):
         with pytest.raises(AttributeError):
