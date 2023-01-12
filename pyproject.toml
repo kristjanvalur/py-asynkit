@@ -43,3 +43,9 @@ build-backend = "poetry.core.masonry.api"
 testpaths = [
     "tests",
 ]
+
+[tool.ruff]
+# Ignore `F401` (unused import) in all `__init__.py` files
+# Ignore `F403` (importing *) in all `__init__.py` files
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
