@@ -161,8 +161,8 @@ class GeneratorObject(Generic[T]):
     ) -> None:
         self.monitor: Monitor[Any] = Monitor()
 
-    def __call__(self, coro: Coroutine[Any, Any, Any]) -> "GeneratorObjectIter[T]":
-        return GeneratorObjectIter(self.monitor, coro)
+    def __call__(self, coro: Coroutine[Any, Any, Any]) -> "GeneratorObjectIterator[T]":
+        return GeneratorObjectIterator(self.monitor, coro)
 
     async def ayield(self, value: T) -> Any:
         """
@@ -171,7 +171,7 @@ class GeneratorObject(Generic[T]):
         return await self.monitor.oob(value)
 
 
-class GeneratorObjectIter(AsyncIterator[T_co]):
+class GeneratorObjectIterator(AsyncIterator[T_co]):
     __slots__ = ["monitor", "coro", "running", "finalizer", "__weakref__"]
 
     def __init__(self, monitor: Monitor[Any], coro: Coroutine[Any, Any, Any]) -> None:
