@@ -4,7 +4,7 @@ from anyio import sleep
 
 import pytest
 
-from asynkit.susp import GeneratorObject, Monitor, OOBData
+from asynkit import GeneratorObject, Monitor, OOBData
 
 pytestmark = pytest.mark.anyio
 # Most tests here are just testing coroutine behaviour.
