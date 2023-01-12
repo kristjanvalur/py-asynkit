@@ -1,9 +1,17 @@
 import asyncio
 import sys
+from anyio import sleep
 
 import pytest
 
 from asynkit.susp import GeneratorObject, Monitor, OOBData
+
+pytestmark = pytest.mark.anyio
+# Most tests here are just testing coroutine behaviour.
+# some need to explicitly start tasks
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
 
 
 class TestMonitor:
@@ -14,9 +22,9 @@ class TestMonitor:
 
         async def helper(m):
             back = await m.oob("foo")
-            await asyncio.sleep(0)
+            await sleep(0)
             back = await m.oob(back + "foo")
-            await asyncio.sleep(0)
+            await sleep(0)
             return back + "foo"
 
         m = Monitor()
@@ -70,7 +78,7 @@ class TestMonitor:
         async def helper(m):
             back = await m.oob(1)
             assert back is None
-            await asyncio.sleep(0)
+            await sleep(0)
             back = await m.oob(2)
             assert back is None
 
@@ -99,34 +107,34 @@ class TestMonitor:
 
 async def top(g):
     v = await bottom(g, 10)
-    await asyncio.sleep(0)
+    await sleep(0)
     return await bottom(g, 20, v)
 
 
 async def bottom(g, i, v=None):
     v = await g.ayield(i + 1 + (v or 0))
-    await asyncio.sleep(0)
+    await sleep(0)
     v = await g.ayield(i + 2 + (v or 0))
-    await asyncio.sleep(0)
+    await sleep(0)
     v = await g.ayield(i + 3 + (v or 0))
-    await asyncio.sleep(0)
+    await sleep(0)
     return v
 
 
 async def topfail(g):
     v = await bottomfail(g, 10)
-    await asyncio.sleep(0)
+    await sleep(0)
     return await bottomfail(g, 20, v)
 
 
 async def bottomfail(g, i, v=None):
     v = await g.ayield(i + 1 + (v or 0))
-    await asyncio.sleep(0)
+    await sleep(0)
     raise ZeroDivisionError()
     v = await g.ayield(i + 2 + (v or 0))
-    await asyncio.sleep(0)
+    await sleep(0)
     v = await g.ayield(i + 3 + (v or 0))
-    await asyncio.sleep(0)
+    await sleep(0)
     return v
 
 
@@ -441,8 +449,9 @@ class TestGenerator:
             assert isinstance(err.value.__cause__, et)
             assert err.match(r"(async generator|coroutine) raised " + et.__name__)
 
+    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
     @pytest.mark.parametrize("gentype", ["std", "oob"], ids=["async gen", "Generator"])
-    async def test_issue_74956(self, gentype):
+    async def test_issue_74956(self, gentype, anyio_backend):
         # simultanous use of generator by different coroutines is not
         # allowed.
         # https://github.com/python/cpython/issues/74956
@@ -453,7 +462,7 @@ class TestGenerator:
 
             async def consumer():
                 while True:
-                    await asyncio.sleep(0)
+                    await sleep(0)
                     yield
                     # print('received', message)
 
@@ -461,7 +470,7 @@ class TestGenerator:
 
             async def gf(g):
                 while True:
-                    await asyncio.sleep(0)
+                    await sleep(0)
                     await g.ayield(None)
                     # print('received', message)
 
@@ -495,8 +504,9 @@ class TestGenerator:
             await fb
         assert err.match("already running")
 
+    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
     @pytest.mark.parametrize("gentype", ["std", "oob"], ids=["async gen", "Generator"])
-    async def test_loop_cleanup(self, gentype):
+    async def test_loop_cleanup(self, gentype, anyio_backend):
 
         closed = False
         if gentype == "std":
@@ -532,7 +542,7 @@ class TestGenerator:
         assert i == 0
         assert not closed
         g = None
-        await asyncio.sleep(0.01)
+        await sleep(0.01)
         assert closed
 
         # test that cleanup occurs with explicit gen shutdown
