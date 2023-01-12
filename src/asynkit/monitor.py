@@ -4,6 +4,7 @@ from types import TracebackType
 from typing import (
     Any,
     AsyncIterator,
+    AsyncGenerator,
     Callable,
     Coroutine,
     Generator,
@@ -21,7 +22,9 @@ from typing import (
 from .coroutine import coro_is_finished, coro_is_new
 
 T = TypeVar("T")
+V = TypeVar("V")
 T_co = TypeVar("T_co", covariant=True)
+T_contra = TypeVar("T_contra", contravariant=True)
 
 
 class OOBData(Exception):
@@ -153,7 +156,7 @@ class Monitor(Generic[T]):
         return (yield data)
 
 
-class GeneratorObject(Generic[T]):
+class GeneratorObject(Generic[T, V]):
     __slots__ = ["monitor"]
 
     def __init__(
@@ -161,7 +164,9 @@ class GeneratorObject(Generic[T]):
     ) -> None:
         self.monitor: Monitor[Any] = Monitor()
 
-    def __call__(self, coro: Coroutine[Any, Any, Any]) -> "GeneratorObjectIterator[T]":
+    def __call__(
+        self, coro: Coroutine[Any, Any, Any]
+    ) -> "GeneratorObjectIterator[T, V]":
         return GeneratorObjectIterator(self.monitor, coro)
 
     async def ayield(self, value: T) -> Any:
@@ -171,7 +176,7 @@ class GeneratorObject(Generic[T]):
         return await self.monitor.oob(value)
 
 
-class GeneratorObjectIterator(AsyncIterator[T_co]):
+class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
     __slots__ = ["monitor", "coro", "running", "finalizer", "__weakref__"]
 
     def __init__(self, monitor: Monitor[Any], coro: Coroutine[Any, Any, Any]) -> None:
@@ -196,7 +201,7 @@ class GeneratorObjectIterator(AsyncIterator[T_co]):
             cast(Callable[[Any], None], hooks.firstiter)(self)
         self.finalizer = cast(Optional[Callable[[Any], None]], hooks.finalizer)
 
-    async def asend(self, value: Any) -> T_co:
+    async def asend(self, value: Optional[T_contra]) -> T_co:
         if self.running:
             raise RuntimeError("asend(): asynchronous generator is already running")
         if coro_is_finished(self.coro):
@@ -224,7 +229,7 @@ class GeneratorObjectIterator(AsyncIterator[T_co]):
         type: Type[BaseException],
         value: Union[BaseException, object] = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> Optional[T_co]:
+    ) -> T_co:
         ...
 
     @overload
@@ -233,7 +238,7 @@ class GeneratorObjectIterator(AsyncIterator[T_co]):
         type: BaseException,
         value: None = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> Optional[T_co]:
+    ) -> T_co:
         ...
 
     async def athrow(
@@ -241,8 +246,8 @@ class GeneratorObjectIterator(AsyncIterator[T_co]):
         type: Union[BaseException, Type[BaseException]],
         value: Union[BaseException, object] = None,
         traceback: Optional[TracebackType] = None,
-    ) -> Optional[T_co]:
-        return await self._athrow(type, value, traceback)
+    ) -> T_co:
+        return cast(T_co, await self._athrow(type, value, traceback))
 
     async def aclose(self) -> None:
         await self._athrow(None, None, None)
