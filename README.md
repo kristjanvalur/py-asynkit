@@ -118,7 +118,7 @@ an exception. It has the following methods:
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
 
-## Context helper
+### Context helper
 
 `coro_await()` is a helper function to await a coroutine, optionally with a `contextvars.Context`
 object to activate:
@@ -139,7 +139,79 @@ async def main():
     assert context.get(var1) == "foo"
 ```
 
-This is similar to `contextvars.Context.run()` but works for async functions.
+This is similar to `contextvars.Context.run()` but works for async functions.  This function is
+implemented using `CoroStart`
+
+### `Monitor`
+
+A `Monitor` object can be used to await a coroutine, while listening for _out of band_ messages
+from the coroutine.  As the coroutine sends messages, it is suspended, until the caller resumes
+awaiting for it.
+
+```python
+async def coro(monitor):
+    await monitor.oob("hello")
+    await asyncio.sleep(0)
+    await monitor.oob("dolly")
+    return "done"
+
+async def runner():
+    m = Monitor()
+    c = coro(m)
+    while True:
+        try:
+            print(await m.aawait(c))
+        except OOBData as oob:
+            print(oob.data)
+```
+
+which will result in the output
+
+```
+hello
+dolly
+done
+```
+
+The caller can also pass in data to the coroutine via the `Monitor.aawait(coro, data:None)` method and
+it will become the result of the `Monitor.oob()` call inside the monitor.   `Monitor.athrow()` can be
+used to raise an exception inside the coroutine.
+
+A Monitor can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
+condition, without resorting to the relatively heavy mechanism of creating, managing and synchronizing
+`Task` objects.
+
+### `GeneratorObject`
+
+A GeneratorObject builds on top of the `Monitor` to create an `AsyncGenerator`.  It is in many ways
+similar to an _asynchronous generator_ constructed using the _generator function_ syntax.
+But wheras those return values using the `yield` keyword,
+a GeneratorObject has an `ayield()` method, which means that data can be sent to the generator
+by anyone.
+It leverages the `Monitor.oob()` method to deliver the yielded data to whomever is iterating over it:
+
+```python
+async def generator(gen_obj):
+    # yield directly to the generator
+    await gen_obj.ayield(1):
+    # have someone else yield to it
+    async def helper():
+        await gen_obj.ayield(2)
+    await asyncio.create_task(helper())
+
+async def runner():
+    gen_obj = GeneratorObject()
+    values = [val async for val in gen_obj(generator(gen_obj))]
+    assert values == [1, 2]
+```
+
+The `GeneratorObject`, when called, returns a `GeneratorObjectIterator` which behaves in
+the same way as an `AsyncGenerator` object.  It can be iterated over and supports the
+`asend()`, `athrow()` and `aclose()` methods.
+
+A GeneratorObject is a flexible way to asynchronously generate results without
+resorting to Tasks and Queues.
+
 
 ## Event loop tools
 
