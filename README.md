@@ -5,9 +5,9 @@
 This module provides some handy tools for those wishing to have better control over the
 way Python's `asyncio` module does things.
 
-- Helper tools for coroutines
+- Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
 - `asyncio` event-loop extensions
-- "eager" execution of Tasks
+- _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
 
 ## Installation
@@ -107,13 +107,20 @@ directly turned into a `Task`.
 
 This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. 
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
-an exception. It has the following methods:
+an exception.
 
-- `done()` returns true if the coroutine start resulted in it completing.
-- `as_coroutine()` returns an coroutine with the coroutine's results.
-- `as_future()` returns a `Future`.  If the coroutine is finished, the returned object is a plain `Future`,
-  otherwise a `Task` (as created by the optional `create_task` parameter). This is suitable for uses such as
-  `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.  
+Similar to a `Future` it has these methods:
+
+ - `done()` - returns `True` if the coroutine finished without blocking.
+ - `result()` - If `done()`, returns the result or raises an exception.
+ - `exception()` - if `done()`, returns any _exception_ raised, or None otherwise.
+
+ But more importly it has these:
+
+- `as_coroutine()` returns an coroutine encapsulating the original coroutine's _continuation_.  If it has already finished, awaiting this coroutine is the same as calling `result()`.
+- `as_future()` returns a `Future`.  If the coroutine has finished, the returned object is a plain `Future`,
+  otherwise a `Task` is returned. This is suitable for uses such as
+  `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.
 
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
