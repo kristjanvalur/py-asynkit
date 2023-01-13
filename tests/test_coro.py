@@ -88,6 +88,21 @@ class TestEager:
         assert log == expect
         assert eager_var.get() == "X"
 
+    async def test_coro_eager_create_task(self, block):
+        log = []
+        eager_var.set("X")
+        coro, expect = self.get_coro1(block)
+        m = Mock()
+        m.side_effect = asynkit.tools.create_task
+        future = asynkit.coro_eager(coro(log), create_task=m, name="bob")
+        if block:
+            m.assert_called_once()
+            assert m.call_args[1] == {"name": "bob"}
+        log.append("a")
+        await future
+        assert log == expect
+        assert eager_var.get() == "X"
+
     async def test_func_eager(self, block):
         log = []
         eager_var.set("X")
