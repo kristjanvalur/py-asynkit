@@ -94,7 +94,7 @@ of invocation in each such case.
 1. It copies the current _context_
 1. It initializes a `CoroStart()` object for the coroutine, starting it in the copied context.
 2. If it subsequently is `done()` It returns `CoroStart.as_future()`, ortherwise
-   it creates and returns a `Task` (using `asyncio.create_task by default`)
+   it creates and returns a `Task` (using `asyncio.create_task` by default.)
 
 The result is an _awaitable_ which can be either directly awaited or passed
 to `asyncio.gather()`. The coroutine is executed in its own copy of the current context,
@@ -106,13 +106,21 @@ just as would happen if it were directly turned into a `Task`.
 
 This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. 
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
-an exception. It has the following methods:
+an exception.
 
-- `done()` - Returns `True` if the coroutine start resulted in it completing.
-- `as_coroutine()` - Returns an coroutine representing the _continuation_ of the coroutine.
-- `as_future()` if `done()`, returns a `Future` holding its result. This is suitable for uses such as
+Similarly to a `Future`, it has these methods:
+
+- `done()` - returns `True` if the coroutine finished without blocking. In this case, the following two methods may be called to get the result.
+- `result()` - Returns the _return value_ of the coroutine or **raises** any _exception_ that it produced.
+- `exception()` - Returns any _exception_ raised, or `None` otherwise.
+
+ But more importly it has these:
+
+- `as_coroutine()` - Returns an coroutine encapsulating the original coroutine's _continuation_.
+  If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it continues the original coroutine's execution.
+- `as_future()` - If `done()`, returns a `Future` holding its result, otherwise, a `RuntimeError`
+  is raised. This is suitable for using with
   `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.
-  Otherwise, a `RuntimeError` is raised.
 
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
