@@ -6,19 +6,20 @@ This module provides some handy tools for those wishing to have better control o
 way Python's `asyncio` module does things.
 
 - Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
+- Utility classes such as `GeneratorObject`
 - `asyncio` event-loop extensions
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
 
-## Installation
+# Installation
 
 ```bash
 $ pip install asynkit
 ```
 
-## Coroutine Tools
+# Coroutine Tools
 
-### `eager()` - lower latency IO
+## `eager()` - lower latency IO
 
 Did you ever wish that your _coroutines_ started right away, and only returned control to
 the caller once they become blocked?  Like the way the `async` and `await` keywords work in the __C#__ language?
@@ -87,7 +88,7 @@ Decorating your function makes sense if you __always__ intend
 To _await_ its result at some later point. Otherwise, just apply it at the point
 of invocation in each such case. 
 
-### `coro_eager()`, `func_eager()`
+## `coro_eager()`, `func_eager()`
 
 `coro_eager()` is the magic coroutine wrapper providing the __eager__ behaviour:
 
@@ -102,7 +103,7 @@ just as would happen if it were directly turned into a `Task`.
 
 `func_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
-### `CoroStart`
+## `CoroStart`
 
 This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. 
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
@@ -125,7 +126,7 @@ Similarly to a `Future`, it has these methods:
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
 
-### Context helper
+## Context helper
 
 `coro_await()` is a helper function to await a coroutine, optionally with a `contextvars.Context`
 object to activate:
@@ -149,7 +150,7 @@ async def main():
 This is similar to `contextvars.Context.run()` but works for async functions.  This function is
 implemented using `CoroStart`
 
-### `Monitor`
+## `Monitor`
 
 A `Monitor` object can be used to await a coroutine, while listening for _out of band_ messages
 from the coroutine.  As the coroutine sends messages, it is suspended, until the caller resumes
@@ -215,7 +216,7 @@ this to the monitor:
 In this example, `readline()` is trivial, but if this were a complicated parser with hierarchical
 invocation structure, then this pattern allows the decoupling of IO and the parsing of buffered data, maintaining the state of the parser while _the caller_ fills up the buffer.
 
-### `GeneratorObject`
+## `GeneratorObject`
 
 A GeneratorObject builds on top of the `Monitor` to create an `AsyncGenerator`.  It is in many ways
 similar to an _asynchronous generator_ constructed using the _generator function_ syntax.
@@ -247,12 +248,12 @@ A GeneratorObject is a flexible way to asynchronously generate results without
 resorting to Tasks and Queues.
 
 
-## Event loop tools
+# Event loop tools
 
 Also provided is a mixin for the built-in event loop implementations in python, providing some primitives for advanced
 scheduling of tasks.
 
-### `SchedulingMixin` mixin class
+## `SchedulingMixin` mixin class
 
 This class adds some handy scheduling functions to the event loop. They primarily
 work with the _ready queue_, a queue of callbacks representing tasks ready
@@ -264,14 +265,14 @@ to be executed.
 - `ready_rotate(self, n)` - rotates the queue
 - `call_insert(self, pos, ...)` - schedules a callback at position `pos` in the queue
 
-### Concrete event loop classes
+## Concrete event loop classes
 
 Concrete subclasses of Python's built-in event loop classes are provided.
 
 - `SchedulingSelectorEventLoop` is a subclass of `asyncio.SelectorEventLoop` with the `SchedulingMixin`
 - `SchedulingProactorEventLoop` is a subclass of `asyncio.ProactorEventLoop` with the `SchedulingMixin` on those platforms that support it.
 
-### Event Loop Policy
+## Event Loop Policy
 
 A policy class is provided to automatically create the appropriate event loops.
 
@@ -354,29 +355,22 @@ Returns a set of the tasks that are currently runnable in the given loop
 
 Returns a set of the tasks that are currently blocked on some future in the given loop.
 
-## Coroutine helpers
+# Coroutine helpers
 
 A couple of functions are provided to introspect the state of coroutine objects. They
 work on both regular __async__ coroutines, __classic__ coroutines (using `yield from`) and
 __async generators__.
 
-### `coro_is_new(coro)`
+- `coro_is_new(coro)` -
+  Returns true if the object has just been created and hasn't started executing yet
 
-Returns true if the object has just been created and hasn't started executing yet
+- `coro_is_suspended(coro)` - Returns true if the object is in a suspended state.
 
-### `coro_is_suspended(coro)`
+- `coro_is_done(coro)` - Returns true if the object has finished executing, e.g. by returning or raising an exception.
 
-Returns true if the object is in a suspended state.
+- `coro_get_frame(coro)` - Returns the current frame object of the coroutine, if it has one, or `None`.
 
-### `coro_is_done(coro)`
-
-Returns true if the object has finished executing, e.g. by returning or raising an exception.
-
-### `coro_get_frame(coro)`
-
-Returns the current frame object of the coroutine, if it has one, or `None`.
-
-## `anyio` support
+# `anyio` support
 
 The library has been tested to work with the `anyio`.  However, not everything is supported on the `trio` backend.
 Currently only the `asyncio` backend can be assumed to work reliably.
@@ -420,7 +414,7 @@ The first part of the function `func` is run even before calling `await` on the 
 Similarly, `EagerTaskGroup.start_soon()` will run the provided coroutine up to its first blocking point before
 returning.
 
-### `trio` limitations
+## `trio` limitations
 
 `trio` differs significantly from `asyncio` and therefore enjoys only limited support.
 
