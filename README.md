@@ -82,38 +82,45 @@ asyncio.run(caller(asynkit.eager))
 assert log == ["a", 1, "b", "c", 2]
 ```
 
-`eager()` is actually a convenience function, invoking either `coro_eager()` or `async_eager()` (see below) depending on context.
+`eager()` is actually a convenience function, invoking either `coro_eager()` or `func_eager()` (see below) depending on context.
 Decorating your function makes sense if you __always__ intend
 To _await_ its result at some later point. Otherwise, just apply it at the point
 of invocation in each such case. 
 
-### `coro_eager()`, `async_eager()`
+### `coro_eager()`, `func_eager()`
 
 `coro_eager()` is the magic coroutine wrapper providing the __eager__ behaviour:
 
-1. It initializes a `CoroStart()` object for the coroutine, starting it.
-2. It returns `CoroStart.as_future()`.
+1. It copies the current _context_
+1. It initializes a `CoroStart()` object for the coroutine, starting it in the copied context.
+2. If it subsequently is `done()` It returns `CoroStart.as_future()`, ortherwise
+   it creates and returns a `Task` (using `asyncio.create_task` by default.)
 
-If the coroutine finished in step 1 above, the Future is a plain future and the
-result is immediately available. Otherwise, a Task is created continuing from
-the point where the coroutine initially suspended. In either case, the result
-is an _awaitable_.
-The coroutine is executed in its own context, just as would happen if it were
-directly turned into a `Task`.
+The result is an _awaitable_ which can be either directly awaited or passed
+to `asyncio.gather()`. The coroutine is executed in its own copy of the current context,
+just as would happen if it were directly turned into a `Task`.
 
-`async_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
+`func_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
 ### `CoroStart`
 
 This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. 
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
-an exception. It has the following methods:
+an exception.
 
-- `done()` returns true if the coroutine start resulted in it completing.
-- `as_coroutine()` returns an coroutine with the coroutine's results.
-- `as_future()` returns a `Future`.  If the coroutine is finished, the returned object is a plain `Future`,
-  otherwise a `Task` (as created by the optional `create_task` parameter). This is suitable for uses such as
-  `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.  
+Similarly to a `Future`, it has these methods:
+
+- `done()` - returns `True` if the coroutine finished without blocking. In this case, the following two methods may be called to get the result.
+- `result()` - Returns the _return value_ of the coroutine or **raises** any _exception_ that it produced.
+- `exception()` - Returns any _exception_ raised, or `None` otherwise.
+
+ But more importly it has these:
+
+- `as_coroutine()` - Returns an coroutine encapsulating the original coroutine's _continuation_.
+  If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it continues the original coroutine's execution.
+- `as_future()` - If `done()`, returns a `Future` holding its result, otherwise, a `RuntimeError`
+  is raised. This is suitable for using with
+  `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.
 
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
