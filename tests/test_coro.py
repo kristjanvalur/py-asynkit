@@ -88,6 +88,21 @@ class TestEager:
         assert log == expect
         assert eager_var.get() == "X"
 
+    async def test_coro_eager_create_task(self, block):
+        log = []
+        eager_var.set("X")
+        coro, expect = self.get_coro1(block)
+        m = Mock()
+        m.side_effect = asynkit.tools.create_task
+        future = asynkit.coro_eager(coro(log), create_task=m, name="bob")
+        if block:
+            m.assert_called_once()
+            assert m.call_args[1] == {"name": "bob"}
+        log.append("a")
+        await future
+        assert log == expect
+        assert eager_var.get() == "X"
+
     async def test_func_eager(self, block):
         log = []
         eager_var.set("X")
@@ -242,44 +257,13 @@ class TestCoroStart:
         coro, expect = self.get_coro1(block)
         log = []
         cs = asynkit.CoroStart(coro(log))
-        fut = cs.as_future()
-        assert isinstance(fut, asyncio.Future)
         if block:
-            assert isinstance(fut, asyncio.Task)
+            with pytest.raises(RuntimeError) as err:
+                fut = cs.as_future()
+            assert err.match(r"not done")
         else:
-            assert not isinstance(fut, asyncio.Task)
-            assert fut.done()
-
-    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
-    async def test_as_future_custom(self, block):
-        coro, expect = self.get_coro1(block)
-        log = []
-        cs = asynkit.CoroStart(coro(log))
-        fut = cs.as_future(create_task=lambda t: t)
-        if block:
-            assert inspect.iscoroutine(fut)
-            await fut
-        else:
-            assert not isinstance(fut, asyncio.Task)
-            assert fut.done()
-
-    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
-    async def test_task_factory(self, block):
-        coro, expect = self.get_coro1(block)
-        log = []
-        mock = Mock()
-        cs = asynkit.CoroStart(coro(log))
-        fut = cs.as_future(create_task=mock)
-        if block:
-            assert isinstance(fut, Mock)
-            mock.assert_called()
-            assert len(mock.call_args[0]) == 1
-            coro = mock.call_args[0][0]
-            assert inspect.iscoroutine(coro)
-            await coro
-        else:
+            fut = cs.as_future()
             assert isinstance(fut, asyncio.Future)
-            mock.assert_not_called()
 
     async def test_result(self, block):
         coro, _ = self.get_coro1(block)

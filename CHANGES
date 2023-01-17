@@ -1,3 +1,4 @@
+* Move Task creation out of the `CoroStart` class and into `coro_eager()` helper.
 * Add Monitor class and GeneratorObject
 * Add anyio support for testing.  Add asykit.experimental.anyio.
 * Release 0.5.0
