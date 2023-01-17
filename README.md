@@ -186,7 +186,34 @@ used to raise an exception inside the coroutine.
 
 A Monitor can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
 condition, without resorting to the relatively heavy mechanism of creating, managing and synchronizing
-`Task` objects.
+`Task` objects.  This can be useful if the coroutine needs to maintain state.
+
+Consider the following scenario. A _parser_ wants to read a line from a buffer, but fails, signalling
+this to the monitor:
+
+```python
+    async def readline(m, buffer):
+        l = buffer.readline()
+        while not l.endswith("\n"):
+            await m.oob(None)  # ask for more data in the buffer
+            l += buffer.readline()
+        return l
+
+    async def manager(buffer, io):
+        m = Monitor()
+        c = readline(m, buffer)
+        while True:
+            try:
+                return await m.aawait(c)
+            except OOBData:
+                try:
+                    buffer.fill(await io.read())
+                except Exception as exc:
+                    await m.athrow(c, exc)
+```
+
+In this example, `readline()` is trivial, but if this were a complicated parser with hierarchical
+invocation structure, then this pattern allows the decoupling of IO and the parsing of buffered data, maintaining the state of the parser while _the caller_ fills up the buffer.
 
 ### `GeneratorObject`
 
