@@ -241,6 +241,28 @@ class TestStart:
 
         assert result == ["a", "b"]
 
+    async def test_normal_create_group(self, group, block):
+        eager = group == create_eager_task_group
+        if block and eager:
+            pytest.xfail("cancel scope corruption")
+        result = []
+        event, coro = self.get_coro(block)
+        # manually create the group
+        if group == create_eager_task_group:
+            tg = EagerTaskGroup(create_task_group())
+        else:
+            tg = create_task_group()
+        async with tg:
+            coro2 = tg.start(coro, result, "b", name="myname")
+            if not eager:
+                assert result == []
+            else:
+                assert result == (["a"] if block else ["a", "b"])
+            event.set()
+            assert await coro2 == "b"
+
+        assert result == ["a", "b"]
+
     def get_coro(self, block):
 
         event = Event()
