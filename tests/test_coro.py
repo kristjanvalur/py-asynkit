@@ -285,6 +285,20 @@ class TestCoroStart:
         with pytest.raises(ZeroDivisionError):
             cs.result()
 
+    async def test_exception(self, block):
+        async def coro():
+            if block:
+                await sleep(0.01)
+            1 / 0
+
+        cs = asynkit.CoroStart(coro())
+        if block:
+            assert not cs.done()
+            with pytest.raises(asyncio.InvalidStateError):
+                cs.exception()
+        else:
+            assert isinstance(cs.exception(), ZeroDivisionError)
+
     async def test_low_level_close(self, block):
         coro, _ = self.get_coro1(block)
         log = []
