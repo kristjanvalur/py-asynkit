@@ -113,7 +113,7 @@ class SchedulingSelectorEventLoop(asyncio.SelectorEventLoop, SchedulingMixin):
     pass
 
 
-if not TYPE_CHECKING and hasattr(asyncio, "ProactorEventLoop"):
+if not TYPE_CHECKING and hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
 
     class SchedulingProactorEventLoop(asyncio.ProactorEventLoop, SchedulingMixin):
         pass

@@ -153,8 +153,13 @@ class TestEager:
 @pytest.mark.parametrize("block", [True, False], ids=["block", "noblock"])
 class TestCoroStart:
     async def coro1(self, log):
+        self.gen_exit = False
         log.append(1)
-        await sleep(0.01)
+        try:
+            await sleep(0.01)
+        except GeneratorExit:
+            self.gen_exit = True
+            raise
         log.append(2)
         return log
 
@@ -279,6 +284,35 @@ class TestCoroStart:
         assert cs.done()
         with pytest.raises(ZeroDivisionError):
             cs.result()
+
+    async def test_exception(self, block):
+        async def coro():
+            if block:
+                await sleep(0.01)
+            1 / 0
+
+        cs = asynkit.CoroStart(coro())
+        if block:
+            assert not cs.done()
+            with pytest.raises(asyncio.InvalidStateError):
+                cs.exception()
+        else:
+            assert isinstance(cs.exception(), ZeroDivisionError)
+
+    async def test_low_level_close(self, block):
+        coro, _ = self.get_coro1(block)
+        log = []
+        cs = asynkit.CoroStart(coro(log))
+        cont = cs.as_coroutine()
+        if not block:
+            with pytest.raises(StopIteration) as err:
+                cont.send(None)
+            assert err.value.value == [1, 2]
+        else:
+            cont.send(None)
+        cont.close()
+        if block:
+            assert self.gen_exit is True
 
 
 class TestCoroAwait:
