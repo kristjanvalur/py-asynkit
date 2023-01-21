@@ -122,6 +122,56 @@ class TestMonitor:
             await m.aawait(c, None)
         assert err.match("raised OOBData")
 
+    async def test_monitor_close(self):
+        """
+        Test low-level close() handling of our coroutine, for coverage
+        """
+
+        async def helper(m):
+            await sleep(0)
+
+        m = Monitor()
+        c = helper(m)
+        cc = m.aawait(c, None)
+        f = cc.send(None)
+        cc.close()
+
+    async def test_monitor_throw(self):
+        """
+        Test low-level throw() handling of our coroutine, for coverage
+        """
+
+        async def helper(m):
+            await sleep(0)
+
+        m = Monitor()
+        c = helper(m)
+        cc = m.aawait(c, None)
+        f = cc.send(None)
+        with pytest.raises(EOFError):
+            cc.throw(EOFError())
+        cc.close()
+
+    async def test_monitor_throw2(self):
+        """
+        Test low-level throw() handling of our coroutine, for coverage
+        """
+
+        async def helper(m):
+            try:
+                await sleep(0)
+            except EOFError:
+                return 1
+
+        m = Monitor()
+        c = helper(m)
+        cc = m.aawait(c, None)
+        f = cc.send(None)
+        with pytest.raises(StopIteration) as err:
+            cc.throw(EOFError())
+        assert err.value.value == 1
+        cc.close()
+
 
 async def top(g):
     v = await bottom(g, 10)
