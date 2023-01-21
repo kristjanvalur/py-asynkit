@@ -257,6 +257,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
     async def aclose(self) -> None:
         await self._athrow(None, None, None)
 
+    # shared implementation for aclose() and athrow()
     async def _athrow(
         self,
         type: Optional[Union[BaseException, Type[BaseException]]],
@@ -275,21 +276,26 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         self.running = True
         try:
             if type is not None:
+                # athrow()
                 await self.monitor.athrow(
                     self.coro, cast(Type[BaseException], type), value, traceback
                 )
             else:
+                # aclose()
                 await self.monitor.athrow(self.coro, GeneratorExit)
         except OOBData as oob:
             if type is None:
+                # aclose() - There should be no generated value
                 raise RuntimeError("async generator ignored GeneratorExit")
+            # athrow() - return the generated value
             return cast(T_co, oob.data)
         except StopAsyncIteration as err:
             raise RuntimeError("async generator raised StopAsyncIteration") from err
         except GeneratorExit:
+            # special handling for GeneratorExit if this was an aclose() call
             if type is None:
-                return None
-            raise
+                return None  # aclose()
+            raise  # otherwise, pass the error along
         else:
             if type is None:
                 return None  # aclose() resulted in coroutine exit

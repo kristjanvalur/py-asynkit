@@ -493,6 +493,14 @@ class TestGenerator:
         with pytest.raises(StopAsyncIteration):
             await g.__anext__()
 
+    async def test_throw_generatorexit(self, normalgen):
+        g = normalgen
+        n = await g.__anext__()
+        assert n == 11
+        with pytest.raises(GeneratorExit):
+            n = await g.athrow(GeneratorExit)
+            await g.__anext__()
+
     async def test_pep_479(self, gen479):
         for et in (StopIteration, StopAsyncIteration):
             g = gen479(et)
