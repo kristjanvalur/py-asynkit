@@ -108,6 +108,20 @@ class TestMonitor:
         t = await m.aawait(c, None)
         assert t == 3
 
+    async def test_monitor_raise_oob(self):
+        """
+        Verify that we get an error if raising OOB error out of monitor
+        """
+
+        async def helper(m):
+            raise OOBData("foo")
+
+        m = Monitor()
+        c = helper(m)
+        with pytest.raises(RuntimeError) as err:
+            await m.aawait(c, None)
+        assert err.match("raised OOBData")
+
 
 async def top(g):
     v = await bottom(g, 10)
