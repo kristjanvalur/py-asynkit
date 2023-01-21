@@ -116,7 +116,7 @@ class Monitor(Generic[T]):
         value: Union[BaseException, object] = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T:
-        ...
+        ...  # pragma: no coverage
 
     @overload
     async def athrow(
@@ -126,7 +126,7 @@ class Monitor(Generic[T]):
         value: None = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T:
-        ...
+        ...  # pragma: no coverage
 
     async def athrow(
         self,
@@ -230,7 +230,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         value: Union[BaseException, object] = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T_co:
-        ...
+        ...  # pragma: no coverage
 
     @overload
     async def athrow(
@@ -239,7 +239,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         value: None = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T_co:
-        ...
+        ...  # pragma: no coverage
 
     async def athrow(
         self,
