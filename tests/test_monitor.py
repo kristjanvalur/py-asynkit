@@ -93,10 +93,14 @@ class TestMonitor:
         Verify that we get an error if trying to re-enter the monitor
         """
 
-        async def helper(m):
+        async def helper(m, final=0):
+            if final:
+                return
+            c = helper(m, final=1)
             with pytest.raises(RuntimeError) as err:
-                await m.aawait(helper(m))
+                await m.aawait(c)
             assert err.match(r"cannot be re-entered")
+            await c  # to avoid warnings, must await all coroutines
             return 3
 
         m = Monitor()
