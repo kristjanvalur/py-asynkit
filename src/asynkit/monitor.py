@@ -29,19 +29,21 @@ T_contra = TypeVar("T_contra", contravariant=True)
 
 class OOBData(Exception):
     """
-    An exception representing OutOfBound data sent to a Monitor
+    An exception representing OutOfBound data sent to a Monitor.
+    The `data` member contains any actual data being sent.
     """
 
     __slots__ = ["data"]
 
-    def __init__(self, data: Any):
+    def __init__(self, data: Optional[Any] = None):
         self.data = data
 
 
 class Monitor(Generic[T]):
     """
     A class to await a coroutine while receiving and sending OOB (out of band)
-    data to the coroutine and leaving it suspended.
+    data to the coroutine.  The called coroutine can thus suspend operation while
+    the caller handles and responds to the OOB data.
     """
 
     __slots__ = [
@@ -52,12 +54,16 @@ class Monitor(Generic[T]):
         self.state: int = 0
 
     @types.coroutine
-    def _oob_generic(
+    def _asend(
         self,
         coro: Coroutine[Any, Any, T],
         callable: Callable[..., Any],
         args: Tuple[Any, ...],
     ) -> Generator[Any, Any, T]:
+        """
+        Await a coroutine after an initial "send" call which is either
+        `send()` or `throw()`, while handling the OOB data protocol.
+        """
         if self.state != 0:
             raise RuntimeError("Monitor cannot be re-entered")
         self.state = 1
@@ -76,8 +82,7 @@ class Monitor(Generic[T]):
                 try:
                     in_value = yield out_value
 
-                except GeneratorExit:  # pragma: no coverage
-                    # asyncio lib does not appear to ever close coroutines.
+                except GeneratorExit:
                     coro.close()
                     raise
                 except BaseException as exc:
@@ -103,10 +108,10 @@ class Monitor(Generic[T]):
         Asynchronously await the coroutine result.  If the coroutine calls `oob()`
         the function will throw a `OOBData` exception with the data in the `data`
         attribute.  The caller must then re-try the `aawait`.
-        `data` must be None for the first time `aawait()` is called, but can be used
+        `data` must be None for the first time it is called, but can be used
         to pass data as the return value for the `oob()` call for a subsequent call.
         """
-        return await self._oob_generic(coro, coro.send, (data,))
+        return await self._asend(coro, coro.send, (data,))
 
     @overload
     async def athrow(
@@ -139,7 +144,7 @@ class Monitor(Generic[T]):
         Similar to `aawait()` but throws an exception into the coroutine at the
         point where it is suspended.
         """
-        return await self._oob_generic(coro, coro.throw, (type, value, traceback))
+        return await self._asend(coro, coro.throw, (type, value, traceback))
 
     @types.coroutine
     def oob(self, data: Any) -> Generator[Any, Any, Any]:
