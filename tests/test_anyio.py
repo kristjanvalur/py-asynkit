@@ -2,7 +2,12 @@ import pytest
 from anyio import create_task_group, sleep, Event
 from contextlib import nullcontext
 
-from asynkit.experimental.anyio import EagerTaskGroup, create_eager_task_group
+from asynkit.experimental.anyio import (
+    EagerTaskGroup,
+    create_eager_task_group,
+    TaskStatusForwarder,
+)
+from asynkit import CoroStart
 
 pytestmark = pytest.mark.anyio
 
@@ -187,6 +192,31 @@ class TestStartSoon:
             result.append(val)
 
         return event, coro
+
+
+@pytest.mark.parametrize("anyio_backend", ["asyncio"])
+@pytest.mark.parametrize("block", [True, False], ids=["block", "noblock"])
+async def test_task_status_forwarder(block, anyio_backend):
+    result = None
+
+    async def coro(task_status):
+        if block:
+            await sleep(0.001)
+        task_status.started("foo")
+        nonlocal result
+        result = "bar"
+
+    async with create_task_group() as tg:
+
+        sf = TaskStatusForwarder()
+        cs = CoroStart(coro(sf))
+
+        async def helper(task_status):
+            sf.set_forward(task_status)
+            await cs
+
+        assert await tg.start(helper) == "foo"
+    assert result == "bar"
 
 
 @pytest.mark.parametrize(
