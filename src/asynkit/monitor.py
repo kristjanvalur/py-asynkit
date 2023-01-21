@@ -147,7 +147,7 @@ class Monitor(Generic[T]):
         return await self._asend(coro, coro.throw, (type, value, traceback))
 
     @types.coroutine
-    def oob(self, data: Any) -> Generator[Any, Any, Any]:
+    def oob(self, data: Optional[Any] = None) -> Generator[Any, Any, Any]:
         """
         Send Out Of Band data to a higher up caller which is awaiting `aawait()` or
         `athrow()`.  It will cause a `OOBData` exception to be generated for the caller
