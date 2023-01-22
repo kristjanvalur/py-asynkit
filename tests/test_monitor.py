@@ -133,7 +133,7 @@ class TestMonitor:
         m = Monitor()
         c = helper(m)
         cc = m.aawait(c, None)
-        f = cc.send(None)
+        cc.send(None)
         cc.close()
 
     async def test_monitor_throw(self):
@@ -147,7 +147,7 @@ class TestMonitor:
         m = Monitor()
         c = helper(m)
         cc = m.aawait(c, None)
-        f = cc.send(None)
+        cc.send(None)
         with pytest.raises(EOFError):
             cc.throw(EOFError())
         cc.close()
@@ -166,7 +166,7 @@ class TestMonitor:
         m = Monitor()
         c = helper(m)
         cc = m.aawait(c, None)
-        f = cc.send(None)
+        cc.send(None)
         with pytest.raises(StopIteration) as err:
             cc.throw(EOFError())
         assert err.value.value == 1
