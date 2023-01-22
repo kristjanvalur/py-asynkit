@@ -279,7 +279,11 @@ async def coro_await(coro: CoroLike[T], *, context: Optional[Context] = None) ->
 
 
 def coro_eager(
-    coro: Coroutine[Any, Any, T], *, create_task=create_task, name="eager_task"
+    coro: Coroutine[Any, Any, T],
+    *,
+    task_factory: Optional[
+        Callable[[Coroutine[Any, Any, T]], asyncio.Future[T]]
+    ] = None,
 ) -> asyncio.Future[T]:
     """
     Make the coroutine "eager":
@@ -294,11 +298,18 @@ def coro_eager(
     cs = CoroStart(coro, context=copy_context())
     if cs.done():
         return cs.as_future()
-    return create_task(cs.as_coroutine(), name=name)
+
+    if task_factory:
+        return task_factory(cs.as_coroutine())
+    return create_task(cs.as_coroutine(), name="eager_task")
 
 
 def func_eager(
-    func: Callable[P, Coroutine[Any, Any, T]], *, create_task=create_task, name="eager"
+    func: Callable[P, Coroutine[Any, Any, T]],
+    *,
+    task_factory: Optional[
+        Callable[[Coroutine[Any, Any, T]], asyncio.Future[T]]
+    ] = None,
 ) -> Callable[P, asyncio.Future[T]]:
     """
     Decorator to automatically apply the `coro_eager` to the
@@ -307,21 +318,29 @@ def func_eager(
 
     @functools.wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> asyncio.Future[T]:
-        return coro_eager(func(*args, **kwargs), create_task=create_task, name=name)
+        return coro_eager(func(*args, **kwargs), task_factory=task_factory)
 
     return wrapper
 
 
 @overload
 def eager(
-    arg: Coroutine[Any, Any, T], *, create_task=create_task, name="eager"
+    arg: Coroutine[Any, Any, T],
+    *,
+    task_factory: Optional[
+        Callable[[Coroutine[Any, Any, T]], asyncio.Future[T]]
+    ] = None,
 ) -> asyncio.Future[T]:
     ...
 
 
 @overload
 def eager(
-    arg: Callable[P, Coroutine[Any, Any, T]], *, create_task=create_task, name="eager"
+    arg: Callable[P, Coroutine[Any, Any, T]],
+    *,
+    task_factory: Optional[
+        Callable[[Coroutine[Any, Any, T]], asyncio.Future[T]]
+    ] = None,
 ) -> Callable[P, asyncio.Future[T]]:
     ...
 
@@ -329,8 +348,9 @@ def eager(
 def eager(
     arg: Union[Coroutine[Any, Any, T], Callable[P, Coroutine[Any, Any, T]]],
     *,
-    create_task=create_task,
-    name="eager",
+    task_factory: Optional[
+        Callable[[Coroutine[Any, Any, T]], asyncio.Future[T]]
+    ] = None,
 ) -> Union[asyncio.Future[T], Callable[P, asyncio.Future[T]]]:
     """
     Convenience function invoking either `coro_eager` or `func_eager`
@@ -339,7 +359,7 @@ def eager(
     """
     if isinstance(arg, types.CoroutineType):
         # A coroutine
-        return coro_eager(arg, create_task=create_task, name=name)
+        return coro_eager(arg, task_factory=task_factory)
     if isinstance(arg, types.FunctionType):
-        return func_eager(arg, create_task=create_task, name=name)
+        return func_eager(arg, task_factory=task_factory)
     raise TypeError("need coroutine or function")
