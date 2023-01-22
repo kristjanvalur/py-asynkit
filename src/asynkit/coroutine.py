@@ -281,9 +281,7 @@ async def coro_await(coro: CoroLike[T], *, context: Optional[Context] = None) ->
 def coro_eager(
     coro: Coroutine[Any, Any, T],
     *,
-    task_factory: Optional[
-        Callable[[Coroutine[Any, Any, T]], Awaitable[T]]
-    ] = None,
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
 ) -> Awaitable[T]:
     """
     Make the coroutine "eager":
@@ -307,9 +305,7 @@ def coro_eager(
 def func_eager(
     func: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Optional[
-        Callable[[Coroutine[Any, Any, T]], Awaitable[T]]
-    ] = None,
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
 ) -> Callable[P, Awaitable[T]]:
     """
     Decorator to automatically apply the `coro_eager` to the
@@ -327,9 +323,7 @@ def func_eager(
 def eager(
     arg: Coroutine[Any, Any, T],
     *,
-    task_factory: Optional[
-        Callable[[Coroutine[Any, Any, T]], Awaitable[T]]
-    ] = None,
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
 ) -> Awaitable[T]:
     ...
 
@@ -338,9 +332,7 @@ def eager(
 def eager(
     arg: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Optional[
-        Callable[[Coroutine[Any, Any, T]], Awaitable[T]]
-    ] = None,
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
 ) -> Callable[P, Awaitable[T]]:
     ...
 
@@ -348,9 +340,7 @@ def eager(
 def eager(
     arg: Union[Coroutine[Any, Any, T], Callable[P, Coroutine[Any, Any, T]]],
     *,
-    task_factory: Optional[
-        Callable[[Coroutine[Any, Any, T]], Awaitable[T]]
-    ] = None,
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
 ) -> Union[Awaitable[T], Callable[P, Awaitable[T]]]:
     """
     Convenience function invoking either `coro_eager` or `func_eager`

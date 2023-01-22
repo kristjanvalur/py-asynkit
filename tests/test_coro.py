@@ -92,8 +92,10 @@ class TestEager:
         log = []
         eager_var.set("X")
         coro, expect = self.get_coro1(block)
+
         def factory(coro):
             return asynkit.tools.create_task(coro, name="bob")
+
         m = Mock()
         m.side_effect = factory
         future = asynkit.coro_eager(coro(log), task_factory=m)
