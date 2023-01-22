@@ -13,6 +13,7 @@ from typing import (
     Coroutine,
     Generator,
     Optional,
+    Tuple,
     TypeVar,
     Union,
     cast,
@@ -147,9 +148,9 @@ class CoroStart(Awaitable[T_co]):
     ):
         self.coro = coro
         self.context = context
-        self.start_result: Optional[tuple[Any, Optional[BaseException]]] = self._start()
+        self.start_result: Optional[Tuple[Any, Optional[BaseException]]] = self._start()
 
-    def _start(self) -> tuple[Any, Optional[BaseException]]:
+    def _start(self) -> Tuple[Any, Optional[BaseException]]:
         """
         Start the coroutine execution. It runs the coroutine to its first suspension
         point or until it raises an exception or returns a value, whichever comes
@@ -234,7 +235,7 @@ class CoroStart(Awaitable[T_co]):
         """
         Returns the exception or None
         """
-        exc = self.start_result[1]
+        exc = self.start_result and self.start_result[1]
         if exc is None:
             raise asyncio.InvalidStateError("CoroStart: coroutine not done()")
         if isinstance(exc, StopIteration):
@@ -255,8 +256,10 @@ class CoroStart(Awaitable[T_co]):
         """
         if not self.done():
             raise RuntimeError("CoroStart: coroutine not done()")
-        future = asyncio.get_running_loop().create_future()
+        assert self.start_result is not None
         exc = self.start_result[1]
+        assert exc
+        future = asyncio.get_running_loop().create_future()
         if isinstance(exc, StopIteration):
             future.set_result(exc.value)
         else:
@@ -276,7 +279,7 @@ async def coro_await(coro: CoroLike[T], *, context: Optional[Context] = None) ->
 
 
 def coro_eager(
-    coro: Coroutine[Any, Any, T], *, create_task=create_task, name="eager"
+    coro: Coroutine[Any, Any, T], *, create_task=create_task, name="eager_task"
 ) -> asyncio.Future[T]:
     """
     Make the coroutine "eager":
