@@ -5,7 +5,8 @@ import sys
 import types
 import typing
 from contextvars import Context, copy_context
-from typing import Optional, Union
+from types import FrameType
+from typing import AsyncGenerator, Optional, Union
 
 from .tools import create_task
 
@@ -24,6 +25,7 @@ __all__ = [
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 Coroutine = Union[typing.Coroutine, typing.Generator]
+CoroutineLike = Union[typing.Coroutine, typing.Generator, AsyncGenerator]
 
 """
 Tools and utilities for advanced management of coroutines
@@ -51,7 +53,7 @@ def _coro_getattr(coro, suffix):
     )
 
 
-def coro_get_frame(coro):
+def coro_get_frame(coro: CoroutineLike) -> FrameType:
     """
     Get the current frame of a coroutine or coroutine like object
     (generator, legacy coroutines)
@@ -59,7 +61,7 @@ def coro_get_frame(coro):
     return _coro_getattr(coro, "frame")
 
 
-def coro_is_new(coro):
+def coro_is_new(coro: CoroutineLike):
     """
     Returns True if the coroutine has just been created and
     never not yet started
@@ -79,7 +81,7 @@ def coro_is_new(coro):
         )
 
 
-def coro_is_suspended(coro):
+def coro_is_suspended(coro: CoroutineLike):
     """
     Returns True if the coroutine has started but not exited
     """
@@ -102,7 +104,7 @@ def coro_is_suspended(coro):
         )
 
 
-def coro_is_finished(coro):
+def coro_is_finished(coro: CoroutineLike) -> bool:
     """
     Returns True if the coroutine has finished execution, either by
     returning or throwing an exception

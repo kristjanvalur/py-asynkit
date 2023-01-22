@@ -38,7 +38,7 @@ class TestCreateTask:
     async def eager(self, coro):
         return asynkit.coro_eager(coro)
 
-    def setup(self, method):
+    def setup_method(self, method):
         self.method = method
         if method == "nostart":
             self.convert = self.nostart
@@ -124,7 +124,7 @@ class TestCreateTask:
             log.append(label + "c")
 
     async def test_okay_one(self, method):
-        self.setup(method)
+        self.setup_method(method)
         log = []
         await self.recursive(1, log)
         log2 = []
@@ -132,7 +132,7 @@ class TestCreateTask:
         assert self.splitlog(log) == self.splitlog(log2)
 
     async def test_okay_two(self, method):
-        self.setup(method)
+        self.setup_method(method)
         log = []
         await self.recursive(2, log)
         log2 = []
