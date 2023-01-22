@@ -1,27 +1,49 @@
 import asyncio
 import sys
-from typing import Any, Coroutine, Generator, Optional, TypeVar, Union
+from typing import (
+    Any,
+    Coroutine,
+    Generator,
+    Optional,
+    TypeVar,
+    Union,
+    Deque,
+    List,
+    TYPE_CHECKING,
+    Awaitable,
+)
 
 _ver = sys.version_info[:2]
 
 T = TypeVar("T")
 CoroLike = Union[Coroutine[Any, Any, T], Generator[Any, Any, T]]
 
+if not TYPE_CHECKING and _ver <= (3, 8):
+    _TaskAny = asyncio.Task
+else:
+    _TaskAny = asyncio.Task[Any]
 
 if _ver >= (3, 8):
     create_task = asyncio.create_task
 else:  # pragma: no cover
 
-    # can't really try to replicate the type definitions here.
+    # Ignore typing to remove warnings about different type signatures.
+    # return type is simply Awaitable to aid in compatibility with python
+    # versions < 3.0
     def create_task(  # type: ignore
-        coro: CoroLike[T],
+        coro: Coroutine[Any, Any, T],
         *,
         name: Optional[str] = None,
-    ) -> asyncio.Future[T]:
+    ) -> Awaitable[T]:
         return asyncio.create_task(coro)
 
 
-def deque_pop(d, pos=-1):
+def deque_pop(d: Deque[T], pos: int = -1) -> T:
+    """
+    Allows popping from an arbitrary position in a deque.
+    The `pos` argument has the same meaning as for
+    `list.pop()`
+    """
     if pos == -1:
         return d.pop()
     elif pos == 0:
@@ -40,10 +62,11 @@ def deque_pop(d, pos=-1):
         d.rotate(pos)
         return r
     # create exception
-    [].pop(pos)
+    empty: List[T] = []
+    return empty.pop(pos)
 
 
-def task_from_handle(item):
+def task_from_handle(item: asyncio.Handle) -> Optional[_TaskAny]:
     """
     Runnable task objects exist as callbacks on the ready queue in the loop.
     Specifically, they are Handle objects, containing a Task bound method
@@ -52,8 +75,9 @@ def task_from_handle(item):
     """
 
     try:
-        task = item._callback.__self__
+        task = item._callback.__self__  # type: ignore
     except AttributeError:
         return None
     if isinstance(task, asyncio.Task):
         return task
+    return None
