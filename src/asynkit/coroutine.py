@@ -220,7 +220,7 @@ class CoroStart(Awaitable[T_co]):
         """returns true if the coroutine finished without blocking"""
         return self.start_result is not None and self.start_result[1] is not None
 
-    def result(self) -> Any:
+    def result(self) -> T_co:
         """
         Returns the result or raises the exception
         """
@@ -228,7 +228,7 @@ class CoroStart(Awaitable[T_co]):
         if not exc:
             raise asyncio.InvalidStateError("CoroStart: coroutine not done()")
         if isinstance(exc, StopIteration):
-            return exc.value
+            return cast(T_co, exc.value)
         raise exc
 
     def exception(self) -> Optional[BaseException]:
@@ -242,7 +242,7 @@ class CoroStart(Awaitable[T_co]):
             return None
         return exc
 
-    async def as_coroutine(self) -> Any:
+    async def as_coroutine(self) -> T_co:
         """
         Continue execution of the coroutine that was started by start()
         Returns a coroutine which can be awaited
