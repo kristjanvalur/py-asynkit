@@ -143,7 +143,7 @@ def event_loop_policy(policy=None):
         asyncio.set_event_loop_policy(previous)
 
 
-async def sleep_insert(pos, result=None):
+async def sleep_insert(pos):
     """Coroutine that completes after `pos` other callbacks have been run.
 
     This effectively pauses the current coroutine and places it at position `pos`
@@ -159,7 +159,7 @@ async def sleep_insert(pos, result=None):
 
     # make the callback execute right after the current task goes to sleep
     loop.call_insert(0, post_sleep)
-    return await asyncio.sleep(0, result)
+    await asyncio.sleep(0)
 
 
 def task_reinsert(task, pos):
@@ -172,7 +172,7 @@ def task_reinsert(task, pos):
     loop.ready_insert(pos, item)
 
 
-async def task_switch(task, result=None, sleep_pos=None):
+async def task_switch(task, sleep_pos=None):
     """Switch immediately to the given task.
     The target task is moved to the head of the queue. If 'sleep_pos'
     is None, then the current task is scheduled at the end of the
@@ -187,11 +187,11 @@ async def task_switch(task, result=None, sleep_pos=None):
     loop.ready_insert(0, loop.ready_pop(pos))
     if sleep_pos is None:
         # schedule ourselves to the end
-        return await asyncio.sleep(0, result=result)
+        await asyncio.sleep(0)
     else:
         # schedule ourselves at a given position, typically
         # position 1, right after the task.
-        return await sleep_insert(sleep_pos, result=result)
+        await sleep_insert(sleep_pos)
 
 
 def task_is_blocked(task):
