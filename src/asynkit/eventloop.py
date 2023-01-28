@@ -10,10 +10,7 @@ from typing import (
     Callable,
     Optional,
     Any,
-    List,
-    Tuple,
     Generator,
-    overload,
     TypeVar,
     cast,
     Coroutine,
@@ -116,7 +113,7 @@ class SchedulingMixin(_Base):
                 return len(self._ready) - i - 1
         raise ValueError("task not in ready queue")
 
-    def ready_tasks(self) -> List[Tuple[TaskAny, int]]:
+    def ready_tasks(self) -> Set[TaskAny]:
         """
         Return a set of all all runnable tasks in the ready queue.
         """
@@ -198,9 +195,7 @@ def task_reinsert(task: TaskAny, pos: int) -> None:
     loop.ready_insert(pos, item)
 
 
-async def task_switch(
-    task: TaskAny, insert_pos: Optional[int] = None
-) -> Any:
+async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     """Switch immediately to the given task.
     The target task is moved to the head of the queue. If 'insert_pos'
     is None, then the current task is scheduled at the end of the
