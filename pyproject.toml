@@ -53,3 +53,9 @@ testpaths = [
 
 [tool.mypy-asynkit]
 strict = true
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "@overload"
+  ]
