@@ -311,13 +311,13 @@ reinserts it at a given position in the queue.
 Similarly as for `sleep_insert()`, this can be useful to achieve
 certain scheduling goals.
 
-### `task_switch(task, sleep_pos=None)`
+### `task_switch(task, *, insert_pos=None)`
 
 Immediately moves the given task to the head of the ready queue and switches to it, assuming it is runnable.
-If `sleep_pos is not None`, the current task will be
+If `insert_pos is not None`, the current task will be
 put to sleep at that position, using `sleep_insert()`. Otherwise the current task is put at the end
-of the ready queue.  If `sleep_pos == 1` the current task will be inserted directly after the target
-task, making it the next to be run.  If `sleep_pos == 0`, the current task will execute _before_ the target.
+of the ready queue.  If `insert_pos == 1` the current task will be inserted directly after the target
+task, making it the next to be run.  If `insert_pos == 0`, the current task will execute _before_ the target.
 
 ### `task_is_blocked(task)`
 

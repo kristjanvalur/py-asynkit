@@ -235,7 +235,7 @@ async def test_task_switch_insert(pos):
         tasks.append(asyncio.create_task(foo(i)))
 
     assert len(log) == 0
-    await asynkit.task_switch(tasks[pos], sleep_pos=1)
+    await asynkit.task_switch(tasks[pos], insert_pos=1)
     log.append("me")
     await asyncio.sleep(0)
     assert len(log) == 7

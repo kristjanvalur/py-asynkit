@@ -69,13 +69,6 @@ class SchedulingMixin(_Base):
     def call_insert(self, position, callback, *args, context=None):
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.
-
-        This operates on the ready queue. A value of 0 will insert it at the front
-        to be called next, a value of 1 will insert it after the first element.
-
-        Negative values will insert before the entries counting from the end.
-        A value of -1 will place it in the next-to-last place.
-        Use `call_soon` to place it _at_ the end.
         """
         handle = self.call_soon(callback, *args, context=context)
         handle2 = self.ready_pop(-1)
@@ -86,7 +79,7 @@ class SchedulingMixin(_Base):
     def ready_index(self, task):
         """
         Look for a runnable task in the ready queue. Return its index if found
-        or rais e a ValueError
+        or raise a ValueError
         """
         # we search in reverse, since the task is likely to have been
         # just appended to the queue
@@ -169,9 +162,9 @@ def task_reinsert(task, pos):
     loop.ready_insert(pos, item)
 
 
-async def task_switch(task, sleep_pos=None):
+async def task_switch(task, *, insert_pos=None):
     """Switch immediately to the given task.
-    The target task is moved to the head of the queue. If 'sleep_pos'
+    The target task is moved to the head of the queue. If 'insert_pos'
     is None, then the current task is scheduled at the end of the
     queue, otherwise it is inserted at the given position, typically
     at position 1, right after the target task.
@@ -180,13 +173,13 @@ async def task_switch(task, sleep_pos=None):
     pos = loop.ready_index(task)
     # move the task to the head
     loop.ready_insert(0, loop.ready_pop(pos))
-    if sleep_pos is None:
+    if insert_pos is None:
         # schedule ourselves to the end
         await asyncio.sleep(0)
     else:
         # schedule ourselves at a given position, typically
         # position 1, right after the task.
-        await sleep_insert(sleep_pos)
+        await sleep_insert(insert_pos)
 
 
 def task_is_blocked(task):
@@ -216,7 +209,7 @@ async def create_task_descend(coro, *, name=None):
     This facilitates a depth-first task execution pattern.
     """
     task = create_task(coro, name=name)
-    await task_switch(task, sleep_pos=1)
+    await task_switch(task, insert_pos=1)
     return task
 
 
