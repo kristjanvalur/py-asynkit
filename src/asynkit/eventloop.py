@@ -96,13 +96,6 @@ class SchedulingMixin(_Base):
     ) -> Handle:
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.
-
-        This operates on the ready queue. A value of 0 will insert it at the front
-        to be called next, a value of 1 will insert it after the first element.
-
-        Negative values will insert before the entries counting from the end.
-        A value of -1 will place it in the next-to-last place.
-        Use `call_soon` to place it _at_ the end.
         """
         handle = self.call_soon(callback, *args, context=context)
         handle2 = self.ready_pop(-1)
@@ -110,10 +103,10 @@ class SchedulingMixin(_Base):
         self.ready_insert(position, handle)
         return handle
 
-    def ready_find_task(self, task: TaskAny) -> int:
+    def ready_index(self, task: TaskAny) -> int:
         """
-        Look for a runnable task in the ready queue. Return its index if found,
-        else -1
+        Look for a runnable task in the ready queue. Return its index if found
+        or raise a ValueError
         """
         # we search in reverse, since the task is likely to have been
         # just appended to the queue
@@ -121,18 +114,17 @@ class SchedulingMixin(_Base):
             found = task_from_handle(handle)
             if found is task:
                 return len(self._ready) - i - 1
-        return -1
+        raise ValueError("task not in ready queue")
 
-    def ready_get_tasks(self) -> List[Tuple[TaskAny, int]]:
+    def ready_tasks(self) -> List[Tuple[TaskAny, int]]:
         """
-        Find all runnable tasks in the ready queue. Return a list of
-        (task, index) tuples.
+        Return a set of all all runnable tasks in the ready queue.
         """
-        result = []
-        for i, handle in enumerate(self._ready):
+        result = set()
+        for handle in self._ready:
             task = task_from_handle(handle)
             if task:
-                result.append((task, i))
+                result.add(task)
         return result
 
 
@@ -179,17 +171,7 @@ def get_running_scheduling_loop() -> SchedulingMixin:
     return cast(SchedulingMixin, asyncio.get_running_loop())
 
 
-@overload
 async def sleep_insert(pos: int) -> None:
-    ...
-
-
-@overload
-async def sleep_insert(pos: int, result: T) -> T:
-    ...
-
-
-async def sleep_insert(pos: int, result: Any = None) -> Any:
     """Coroutine that completes after `pos` other callbacks have been run.
 
     This effectively pauses the current coroutine and places it at position `pos`
@@ -205,41 +187,37 @@ async def sleep_insert(pos: int, result: Any = None) -> Any:
 
     # make the callback execute right after the current task goes to sleep
     loop.call_insert(0, post_sleep)
-    return await asyncio.sleep(0, result)
+    await asyncio.sleep(0)
 
 
 def task_reinsert(task: TaskAny, pos: int) -> None:
     """Place a just-created task at position 'pos' in the runnable queue."""
     loop = get_running_scheduling_loop()
-    current_pos = loop.ready_find_task(task)
-    if current_pos < 0:
-        raise ValueError("task is not runnable")
+    current_pos = loop.ready_index(task)
     item = loop.ready_pop(current_pos)
     loop.ready_insert(pos, item)
 
 
 async def task_switch(
-    task: TaskAny, result: Any = None, sleep_pos: Optional[int] = None
+    task: TaskAny, insert_pos: Optional[int] = None
 ) -> Any:
     """Switch immediately to the given task.
-    The target task is moved to the head of the queue. If 'sleep_pos'
+    The target task is moved to the head of the queue. If 'insert_pos'
     is None, then the current task is scheduled at the end of the
     queue, otherwise it is inserted at the given position, typically
     at position 1, right after the target task.
     """
     loop = get_running_scheduling_loop()
-    pos = loop.ready_find_task(task)
-    if pos < 0:
-        raise ValueError("task is not runnable")
+    pos = loop.ready_index(task)
     # move the task to the head
     loop.ready_insert(0, loop.ready_pop(pos))
-    if sleep_pos is None:
+    if insert_pos is None:
         # schedule ourselves to the end
-        return await asyncio.sleep(0, result=result)
+        await asyncio.sleep(0)
     else:
         # schedule ourselves at a given position, typically
         # position 1, right after the task.
-        return await sleep_insert(sleep_pos, result=result)
+        await sleep_insert(insert_pos)
 
 
 def task_is_blocked(task: TaskAny) -> bool:
@@ -272,7 +250,7 @@ async def create_task_descend(
     This facilitates a depth-first task execution pattern.
     """
     task = create_task(coro, name=name)
-    await task_switch(task, sleep_pos=1)
+    await task_switch(task, insert_pos=1)
     return task
 
 
@@ -293,8 +271,7 @@ def runnable_tasks(loop: Optional[SchedulingMixin] = None) -> Set[TaskAny]:
     """Return a set of the runnable tasks for the loop."""
     if loop is None:
         loop = get_running_scheduling_loop()
-    tasks = loop.ready_get_tasks()
-    result = set(t for (t, _) in tasks)
+    result = loop.ready_tasks()
     assert all(not task_is_blocked(task) for task in result)
     return result
 
