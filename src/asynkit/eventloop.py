@@ -83,10 +83,10 @@ class SchedulingMixin(_Base):
         self.ready_insert(position, handle)
         return handle
 
-    def ready_find_task(self, task):
+    def ready_index(self, task):
         """
-        Look for a runnable task in the ready queue. Return its index if found,
-        else -1
+        Look for a runnable task in the ready queue. Return its index if found
+        or rais e a ValueError
         """
         # we search in reverse, since the task is likely to have been
         # just appended to the queue
@@ -94,7 +94,7 @@ class SchedulingMixin(_Base):
             found = task_from_handle(handle)
             if found is task:
                 return len(self._ready) - i - 1
-        return -1
+        raise ValueError("task not in ready queue")
 
     def ready_get_tasks(self):
         """
@@ -165,9 +165,7 @@ async def sleep_insert(pos):
 def task_reinsert(task, pos):
     """Place a just-created task at position 'pos' in the runnable queue."""
     loop = asyncio.get_running_loop()
-    current_pos = loop.ready_find_task(task)
-    if current_pos < 0:
-        raise ValueError("task is not runnable")
+    current_pos = loop.ready_index(task)
     item = loop.ready_pop(current_pos)
     loop.ready_insert(pos, item)
 
@@ -180,9 +178,7 @@ async def task_switch(task, sleep_pos=None):
     at position 1, right after the target task.
     """
     loop = asyncio.get_running_loop()
-    pos = loop.ready_find_task(task)
-    if pos < 0:
-        raise ValueError("task is not runnable")
+    pos = loop.ready_index(task)
     # move the task to the head
     loop.ready_insert(0, loop.ready_pop(pos))
     if sleep_pos is None:
