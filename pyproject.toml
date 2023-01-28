@@ -18,8 +18,7 @@ include=["src/asynkit/py.typed"]
 lint = "ruff ."
 black = "black ."
 test = "pytest"
-cov = "pytest --cov=asynkit --cov-report term-missing"
-covbranch = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
+cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 typing = "mypy ."
 
 [tool.poetry.dependencies]

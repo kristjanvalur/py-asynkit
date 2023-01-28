@@ -372,6 +372,28 @@ def gen479(request):
 
 
 class TestGenerator:
+    def test_generator_none(self):
+        "create a generator but don't iterate"
+
+        async def foo():
+            pass
+
+        GeneratorObject()(foo())
+
+    async def test_generator_no_firstiter(self):
+        "create a generator but don't iterate"
+
+        async def foo():
+            pass
+
+        i = GeneratorObject()(foo())
+        old = sys.get_asyncgen_hooks()
+        sys.set_asyncgen_hooks(None, None)
+        try:
+            assert [e async for e in i] == []
+        finally:
+            sys.set_asyncgen_hooks(*old)
+
     async def test_generator_iter(self, normalgen):
         g = normalgen
         results = [f async for f in g]

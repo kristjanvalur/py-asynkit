@@ -10,7 +10,6 @@ from typing import (
     Deque,
     List,
     TYPE_CHECKING,
-    Awaitable,
 )
 
 # 3.8 or earlier
@@ -32,8 +31,10 @@ if PYTHON_38:
         name: Optional[str] = None,
     ) -> _TaskAny:
         return asyncio.create_task(coro)
+
 else:
     create_task = asyncio.create_task  # pragma: no cover
+
 
 def deque_pop(d: Deque[T], pos: int = -1) -> T:
     """
