@@ -1,5 +1,6 @@
 import asyncio
 from collections import deque
+from unittest.mock import patch
 
 import pytest
 
@@ -345,6 +346,15 @@ class TestTasks:
         tasks2 = loop.ready_tasks()
         assert tasks2 == set(tasks)
 
+    async def test_get_task_extra(self):
+        loop = asyncio.get_running_loop()
+        tasks = self.tasks()
+        assert loop.ready_len() == len(tasks)
+        loop.call_soon(lambda: None)
+        assert loop.ready_len() > len(tasks)
+        tasks2 = loop.ready_tasks()
+        assert tasks2 == set(tasks)
+
     async def test_runnable_tasks(self):
         tasks = self.tasks()
         tasks2 = asynkit.runnable_tasks()
@@ -361,7 +371,8 @@ class TestTasks:
         assert asynkit.runnable_tasks() == set()
 
     async def test_blocked_tasks(self):
-        self.identity()
+        loop = asyncio.get_running_loop()
+        self.identity(loop)  # test both with None and provided loop
         tasks = self.tasks(0.1)
         self.identity()
         await asyncio.sleep(0)  # make our tasks blocked on the sleep
@@ -373,6 +384,16 @@ class TestTasks:
         for task in tasks:
             task.cancel()
         self.identity()
+
+    async def test_blocked_tasks_current(self):
+        """Test that if current_task() is None, it is not removed from
+        the list of blocked tasks.
+        This test is added for complete coverage testing.
+        """
+        with patch("asyncio.current_task", lambda: None):
+            with patch("asynkit.eventloop.task_is_blocked", lambda t: True):
+                blocked = asynkit.blocked_tasks()
+        assert asyncio.current_task() in blocked
 
 
 class TestRegularLoop:

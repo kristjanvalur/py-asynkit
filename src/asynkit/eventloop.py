@@ -2,8 +2,20 @@ import asyncio
 import asyncio.base_events
 import contextlib
 import sys
-from asyncio import Handle, events
-from typing import TYPE_CHECKING, Deque
+from asyncio import Handle, Task, AbstractEventLoopPolicy, AbstractEventLoop, Future
+from contextvars import Context
+from typing import (
+    TYPE_CHECKING,
+    Deque,
+    Callable,
+    Optional,
+    Any,
+    Generator,
+    TypeVar,
+    cast,
+    Coroutine,
+    Set,
+)
 
 from .tools import create_task, deque_pop, task_from_handle
 
@@ -24,13 +36,19 @@ __all__ = [
     "blocked_tasks",
 ]
 
-if TYPE_CHECKING:  # pragma: no coverage
+if TYPE_CHECKING:
+    TaskAny = Task[Any]
+    FutureAny = Future[Any]
 
     class _Base(asyncio.base_events.BaseEventLoop):
         _ready: Deque[Handle]
 
 else:
+    TaskAny = Task
+    FutureAny = Future
     _Base = object
+
+T = TypeVar("T")
 
 
 class SchedulingMixin(_Base):
@@ -38,11 +56,11 @@ class SchedulingMixin(_Base):
     A mixin class adding features to the base event loop.
     """
 
-    def ready_len(self):
+    def ready_len(self) -> int:
         """Get the length of the runnable queue"""
         return len(self._ready)
 
-    def ready_rotate(self, n: int):
+    def ready_rotate(self, n: int) -> None:
         """Rotate the ready queue.
 
         The leftmost part of the ready queue is the callback called next.
@@ -53,20 +71,26 @@ class SchedulingMixin(_Base):
         """
         self._ready.rotate(n)
 
-    def ready_pop(self, pos=-1):
+    def ready_pop(self, pos: int = -1) -> Handle:
         """Pop an element off the ready list at the given position."""
         return deque_pop(self._ready, pos)
 
-    def ready_insert(self, pos, element):
+    def ready_insert(self, pos: int, element: Handle) -> None:
         """Insert a previously popped `element` back into the
         ready queue at `pos`"""
         self._ready.insert(pos, element)
 
-    def ready_append(self, element):
+    def ready_append(self, element: Handle) -> None:
         """Append a previously popped `element` to the end of the queue."""
         self._ready.append(element)
 
-    def call_insert(self, position, callback, *args, context=None):
+    def call_insert(
+        self,
+        position: int,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Optional[Context] = None
+    ) -> Handle:
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.
         """
@@ -76,7 +100,7 @@ class SchedulingMixin(_Base):
         self.ready_insert(position, handle)
         return handle
 
-    def ready_index(self, task):
+    def ready_index(self, task: TaskAny) -> int:
         """
         Look for a runnable task in the ready queue. Return its index if found
         or raise a ValueError
@@ -89,7 +113,7 @@ class SchedulingMixin(_Base):
                 return len(self._ready) - i - 1
         raise ValueError("task not in ready queue")
 
-    def ready_tasks(self):
+    def ready_tasks(self) -> Set[TaskAny]:
         """
         Return a set of all all runnable tasks in the ready queue.
         """
@@ -113,19 +137,24 @@ if not TYPE_CHECKING and hasattr(asyncio, "ProactorEventLoop"):  # pragma: no co
     __all__.append("SchedulingProactorEventLoop")
 
 
-if sys.platform == "win32" and globals().get("SchedulingProactorEventLoop"):
-    DefaultSchedulingEventLoop = SchedulingProactorEventLoop  # pragma: no coverage
-else:
-    DefaultSchedulingEventLoop = SchedulingSelectorEventLoop  # pragma: no coverage
+if sys.platform == "win32" and globals().get(
+    "SchedulingProactorEventLoop"
+):  # pragma: no coverage
+
+    DefaultSchedulingEventLoop = globals().get("SchedulingProactorEventLoop")
+else:  # pragma: no coverage
+    DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
 
 
 class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
-    def new_event_loop(self):
+    def new_event_loop(self) -> AbstractEventLoop:
         return DefaultSchedulingEventLoop()
 
 
 @contextlib.contextmanager
-def event_loop_policy(policy=None):
+def event_loop_policy(
+    policy: Optional[AbstractEventLoopPolicy] = None,
+) -> Generator[AbstractEventLoopPolicy, Any, None]:
     policy = policy or SchedulingEventLoopPolicy()
     previous = asyncio.get_event_loop_policy()
     asyncio.set_event_loop_policy(policy)
@@ -135,16 +164,20 @@ def event_loop_policy(policy=None):
         asyncio.set_event_loop_policy(previous)
 
 
-async def sleep_insert(pos):
+def get_running_scheduling_loop() -> SchedulingMixin:
+    return cast(SchedulingMixin, asyncio.get_running_loop())
+
+
+async def sleep_insert(pos: int) -> None:
     """Coroutine that completes after `pos` other callbacks have been run.
 
     This effectively pauses the current coroutine and places it at position `pos`
     in the ready queue. This position may subsequently change due to other
     scheduling operations
     """
-    loop = events.get_running_loop()
+    loop = get_running_scheduling_loop()
 
-    def post_sleep():
+    def post_sleep() -> None:
         # move the task wakeup, currently at the end of list
         # to the right place
         loop.ready_insert(pos, loop.ready_pop())
@@ -154,22 +187,22 @@ async def sleep_insert(pos):
     await asyncio.sleep(0)
 
 
-def task_reinsert(task, pos):
+def task_reinsert(task: TaskAny, pos: int) -> None:
     """Place a just-created task at position 'pos' in the runnable queue."""
-    loop = asyncio.get_running_loop()
+    loop = get_running_scheduling_loop()
     current_pos = loop.ready_index(task)
     item = loop.ready_pop(current_pos)
     loop.ready_insert(pos, item)
 
 
-async def task_switch(task, *, insert_pos=None):
+async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     """Switch immediately to the given task.
     The target task is moved to the head of the queue. If 'insert_pos'
     is None, then the current task is scheduled at the end of the
     queue, otherwise it is inserted at the given position, typically
     at position 1, right after the target task.
     """
-    loop = asyncio.get_running_loop()
+    loop = get_running_scheduling_loop()
     pos = loop.ready_index(task)
     # move the task to the head
     loop.ready_insert(0, loop.ready_pop(pos))
@@ -182,7 +215,7 @@ async def task_switch(task, *, insert_pos=None):
         await sleep_insert(insert_pos)
 
 
-def task_is_blocked(task):
+def task_is_blocked(task: TaskAny) -> bool:
     """
     Returns True if the task is blocked, as opposed to runnable.
     """
@@ -190,10 +223,11 @@ def task_is_blocked(task):
     # runnable queue can have a future which is done, e.g. when the
     # task was cancelled, or when the future it was waiting for
     # got done or cancelled.
-    return task._fut_waiter is not None and not task._fut_waiter.done()
+    future: Optional[FutureAny] = task._fut_waiter  # type: ignore
+    return future is not None and not future.done()
 
 
-def task_is_runnable(task):
+def task_is_runnable(task: TaskAny) -> bool:
     """
     Returns True if the task is ready.
     """
@@ -202,7 +236,9 @@ def task_is_runnable(task):
     return not (task_is_blocked(task) or task.done())
 
 
-async def create_task_descend(coro, *, name=None):
+async def create_task_descend(
+    coro: Coroutine[Any, Any, Any], *, name: Optional[str] = None
+) -> TaskAny:
     """Creates a task for the coroutine and starts it immediately.
     The current task is paused, to be resumed next when the new task
     initially blocks. The new task is returned.
@@ -213,7 +249,9 @@ async def create_task_descend(coro, *, name=None):
     return task
 
 
-async def create_task_start(coro, *, name=None):
+async def create_task_start(
+    coro: Coroutine[Any, Any, Any], *, name: Optional[str] = None
+) -> TaskAny:
     """Creates a task for the coroutine and starts it soon.
     The current task is paused for one round of the event loop, giving the
     new task a chance to eventually run, before control is returned.
@@ -224,22 +262,23 @@ async def create_task_start(coro, *, name=None):
     return task
 
 
-def runnable_tasks(loop=None):
+def runnable_tasks(loop: Optional[SchedulingMixin] = None) -> Set[TaskAny]:
     """Return a set of the runnable tasks for the loop."""
     if loop is None:
-        loop = events.get_running_loop()
-    tasks = loop.ready_tasks()
-    result = set(tasks)
+        loop = get_running_scheduling_loop()
+    result = loop.ready_tasks()
     assert all(not task_is_blocked(task) for task in result)
     return result
 
 
-def blocked_tasks(loop=None):
+def blocked_tasks(loop: Optional[SchedulingMixin] = None) -> Set[TaskAny]:
     """Return a set of the blocked tasks for the loop."""
     if loop is None:
-        loop = events.get_running_loop()
+        loop = get_running_scheduling_loop()
     result = asyncio.all_tasks(loop) - runnable_tasks(loop)
     # the current task is not blocked
-    result.discard(asyncio.current_task(loop))
+    current = asyncio.current_task()
+    if current:
+        result.discard(current)
     assert all(task_is_blocked(task) for task in result)
     return result

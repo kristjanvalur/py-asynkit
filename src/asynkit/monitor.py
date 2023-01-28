@@ -121,7 +121,7 @@ class Monitor(Generic[T]):
         value: Union[BaseException, object] = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T:
-        ...  # pragma: no coverage
+        ...
 
     @overload
     async def athrow(
@@ -131,7 +131,7 @@ class Monitor(Generic[T]):
         value: None = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T:
-        ...  # pragma: no coverage
+        ...
 
     async def athrow(
         self,
@@ -203,7 +203,8 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
     def _first_iter(self) -> None:
         hooks = sys.get_asyncgen_hooks()
         if hooks.firstiter is not None:
-            cast(Callable[[Any], None], hooks.firstiter)(self)
+            hooks.firstiter(self)
+            # cast(Callable[[Any], None], hooks.firstiter)(self)
         self.finalizer = cast(Optional[Callable[[Any], None]], hooks.finalizer)
 
     async def asend(self, value: Optional[T_contra]) -> T_co:
@@ -235,7 +236,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         value: Union[BaseException, object] = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T_co:
-        ...  # pragma: no coverage
+        ...
 
     @overload
     async def athrow(
@@ -244,7 +245,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         value: None = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T_co:
-        ...  # pragma: no coverage
+        ...
 
     async def athrow(
         self,

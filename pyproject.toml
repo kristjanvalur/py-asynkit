@@ -18,8 +18,8 @@ include=["src/asynkit/py.typed"]
 lint = "ruff ."
 black = "black ."
 test = "pytest"
-cov = "pytest --cov=asynkit --cov-report term-missing"
-covbranch = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
+cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
+typing = "mypy ."
 
 [tool.poetry.dependencies]
 python = "^3.7"
@@ -49,3 +49,16 @@ testpaths = [
 # Ignore `F403` (importing *) in all `__init__.py` files
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
+
+[tool.mypy-asynkit]
+strict = true
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "@overload",
+  "assert False",
+  "TYPE_CHECKING",
+  "PYTHON_37",
+  "PYTHON_38",
+  ]

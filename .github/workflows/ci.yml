@@ -18,15 +18,19 @@ jobs:
       - name: Install Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: "3.11"
       - name: Install poetry
         uses: abatilo/actions-poetry@v2
       - name: Install dependencies
         run: poetry install
-      - name: Run Ruff
+      - name: Coverage
+        run: poetry run poe cov
+      - name: Run Lint
         run: poetry run poe lint
       - name: Run Black
         run: poetry run poe black --check
+      - name: Run typechecks
+        run: poetry run poe typing
 
   tests:
     runs-on: ${{ matrix.os }}
