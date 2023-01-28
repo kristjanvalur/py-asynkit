@@ -13,30 +13,27 @@ from typing import (
     Awaitable,
 )
 
-_ver = sys.version_info[:2]
+# 3.8 or earlier
+PYTHON_38 = sys.version_info[:2] <= (3, 8)
 
 T = TypeVar("T")
 CoroLike = Union[Coroutine[Any, Any, T], Generator[Any, Any, T]]
 
-if not TYPE_CHECKING and _ver <= (3, 8):
-    _TaskAny = asyncio.Task
-else:
+if TYPE_CHECKING:
     _TaskAny = asyncio.Task[Any]
+else:
+    _TaskAny = asyncio.Task
 
-if _ver >= (3, 8):
-    create_task = asyncio.create_task
-else:  # pragma: no cover
-
+if PYTHON_38:
     # Ignore typing to remove warnings about different type signatures.
-    # return type is simply Awaitable to aid in compatibility with python
-    # versions < 3.0
     def create_task(  # type: ignore
         coro: Coroutine[Any, Any, T],
         *,
         name: Optional[str] = None,
-    ) -> Awaitable[T]:
+    ) -> _TaskAny:
         return asyncio.create_task(coro)
-
+else:
+    create_task = asyncio.create_task  # pragma: no cover
 
 def deque_pop(d: Deque[T], pos: int = -1) -> T:
     """

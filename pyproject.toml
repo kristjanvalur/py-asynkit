@@ -57,5 +57,9 @@ strict = true
 [tool.coverage.report]
 exclude_lines = [
   "pragma: no cover",
-  "@overload"
+  "@overload",
+  "assert False",
+  "TYPE_CHECKING",
+  "PYTHON_37",
+  "PYTHON_38",
   ]

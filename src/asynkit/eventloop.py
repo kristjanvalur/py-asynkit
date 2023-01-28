@@ -36,7 +36,7 @@ __all__ = [
     "blocked_tasks",
 ]
 
-if TYPE_CHECKING:  # pragma: no coverage
+if TYPE_CHECKING:
     TaskAny = Task[Any]
     FutureAny = Future[Any]
 

@@ -88,7 +88,7 @@ def coro_is_new(coro: Suspendable) -> bool:
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_CREATED
     elif inspect.isasyncgen(coro):
-        if PYTHON_37:  # pragma: no cover
+        if PYTHON_37:
             return coro.ag_frame is not None and coro.ag_frame.f_lasti < 0
         else:
             return coro.ag_frame is not None and not coro.ag_running
@@ -107,7 +107,7 @@ def coro_is_suspended(coro: Suspendable) -> bool:
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_SUSPENDED
     elif inspect.isasyncgen(coro):
-        if PYTHON_37:  # pragma: no cover
+        if PYTHON_37:
             # frame is None if it has already exited
             # the currently running coroutine is also not suspended by definition.
             return coro.ag_frame is not None and coro.ag_frame.f_lasti >= 0
@@ -174,7 +174,7 @@ class CoroStart(Awaitable[T_co]):
         if self.start_result is None:
             # exhausted coroutine, triger the "cannot reuse" error
             self.coro.send(None)
-            raise RuntimeError()  # pragma: no cover
+            assert False, "unreachable"
 
         out_value, exc = self.start_result
         self.start_result = None
