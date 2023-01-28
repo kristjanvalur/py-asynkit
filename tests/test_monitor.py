@@ -372,13 +372,16 @@ def gen479(request):
 
 
 class TestGenerator:
-    def test_generator_none(self):
+    async def test_generator_none(self):
         "create a generator but don't iterate"
 
         async def foo():
             pass
 
-        GeneratorObject()(foo())
+        coro = foo()
+        # create and destroy that GeneratorIterator
+        GeneratorObject()(coro)
+        await coro  # to avoid warnings
 
     async def test_generator_no_firstiter(self):
         "create a generator but don't iterate"
