@@ -342,13 +342,8 @@ class TestTasks:
     async def test_get_task(self):
         tasks = self.tasks()
         loop = asyncio.get_running_loop()
-        tasks2 = loop.ready_get_tasks()
-
-        # sort by position for safety
-        tasks2.sort(key=lambda t: t[1])
-
-        tasks3 = [t for t, _ in tasks2]
-        assert tasks3 == tasks
+        tasks2 = loop.ready_tasks()
+        assert tasks2 == set(tasks)
 
     async def test_runnable_tasks(self):
         tasks = self.tasks()

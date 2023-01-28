@@ -96,16 +96,15 @@ class SchedulingMixin(_Base):
                 return len(self._ready) - i - 1
         raise ValueError("task not in ready queue")
 
-    def ready_get_tasks(self):
+    def ready_tasks(self):
         """
-        Find all runnable tasks in the ready queue. Return a list of
-        (task, index) tuples.
+        Return a set of all all runnable tasks in the ready queue.
         """
-        result = []
-        for i, handle in enumerate(self._ready):
+        result = set()
+        for handle in self._ready:
             task = task_from_handle(handle)
             if task:
-                result.append((task, i))
+                result.add(task)
         return result
 
 
@@ -236,8 +235,8 @@ def runnable_tasks(loop=None):
     """Return a set of the runnable tasks for the loop."""
     if loop is None:
         loop = events.get_running_loop()
-    tasks = loop.ready_get_tasks()
-    result = set(t for (t, _) in tasks)
+    tasks = loop.ready_tasks()
+    result = set(tasks)
     assert all(not task_is_blocked(task) for task in result)
     return result
 
