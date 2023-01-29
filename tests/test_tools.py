@@ -1,4 +1,3 @@
-import asyncio
 from collections import deque
 
 import pytest
@@ -37,28 +36,3 @@ def test_deque_pop():
         else:
             with pytest.raises(IndexError):
                 asynkit.tools.deque_pop(deq, i)
-
-
-async def test_task_from_handle():
-    async def foo():
-        pass
-
-    task = asyncio.create_task(foo())
-
-    item = asyncio.get_running_loop().ready_pop()
-    asyncio.get_running_loop().ready_append(item)
-    assert isinstance(item, asyncio.Handle)
-    task2 = asynkit.tools.task_from_handle(item)
-    assert task2 is task
-
-    assert asynkit.tools.task_from_handle(foo) is None
-
-
-async def test_task_from_handle_notask():
-    # test that a bogus member callback results in a None
-    class Foo:
-        def bar(self):
-            pass
-
-    h = asyncio.Handle(Foo().bar, (), asyncio.get_running_loop())
-    assert asynkit.tools.task_from_handle(h) is None

@@ -17,7 +17,7 @@ from typing import (
     Set,
 )
 
-from .tools import create_task, deque_pop, task_from_handle
+from .tools import create_task, deque_pop
 
 __all__ = [
     "SchedulingMixin",
@@ -51,14 +51,51 @@ else:
 T = TypeVar("T")
 
 
+# Asyncio does not directly have the concept of "runnable"
+# or "blocked" Tasks.  The EventLoop only holds a weak dictionary
+# of all its Task objects but otherwise does not track them.
+# A Task, which is not currently running, exists either as
+# * `done()` callback on a Future, (we consider it blocked)
+# * a `Task.__step()` callback in the Loop's "ready" queue (runnable)
+# It is the Task.__step() method which handles running a Task until a
+# coroutine blocks, which it does by yielding a Future.
+#
+# To discover runnable Tasks, we must iterate over the ready queue and
+# then discover the Task objects from the scheduled __step() callbacks.
+# This is doable via some hacky introspection.  It would be nicer if the
+# EventLoop considered Tasks separately from scheduled callbacks though.
+
+
 class SchedulingMixin(_Base):
     """
     A mixin class adding features to the base event loop.
     """
 
+    def get_loop_ready_queue(self) -> Deque[Handle]:
+        """
+        Default implementation to get the Ready Queue of the loop.
+        Subclassable by other implementations.
+        """
+        return self._ready
+
+    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+        """
+        Default implementation to extract the runnable Task object
+        from its scheduled __step() callback.  Returns None if the
+        Handle does not represent a runnable Task. Can be subclassed
+        for other non-default Task implementations.
+        """
+        try:
+            task = handle._callback.__self__  # type: ignore
+        except AttributeError:
+            return None
+        if isinstance(task, asyncio.Task):
+            return task
+        return None
+
     def ready_len(self) -> int:
         """Get the length of the runnable queue"""
-        return len(self._ready)
+        return len(self.get_loop_ready_queue())
 
     def ready_rotate(self, n: int) -> None:
         """Rotate the ready queue.
@@ -69,20 +106,20 @@ class SchedulingMixin(_Base):
         entry at the end. A Positive values will move callbacks from the end
         to the front, making them next in line.
         """
-        self._ready.rotate(n)
+        self.get_loop_ready_queue().rotate(n)
 
     def ready_pop(self, pos: int = -1) -> Handle:
         """Pop an element off the ready list at the given position."""
-        return deque_pop(self._ready, pos)
+        return deque_pop(self.get_loop_ready_queue(), pos)
 
     def ready_insert(self, pos: int, element: Handle) -> None:
         """Insert a previously popped `element` back into the
         ready queue at `pos`"""
-        self._ready.insert(pos, element)
+        self.get_loop_ready_queue().insert(pos, element)
 
     def ready_append(self, element: Handle) -> None:
         """Append a previously popped `element` to the end of the queue."""
-        self._ready.append(element)
+        self.get_loop_ready_queue().append(element)
 
     def call_insert(
         self,
@@ -107,10 +144,11 @@ class SchedulingMixin(_Base):
         """
         # we search in reverse, since the task is likely to have been
         # just appended to the queue
-        for i, handle in enumerate(reversed(self._ready)):
-            found = task_from_handle(handle)
+        ready = self.get_loop_ready_queue()
+        for i, handle in enumerate(reversed(ready)):
+            found = self.get_task_from_handle(handle)
             if found is task:
-                return len(self._ready) - i - 1
+                return len(ready) - i - 1
         raise ValueError("task not in ready queue")
 
     def ready_tasks(self) -> Set[TaskAny]:
@@ -118,8 +156,8 @@ class SchedulingMixin(_Base):
         Return a set of all all runnable tasks in the ready queue.
         """
         result = set()
-        for handle in self._ready:
-            task = task_from_handle(handle)
+        for handle in self.get_loop_ready_queue():
+            task = self.get_task_from_handle(handle)
             if task:
                 result.add(task)
         return result
