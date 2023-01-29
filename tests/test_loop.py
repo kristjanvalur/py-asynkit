@@ -134,7 +134,18 @@ async def test_ready_len(count):
 
     assert asyncio.get_running_loop().ready_len() == count
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().ready_len() == 0
+    # add a non-runnable callback to ready loop
+    asyncio.get_running_loop().call_soon(lambda: None)
+    assert asyncio.get_running_loop().ready_len() == 1
+    assert len(asyncio.get_running_loop().ready_tasks()) == 0
+
+    # and add a proper method callback
+    class Foo:
+        def cb(self):
+            pass
+
+    asyncio.get_running_loop().call_soon(Foo().cb)
+    assert len(asyncio.get_running_loop().ready_tasks()) == 0
 
 
 @pytest.mark.parametrize("pos", [0, 1, 3])
