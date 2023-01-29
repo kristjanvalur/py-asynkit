@@ -24,8 +24,7 @@ else:
     _TaskAny = asyncio.Task
 
 if PYTHON_38:
-    # Ignore typing to remove warnings about different type signatures.
-    def create_task(  # type: ignore
+    def create_task(
         coro: Coroutine[Any, Any, T],
         *,
         name: Optional[str] = None,
