@@ -3,10 +3,12 @@ import asyncio
 import pytest
 
 import asynkit
+import asynkit.uvloop
 
 DefaultLoop = asynkit.DefaultSchedulingEventLoop
 SelectorLoop = asynkit.SchedulingSelectorEventLoop
 ProactorLoop = getattr(asynkit, "SchedulingProactorEventLoop", None)
+UvLoop = getattr(asynkit.uvloop, "Loop", None)
 
 
 def pytest_addoption(parser):
@@ -14,7 +16,18 @@ def pytest_addoption(parser):
     parser.addoption("--selector", action="store_true", default=False)
 
 
+# params for parametrized loop fixtures
+loops = [(SelectorLoop, "Selector")]
+if ProactorLoop:
+    loops.append((ProactorLoop, "Proactor"))
+if UvLoop:
+    loops.append((UvLoop, "Uv"))
+loop_types, loop_ids = zip(*loops)
+
+
 def scheduling_loop_type(request):
+    if getattr(request, "param", None):
+        return request.param
     loop_type = DefaultLoop
     if ProactorLoop and request.config.getoption("proactor"):
         loop_type = ProactorLoop
@@ -34,7 +47,9 @@ class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 
 
 # fixture for pytest-asyncio plugin
-@pytest.fixture
+
+
+@pytest.fixture(params=loops, ids=loop_ids)
 def event_loop(request):
     loop = scheduling_loop_type(request)()
     try:

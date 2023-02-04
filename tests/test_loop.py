@@ -6,12 +6,12 @@ import pytest
 
 import asynkit
 
-from .conftest import SchedulingEventLoopPolicy
+from .conftest import SchedulingEventLoopPolicy, loop_types, loop_ids
 
 pytestmark = pytest.mark.anyio
 
 
-@pytest.fixture
+@pytest.fixture(params=loop_types, ids=loop_ids)
 def anyio_backend(request):
     return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
 
