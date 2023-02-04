@@ -2,11 +2,21 @@
 drop-in replacement for uvloop, but providing scheduling primitives
 """
 import asyncio
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, Deque, Optional, cast
+
 from .eventloop import SchedulingMixin
 
+if TYPE_CHECKING:
+    _TaskAny = asyncio.Task[Any]
+else:
+    _TaskAny = asyncio.Task
 
+_uvloop: Optional[ModuleType]
 try:
-    import uvloop as _uvloop
+    import uvloop as __uvloop
+
+    _uvloop = __uvloop
 
     # make sure the loop can be used
     _loop = _uvloop.Loop()
@@ -18,12 +28,14 @@ except ImportError:
 
 if _uvloop:
 
-    class Loop(_uvloop.Loop, SchedulingMixin):
-        def get_loop_ready_queue(self):
+    # uvloop.Loop is type-incompatible with AbstractEventLoop, so
+    # we must ignore typing for this class.
+    class Loop(_uvloop.Loop, SchedulingMixin):  # type: ignore
+        def get_loop_ready_queue(self) -> Deque[asyncio.Handle]:
             #  Invoke the special queue getter function on _uvloop.Loop
-            return self.get_ready_queue()
+            return cast(Deque[asyncio.Handle], self.get_ready_queue())
 
-        def get_task_from_handle(self, handle: asyncio.Handle):
+        def get_task_from_handle(self, handle: asyncio.Handle) -> Optional[_TaskAny]:
             # uvloop.loop.Handle objects have this method
             # note that uvloop type hints claim that methods return
             # asyncio.Handle objects, but in fact they return
@@ -31,7 +43,7 @@ if _uvloop:
             cb = handle.get_callback()  # type: ignore
             if cb:
                 try:
-                    task = cb[0].__self__  # type: ignore
+                    task = cb[0].__self__
                 except AttributeError:
                     return None
                 if isinstance(task, asyncio.Task):
@@ -39,9 +51,18 @@ if _uvloop:
 
             return None
 
-    def new_event_loop():
+    def new_event_loop() -> Loop:
         return Loop()
 
-    class EventLoopPolicy(_uvloop.EventLoopPolicy):
+    class EventLoopPolicy(_uvloop.EventLoopPolicy):  # type: ignore
         def _loop_factory(self) -> Loop:
             return new_event_loop()
+
+    def install() -> None:
+        """A helper function to install uvloop policy."""
+        asyncio.set_event_loop_policy(EventLoopPolicy())
+
+    __all__ = ["new_event_loop", "install", "EventLoopPolicy"]
+
+else:
+    __all__ = []
