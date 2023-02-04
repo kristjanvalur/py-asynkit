@@ -204,7 +204,6 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         hooks = sys.get_asyncgen_hooks()
         if hooks.firstiter is not None:
             hooks.firstiter(self)
-            # cast(Callable[[Any], None], hooks.firstiter)(self)
         self.finalizer = cast(Optional[Callable[[Any], None]], hooks.finalizer)
 
     async def asend(self, value: Optional[T_contra]) -> T_co:
