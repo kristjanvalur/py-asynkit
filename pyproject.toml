@@ -24,6 +24,7 @@ typing = "mypy -p asynkit"
 [tool.poetry.dependencies]
 python = "^3.7"
 typing-extensions = "^4.4.0"
+uvloop = { git = "https://github.com/kristjanvalur/uvloop.git", branch = "kristjan/get_ready_queue", optional = true, markers = "sys_platform == 'linux'" }
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^0.991"
@@ -33,7 +34,10 @@ pytest-cov = "^3.0.0"
 poethepoet = "^0.13.1"
 ruff = "~0.0.190"
 anyio = {extras = ["trio"], version = "^3.6.2"}
-uvloop = {git = "https://github.com/kristjanvalur/uvloop.git", branch = "kristjan/get_ready_queue"}
+uvloop = {git = "https://github.com/kristjanvalur/uvloop.git", branch = "kristjan/get_ready_queue", markers = "sys_platform == 'linux'" }
+
+[tool.poetry.extras]
+uvloop = ["uvloop"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
