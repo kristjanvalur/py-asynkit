@@ -1,7 +1,6 @@
 import asyncio
 import asyncio.base_events
 import contextlib
-import sys
 from asyncio import Handle, Task, AbstractEventLoopPolicy, AbstractEventLoop, Future
 from contextvars import Context
 from typing import (
@@ -174,12 +173,8 @@ if not TYPE_CHECKING and hasattr(asyncio, "ProactorEventLoop"):  # pragma: no co
 
     __all__.append("SchedulingProactorEventLoop")
 
+    DefaultSchedulingEventLoop = SchedulingProactorEventLoop
 
-if sys.platform == "win32" and globals().get(
-    "SchedulingProactorEventLoop"
-):  # pragma: no coverage
-
-    DefaultSchedulingEventLoop = globals().get("SchedulingProactorEventLoop")
 else:  # pragma: no coverage
     DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
 

@@ -14,11 +14,12 @@ else:
 
 _uvloop: Optional[ModuleType]
 try:
-    import uvloop as __uvloop
+    import uvloop as __uvloop  # type: ignore
 
     _uvloop = __uvloop
 
     # make sure the loop can be used
+    assert _uvloop
     _loop = _uvloop.Loop()
     if not hasattr(_loop, "_ready") and not hasattr(_loop, "get_ready_queue"):
         _uvloop = None
