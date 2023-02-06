@@ -55,12 +55,12 @@ jobs:
     - name: Install dev dependencies
       run: poetry install
 
-    - name: Run the tests for selector loop
+    - name: Install uvloop on Linux
+      run: poetry add --group=dev git+https://github.com/kristjanvalur/uvloop.git#kristjan/get_ready_queue
+      if: runner.os == 'Linux'
+
+    - name: Run the tests for all loops
       run: poetry run pytest
-    
-    - name: Run the tests for proactor loop
-      if: ${{ matrix.os == 'windows-latest' }}
-      run: poetry run pytest --proactor
     
   testall:
     if: ${{ always() }}
