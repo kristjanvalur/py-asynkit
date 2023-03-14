@@ -218,12 +218,13 @@ invocation structure, then this pattern allows the decoupling of IO and the pars
 
 ## `GeneratorObject`
 
-A GeneratorObject builds on top of the `Monitor` to create an `AsyncGenerator`.  It is in many ways
+A `GeneratorObject` builds on top of the `Monitor` to create an `AsyncGenerator`.  It is in many ways
 similar to an _asynchronous generator_ constructed using the _generator function_ syntax.
-But wheras those return values using the `yield` keyword,
-a GeneratorObject has an `ayield()` method, which means that data can be sent to the generator
-by anyone.
-It leverages the `Monitor.oob()` method to deliver the yielded data to whomever is iterating over it:
+But wheras those return values using the `yield` _keyword_,
+a GeneratorObject has an `ayield()` _method_, which means that data can be sent to the generator
+by anyone, and not just by using `yield`, which makes composing such generators much simpler.
+
+The `GeneratorObject` leverages the `Monitor.oob()` method to deliver the _ayielded_ data to whomever is iterating over it:
 
 ```python
 async def generator(gen_obj):
