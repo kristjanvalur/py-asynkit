@@ -38,6 +38,30 @@ class TestMonitor:
         back = await m.aawait(c, "how")
         assert back == "howfoo"
 
+    async def test_monitor_awaitable(self):
+        """
+        Test basic monitor awaitable object
+        """
+
+        async def helper(m):
+            back = await m.oob("foo")
+            await sleep(0)
+            back = await m.oob(str(back) + "foo")
+            await sleep(0)
+            return str(back) + "foo"
+
+        m = Monitor()
+        c = helper(m)
+        a = m.awaitable(c)
+        with pytest.raises(OOBData) as data:
+            await a
+        assert data.value.data == "foo"
+        with pytest.raises(OOBData) as data:
+            await a
+        assert data.value.data == "Nonefoo"
+        back = await a
+        assert back == "Nonefoo"
+
     async def test_throw(self):
         """
         Assert that throwing an error into the coroutine after the first OOB
