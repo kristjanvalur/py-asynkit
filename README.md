@@ -150,6 +150,25 @@ async def main():
 This is similar to `contextvars.Context.run()` but works for async functions.  This function is
 implemented using `CoroStart`
 
+## `coro_iter` - helper for `__iter__()` methods
+
+This helper function returns an `Generator` for a coroutine.  This is useful, if one
+wants to make an object awaitable via the `__await__` method which must only
+return `Iterator` objects.
+
+```python
+class Awaitable:
+    def __init__(self, coro):
+        self.coro = coro
+    def __await__(self):
+        return asynkit.coro_iter(self.coro)
+
+async def main():
+    await Awaitable(asyncio.sleep(1))
+
+asyncio.run(main())
+```
+
 ## `Monitor`
 
 A `Monitor` object can be used to await a coroutine, while listening for _out of band_ messages
