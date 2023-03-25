@@ -34,6 +34,7 @@ __all__ = [
     "coro_is_new",
     "coro_is_suspended",
     "coro_is_finished",
+    "coro_iter",
 ]
 
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
@@ -353,3 +354,32 @@ def eager(
     if isinstance(arg, types.FunctionType):
         return func_eager(arg, task_factory=task_factory)
     raise TypeError("need coroutine or function")
+
+
+def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
+    """
+    Helper to turn a coroutine into an iterator, which can then
+    be used as the return of object's __await__ methods.
+    """
+    try:
+        out_value = coro.send(None)
+    except StopIteration as exc:
+        return cast(T, exc.value)
+
+    while True:
+        try:
+            in_value = yield out_value
+
+        except GeneratorExit:
+            coro.close()
+            raise
+        except BaseException as exc:
+            try:
+                out_value = coro.throw(exc)
+            except StopIteration as exc:
+                return cast(T, exc.value)
+        else:
+            try:
+                out_value = coro.send(in_value)
+            except StopIteration as exc:
+                return cast(T, exc.value)

@@ -140,15 +140,14 @@ if not TYPE_CHECKING and hasattr(asyncio, "ProactorEventLoop"):  # pragma: no co
 if sys.platform == "win32" and globals().get(
     "SchedulingProactorEventLoop"
 ):  # pragma: no coverage
-
-    DefaultSchedulingEventLoop = globals().get("SchedulingProactorEventLoop")
+    DefaultSchedulingEventLoop = SchedulingProactorEventLoop  # type: ignore
 else:  # pragma: no coverage
     DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
 
 
 class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
     def new_event_loop(self) -> AbstractEventLoop:
-        return DefaultSchedulingEventLoop()
+        return DefaultSchedulingEventLoop()  # type: ignore
 
 
 @contextlib.contextmanager
