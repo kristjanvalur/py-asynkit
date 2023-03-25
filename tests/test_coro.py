@@ -583,7 +583,7 @@ async def test_coro_iter():
     a = Awaiter(coroutine1)
     assert await a == "foobar1"
     assert await a == "foobar2"  # it can be awaited again
-    
+
     a = Awaiter(coroutine2)
     with pytest.raises(RuntimeError) as err:
         await a
