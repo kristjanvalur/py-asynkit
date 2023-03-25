@@ -158,17 +158,21 @@ return `Iterator` objects.
 
 ```python
 class Awaitable:
-    def __init__(self, coro):
-        self.coro = coro
+    def __init__(self, cofunc):
+        self.cofunc = cofunc
     def __await__(self):
-        return asynkit.coro_iter(self.coro)
+        return asynkit.coro_iter(self.cofunc())
 
 async def main():
-    a = Awaitable(asyncio.sleep(1))
-    await a
+    async def sleeper():
+        await asyncio.sleep(1)
+    a = Awaitable(sleeper)
+    await a  # sleep once
+    await a  # sleep again
 
 asyncio.run(main())
 ```
+Unlike regular coroutines (the result of calling a coroutine function), an awaitable object can be awaited multiple times.
 
 ## `Monitor`
 

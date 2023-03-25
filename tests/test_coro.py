@@ -575,11 +575,19 @@ async def test_coro_iter():
     class Awaiter:
         def __init__(self, coro):
             self.coro = coro
+            self.args = ["bar1", "bar2"]
 
         def __await__(self):
-            return asynkit.coro_iter(self.coro)
+            return asynkit.coro_iter(self.coro(self.args.pop(0)))
 
-    assert await Awaiter(coroutine1("bar")) == "foobar"
+    a = Awaiter(coroutine1)
+    assert await a == "foobar1"
+    assert await a == "foobar2"  # it can be awaited again
+    
+    a = Awaiter(coroutine2)
     with pytest.raises(RuntimeError) as err:
-        await Awaiter(coroutine2("bar"))
-    assert err.value.args[0] == "foobar"
+        await a
+    assert err.value.args[0] == "foobar1"
+    with pytest.raises(RuntimeError) as err:
+        await a
+    assert err.value.args[0] == "foobar2"
