@@ -153,7 +153,7 @@ implemented using `CoroStart`
 ## `coro_iter` - helper for `__iter__()` methods
 
 This helper function returns an `Generator` for a coroutine.  This is useful, if one
-wants to make an object awaitable via the `__await__` method which must only
+wants to make an object _awaitable_ via the `__await__` method, which must only
 return `Iterator` objects.
 
 ```python
@@ -164,7 +164,8 @@ class Awaitable:
         return asynkit.coro_iter(self.coro)
 
 async def main():
-    await Awaitable(asyncio.sleep(1))
+    a = Awaitable(asyncio.sleep(1))
+    await a
 
 asyncio.run(main())
 ```
