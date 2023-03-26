@@ -7,6 +7,7 @@ way Python's `asyncio` module does things.
 
 - Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
 - Utility classes such as `GeneratorObject`
+- Coroutine helpers such as `coro_iter()`
 - `asyncio` event-loop extensions
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
@@ -123,8 +124,7 @@ Similarly to a `Future`, it has these methods:
   is raised. This is suitable for using with
   `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.
 - `as_awaitable()` - If `done()`, returns `as_future()`, else returns `as_coroutine()`.
-  This is a convenience method for use with functions such as `asyncio.gather()` to avoid
-  it creating a `Task` object when `CoroStart.done() is True`.
+  This is a convenience method for use with functions such as `asyncio.gather()`. 
 
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
@@ -208,10 +208,10 @@ dolly
 done
 ```
 
-The caller can also pass in data to the coroutine via the `Monitor.aawait(coro, data:None)` method and
-it will become the result of the `Monitor.oob()` call in the coroutine.
+The caller can also pass in _data_ to the coroutine via the `Monitor.aawait(coro, data=None)` method and
+it will become the _return value_ of the `Monitor.oob()` call in the coroutine.
 `Monitor.athrow()` can be used to raise an exception inside the coroutine.
-Neither data nor an exception cannot be sent the first time the coroutine is awaited, 
+Neither data nor an exception can be sent the first time the coroutine is awaited, 
 only as a response to a previous `OOBData` exception.
 
 If no data is to be sent (the common case), an _awaitable_ object can be generated to simplify
@@ -233,7 +233,7 @@ directly:
 a = MonitorAwaitable(m, coro(m))
 ```
 
-A Monitor can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
+A `Monitor` can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
 condition, without resorting to the relatively heavy mechanism of creating, managing and synchronizing
 `Task` objects.  This can be useful if the coroutine needs to maintain state.
 
@@ -293,8 +293,8 @@ The `GeneratorObject`, when called, returns a `GeneratorObjectIterator` which be
 the same way as an `AsyncGenerator` object.  It can be iterated over and supports the
 `asend()`, `athrow()` and `aclose()` methods.
 
-A GeneratorObject is a flexible way to asynchronously generate results without
-resorting to Tasks and Queues.
+A `GeneratorObject` is a flexible way to asynchronously generate results without
+resorting to `Task` and `Queue` objects.
 
 
 # Event loop tools
