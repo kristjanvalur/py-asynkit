@@ -209,6 +209,19 @@ The caller can also pass in data to the coroutine via the `Monitor.aawait(coro, 
 it will become the result of the `Monitor.oob()` call inside the monitor.   `Monitor.athrow()` can be
 used to raise an exception inside the coroutine.
 
+If no data needs to be sent, an _awaitable_ object can be generated to simplify
+the syntax:
+
+```python
+m = Monitor()
+a = m.awaitable(coro(m))
+while True:
+    try:
+        return await a
+    except OOBData as oob:
+        handle_oob(oob.data)
+```
+
 A Monitor can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
 condition, without resorting to the relatively heavy mechanism of creating, managing and synchronizing
 `Task` objects.  This can be useful if the coroutine needs to maintain state.
@@ -226,10 +239,10 @@ this to the monitor:
 
     async def manager(buffer, io):
         m = Monitor()
-        c = readline(m, buffer)
+        a = m.awaitable(readline(m, buffer))
         while True:
             try:
-                return await m.aawait(c)
+                return await a
             except OOBData:
                 try:
                     buffer.fill(await io.read())
@@ -237,7 +250,7 @@ this to the monitor:
                     await m.athrow(c, exc)
 ```
 
-In this example, `readline()` is trivial, but if this were a complicated parser with hierarchical
+In this example, `readline()` is trivial, but if it were a complicated parser with hierarchical
 invocation structure, then this pattern allows the decoupling of IO and the parsing of buffered data, maintaining the state of the parser while _the caller_ fills up the buffer.
 
 ## `GeneratorObject`

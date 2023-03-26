@@ -51,8 +51,7 @@ class TestMonitor:
             return str(back) + "foo"
 
         m = Monitor()
-        c = helper(m)
-        a = m.awaitable(c)
+        a = m.awaitable(helper(m))
         with pytest.raises(OOBData) as data:
             await a
         assert data.value.data == "foo"
