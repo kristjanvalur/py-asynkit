@@ -1,3 +1,4 @@
+* Add `Monitor.awaitable()` method and `MonitorAwaitable` class
 * Add the coro_iter() helper
 * Move Task creation out of the `CoroStart` class and into `coro_eager()` helper.
 * Add Monitor class and GeneratorObject
