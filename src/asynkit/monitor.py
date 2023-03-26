@@ -65,10 +65,10 @@ class Monitor(Generic[T]):
         Await a coroutine after an initial "send" call which is either
         `send()` or `throw()`, while handling the OOB data protocol.
         """
-        return (yield from self._asend_raw(coro, callable, args))
+        return (yield from self._asend_iter(coro, callable, args))
 
     # A straight generator, suitable for __await__ magic methods.
-    def _asend_raw(
+    def _asend_iter(
         self,
         coro: Coroutine[Any, Any, T],
         callable: Callable[..., Any],
@@ -183,7 +183,7 @@ class MonitorAwaitable(Generic[T]):
         self.coro = coro
 
     def __await__(self)-> Generator[Any, Any, T] :
-        return self.monitor._asend_raw(self.coro, self.coro.send, (None,))
+        return self.monitor._asend_iter(self.coro, self.coro.send, (None,))
         
 
 class GeneratorObject(Generic[T, V]):
