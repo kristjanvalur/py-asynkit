@@ -150,7 +150,7 @@ async def main():
 This is similar to `contextvars.Context.run()` but works for async functions.  This function is
 implemented using `CoroStart`
 
-## `coro_iter` - helper for `__await__()` methods
+## `coro_iter` - helper for `__await__` methods
 
 This helper function returns an `Generator` for a coroutine.  This is useful, if one
 wants to make an object _awaitable_ via the `__await__` method, which must only
@@ -172,7 +172,7 @@ async def main():
 
 asyncio.run(main())
 ```
-Unlike regular coroutines (the result of calling a coroutine function), an awaitable object can be awaited multiple times.
+Unlike a regular _coroutine_ (the result of calling a _coroutine function_), an object with an `__await__` method can potentially be awaited multiple times.
 
 ## `Monitor`
 
