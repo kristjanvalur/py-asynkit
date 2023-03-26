@@ -1,6 +1,8 @@
+* Release 0.7.0
 * Add `CoroStart.as_awaitable()` method
 * Add `Monitor.awaitable()` method and `MonitorAwaitable` class
 * Add the coro_iter() helper
+* Release 0.6.0
 * Move Task creation out of the `CoroStart` class and into `coro_eager()` helper.
 * Add Monitor class and GeneratorObject
 * Add anyio support for testing.  Add asykit.experimental.anyio.
