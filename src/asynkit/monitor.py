@@ -125,9 +125,12 @@ class Monitor(Generic[T]):
     def awaitable(
         self,
         coro: Coroutine[Any, Any, T],
-        ) -> Awaitable[T]:
+    ) -> Awaitable[T]:
+        """
+        Return a `MontiorAwaitable` object which can be awaited instead
+        of explicitly awaiting `Montiro.aawait()`
+        """
         return MonitorAwaitable(self, coro)
-
 
     @overload
     async def athrow(
@@ -178,13 +181,18 @@ class Monitor(Generic[T]):
 
 
 class MonitorAwaitable(Generic[T]):
+    """
+    An awaitable helper class which can be awaited to invoke a
+    `await Monitior.aawait(coroutine)`
+    """
+
     def __init__(self, monitor: Monitor[T], coro: Coroutine[Any, Any, T]) -> None:
         self.monitor = monitor
         self.coro = coro
 
-    def __await__(self)-> Generator[Any, Any, T] :
+    def __await__(self) -> Generator[Any, Any, T]:
         return self.monitor._asend_iter(self.coro, self.coro.send, (None,))
-        
+
 
 class GeneratorObject(Generic[T, V]):
     __slots__ = ["monitor"]
