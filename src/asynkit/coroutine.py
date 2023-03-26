@@ -267,6 +267,19 @@ class CoroStart(Awaitable[T_co]):
             future.set_exception(exc)
         return future
 
+    def as_awaitable(self) -> Awaitable[T_co]:
+        """
+        If `done()`, return `as_future()`, else `as_coroutine()`.
+        This is a convenience function for use when the instance
+        is to be passed directly to methods such as `asyncio.gather()`.
+        In such cases, we want to avoid a `done()` instance to cause
+        a `Task` to be created just to retrieve the result.
+        """
+        if self.done():
+            return self.as_future()
+        else:
+            return self.as_coroutine()
+
 
 async def coro_await(coro: CoroLike[T], *, context: Optional[Context] = None) -> T:
     """
