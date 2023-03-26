@@ -269,9 +269,23 @@ class TestCoroStart:
             with pytest.raises(RuntimeError) as err:
                 fut = cs.as_future()
             assert err.match(r"not done")
+            await cs
         else:
             fut = cs.as_future()
             assert isinstance(fut, asyncio.Future)
+            await fut
+
+    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
+    async def test_as_awaitable(self, block, anyio_backend):
+        coro, expect = self.get_coro1(block)
+        log = []
+        cs = asynkit.CoroStart(coro(log))
+        awaitable = cs.as_awaitable()
+        if block:
+            assert inspect.iscoroutine(awaitable)
+        else:
+            assert isinstance(awaitable, asyncio.Future)
+        await awaitable
 
     async def test_result(self, block):
         coro, _ = self.get_coro1(block)
