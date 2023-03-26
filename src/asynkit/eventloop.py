@@ -166,22 +166,26 @@ class SchedulingSelectorEventLoop(asyncio.SelectorEventLoop, SchedulingMixin):
     pass
 
 
-if not TYPE_CHECKING and hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
+DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
 
-    class SchedulingProactorEventLoop(asyncio.ProactorEventLoop, SchedulingMixin):
+# The following code needs coverage and typing exceptions
+# to lint cleanly on linux where there is no ProactorEventLoop
+if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
+
+    class SchedulingProactorEventLoop(
+        asyncio.ProactorEventLoop, SchedulingMixin  # type: ignore
+    ):
         pass
 
     __all__.append("SchedulingProactorEventLoop")
 
-    DefaultSchedulingEventLoop = SchedulingProactorEventLoop
-
-else:  # pragma: no coverage
-    DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
+    if sys.platform == "win32":  # pragma: no coverage
+        DefaultSchedulingEventLoop = SchedulingProactorEventLoop  # type: ignore
 
 
 class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
     def new_event_loop(self) -> AbstractEventLoop:
-        return DefaultSchedulingEventLoop()
+        return DefaultSchedulingEventLoop()  # type: ignore
 
 
 @contextlib.contextmanager

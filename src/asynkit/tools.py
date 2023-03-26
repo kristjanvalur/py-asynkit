@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 else:
     _TaskAny = asyncio.Task
 
-if PYTHON_38:
+if PYTHON_38:  # pragma: no cover
 
     def create_task(
         coro: Coroutine[Any, Any, T],
@@ -32,8 +32,8 @@ if PYTHON_38:
     ) -> _TaskAny:
         return asyncio.create_task(coro)
 
-else:
-    create_task = asyncio.create_task  # pragma: no cover
+else:  # pragma: no cover
+    create_task = asyncio.create_task  # type: ignore
 
 
 def deque_pop(d: Deque[T], pos: int = -1) -> T:

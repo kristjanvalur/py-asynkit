@@ -56,6 +56,14 @@ testpaths = [
 module = "asynkit.*"
 strict = true
 
+[[tool.mypy.overrides]]
+module = "asynkit.eventloop"
+warn_unused_ignores=false
+
+[[tool.mypy.overrides]]
+module = "asynkit.tools"
+warn_unused_ignores=false
+
 [tool.coverage.report]
 exclude_lines = [
   "pragma: no cover",

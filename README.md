@@ -150,6 +150,30 @@ async def main():
 This is similar to `contextvars.Context.run()` but works for async functions.  This function is
 implemented using `CoroStart`
 
+## `coro_iter` - helper for `__await__` methods
+
+This helper function returns an `Generator` for a coroutine.  This is useful, if one
+wants to make an object _awaitable_ via the `__await__` method, which must only
+return `Iterator` objects.
+
+```python
+class Awaitable:
+    def __init__(self, cofunc):
+        self.cofunc = cofunc
+    def __await__(self):
+        return asynkit.coro_iter(self.cofunc())
+
+async def main():
+    async def sleeper():
+        await asyncio.sleep(1)
+    a = Awaitable(sleeper)
+    await a  # sleep once
+    await a  # sleep again
+
+asyncio.run(main())
+```
+Unlike a regular _coroutine_ (the result of calling a _coroutine function_), an object with an `__await__` method can potentially be awaited multiple times.
+
 ## `Monitor`
 
 A `Monitor` object can be used to await a coroutine, while listening for _out of band_ messages
@@ -182,8 +206,29 @@ done
 ```
 
 The caller can also pass in data to the coroutine via the `Monitor.aawait(coro, data:None)` method and
-it will become the result of the `Monitor.oob()` call inside the monitor.   `Monitor.athrow()` can be
-used to raise an exception inside the coroutine.
+it will become the result of the `Monitor.oob()` call in the coroutine.
+`Monitor.athrow()` can be used to raise an exception inside the coroutine.
+Neither data nor an exception cannot be sent the first time the coroutine is awaited, 
+only as a response to a previous `OOBData` exception.
+
+If no data is to be sent (the common case), an _awaitable_ object can be generated to simplify
+the syntax:
+
+```python
+m = Monitor()
+a = m.awaitable(coro(m))
+while True:
+    try:
+        return await a
+    except OOBData as oob:
+        handle_oob(oob.data)
+```
+The returned awaitable is a `MonitorAwaitable` instance, and it can also be created
+directly:
+
+```python
+a = MonitorAwaitable(m, coro(m))
+```
 
 A Monitor can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
 condition, without resorting to the relatively heavy mechanism of creating, managing and synchronizing
@@ -202,10 +247,10 @@ this to the monitor:
 
     async def manager(buffer, io):
         m = Monitor()
-        c = readline(m, buffer)
+        a = m.awaitable(readline(m, buffer))
         while True:
             try:
-                return await m.aawait(c)
+                return await a
             except OOBData:
                 try:
                     buffer.fill(await io.read())
@@ -213,17 +258,18 @@ this to the monitor:
                     await m.athrow(c, exc)
 ```
 
-In this example, `readline()` is trivial, but if this were a complicated parser with hierarchical
+In this example, `readline()` is trivial, but if it were a complicated parser with hierarchical
 invocation structure, then this pattern allows the decoupling of IO and the parsing of buffered data, maintaining the state of the parser while _the caller_ fills up the buffer.
 
 ## `GeneratorObject`
 
-A GeneratorObject builds on top of the `Monitor` to create an `AsyncGenerator`.  It is in many ways
+A `GeneratorObject` builds on top of the `Monitor` to create an `AsyncGenerator`.  It is in many ways
 similar to an _asynchronous generator_ constructed using the _generator function_ syntax.
-But wheras those return values using the `yield` keyword,
-a GeneratorObject has an `ayield()` method, which means that data can be sent to the generator
-by anyone.
-It leverages the `Monitor.oob()` method to deliver the yielded data to whomever is iterating over it:
+But wheras those return values using the `yield` _keyword_,
+a GeneratorObject has an `ayield()` _method_, which means that data can be sent to the generator
+by anyone, and not just by using `yield`, which makes composing such generators much simpler.
+
+The `GeneratorObject` leverages the `Monitor.oob()` method to deliver the _ayielded_ data to whomever is iterating over it:
 
 ```python
 async def generator(gen_obj):

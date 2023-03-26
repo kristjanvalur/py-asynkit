@@ -561,3 +561,33 @@ async def test_coro_is_suspended():
 
     with pytest.raises(TypeError):
         asynkit.coroutine.coro_is_suspended("str")
+
+
+async def test_coro_iter():
+    async def coroutine1(val):
+        await sleep(0)
+        return "foo" + val
+
+    async def coroutine2(val):
+        await sleep(0)
+        raise RuntimeError("foo" + val)
+
+    class Awaiter:
+        def __init__(self, coro):
+            self.coro = coro
+            self.args = ["bar1", "bar2"]
+
+        def __await__(self):
+            return asynkit.coro_iter(self.coro(self.args.pop(0)))
+
+    a = Awaiter(coroutine1)
+    assert await a == "foobar1"
+    assert await a == "foobar2"  # it can be awaited again
+
+    a = Awaiter(coroutine2)
+    with pytest.raises(RuntimeError) as err:
+        await a
+    assert err.value.args[0] == "foobar1"
+    with pytest.raises(RuntimeError) as err:
+        await a
+    assert err.value.args[0] == "foobar2"

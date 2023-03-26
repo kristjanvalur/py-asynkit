@@ -5,6 +5,7 @@ from typing import (
     Any,
     AsyncIterator,
     AsyncGenerator,
+    Awaitable,
     Callable,
     Coroutine,
     Generator,
@@ -64,6 +65,15 @@ class Monitor(Generic[T]):
         Await a coroutine after an initial "send" call which is either
         `send()` or `throw()`, while handling the OOB data protocol.
         """
+        return (yield from self._asend_iter(coro, callable, args))
+
+    # A straight generator, suitable for __await__ magic methods.
+    def _asend_iter(
+        self,
+        coro: Coroutine[Any, Any, T],
+        callable: Callable[..., Any],
+        args: Tuple[Any, ...],
+    ) -> Generator[Any, Any, T]:
         if self.state != 0:
             raise RuntimeError("Monitor cannot be re-entered")
         self.state = 1
@@ -98,7 +108,6 @@ class Monitor(Generic[T]):
         finally:
             self.state = 0
 
-    @types.coroutine
     async def aawait(
         self,
         coro: Coroutine[Any, Any, T],
@@ -112,6 +121,16 @@ class Monitor(Generic[T]):
         to pass data as the return value for the `oob()` call for a subsequent call.
         """
         return await self._asend(coro, coro.send, (data,))
+
+    def awaitable(
+        self,
+        coro: Coroutine[Any, Any, T],
+    ) -> Awaitable[T]:
+        """
+        Return a `MontiorAwaitable` object which can be awaited instead
+        of explicitly awaiting `Montiro.aawait()`
+        """
+        return MonitorAwaitable(self, coro)
 
     @overload
     async def athrow(
@@ -161,6 +180,20 @@ class Monitor(Generic[T]):
         return (yield data)
 
 
+class MonitorAwaitable(Generic[T]):
+    """
+    An awaitable helper class which can be awaited to invoke a
+    `await Monitior.aawait(coroutine)`
+    """
+
+    def __init__(self, monitor: Monitor[T], coro: Coroutine[Any, Any, T]) -> None:
+        self.monitor = monitor
+        self.coro = coro
+
+    def __await__(self) -> Generator[Any, Any, T]:
+        return self.monitor._asend_iter(self.coro, self.coro.send, (None,))
+
+
 class GeneratorObject(Generic[T, V]):
     __slots__ = ["monitor"]
 
@@ -204,7 +237,6 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         hooks = sys.get_asyncgen_hooks()
         if hooks.firstiter is not None:
             hooks.firstiter(self)
-            # cast(Callable[[Any], None], hooks.firstiter)(self)
         self.finalizer = cast(Optional[Callable[[Any], None]], hooks.finalizer)
 
     async def asend(self, value: Optional[T_contra]) -> T_co:
