@@ -1,6 +1,7 @@
 import asyncio
 import asyncio.base_events
 import contextlib
+import sys
 from asyncio import Handle, Task, AbstractEventLoopPolicy, AbstractEventLoop, Future
 from contextvars import Context
 from typing import (
