@@ -206,10 +206,12 @@ done
 ```
 
 The caller can also pass in data to the coroutine via the `Monitor.aawait(coro, data:None)` method and
-it will become the result of the `Monitor.oob()` call inside the monitor.   `Monitor.athrow()` can be
-used to raise an exception inside the coroutine.
+it will become the result of the `Monitor.oob()` call in the coroutine.
+`Monitor.athrow()` can be used to raise an exception inside the coroutine.
+Neither data nor an exception cannot be sent the first time the coroutine is awaited, 
+only as a response to a previous `OOBData` exception.
 
-If no data needs to be sent, an _awaitable_ object can be generated to simplify
+If no data is to be sent (the common case), an _awaitable_ object can be generated to simplify
 the syntax:
 
 ```python
@@ -220,6 +222,12 @@ while True:
         return await a
     except OOBData as oob:
         handle_oob(oob.data)
+```
+The returned awaitable is a `MonitorAwaitable` instance, and it can also be created
+directly:
+
+```python
+a = MonitorAwaitable(m, coro(m))
 ```
 
 A Monitor can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
