@@ -5,7 +5,7 @@ import asyncio
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, Deque, Optional, cast
 
-from .eventloop import SchedulingMixin
+from ..eventloop import SchedulingMixin
 
 if TYPE_CHECKING:
     _TaskAny = asyncio.Task[Any]

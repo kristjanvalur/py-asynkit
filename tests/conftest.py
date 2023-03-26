@@ -3,12 +3,12 @@ import asyncio
 import pytest
 
 import asynkit
-import asynkit.uvloop
+import asynkit.experimental.uvloop
 
 DefaultLoop = asynkit.DefaultSchedulingEventLoop
 SelectorLoop = asynkit.SchedulingSelectorEventLoop
 ProactorLoop = getattr(asynkit, "SchedulingProactorEventLoop", None)
-UvLoop = getattr(asynkit.uvloop, "Loop", None)
+UvLoop = getattr(asynkit.experimental.uvloop, "Loop", None)
 
 
 def pytest_addoption(parser):
