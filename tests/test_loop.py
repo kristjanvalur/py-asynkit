@@ -360,10 +360,11 @@ class TestTasks:
     async def test_get_task_extra(self):
         loop = asyncio.get_running_loop()
         await asyncio.sleep(0)  # flush ready queue
+        initial = loop.ready_len()
         tasks = self.tasks()
-        assert loop.ready_len() == len(tasks)
+        assert loop.ready_len() == len(tasks) + initial
         loop.call_soon(lambda: None)
-        assert loop.ready_len() > len(tasks)
+        assert loop.ready_len() > len(tasks) + initial
         tasks2 = loop.ready_tasks()
         assert tasks2 == set(tasks)
 
