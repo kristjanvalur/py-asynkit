@@ -18,6 +18,7 @@ from typing import (
 )
 
 from .tools import create_task, deque_pop
+from .loop import default
 
 __all__ = [
     "SchedulingMixin",
@@ -85,13 +86,7 @@ class SchedulingMixin(_Base):
         Handle does not represent a runnable Task. Can be subclassed
         for other non-default Task implementations.
         """
-        try:
-            task = handle._callback.__self__  # type: ignore
-        except AttributeError:
-            return None
-        if isinstance(task, asyncio.Task):
-            return task
-        return None
+        return default.get_task_from_handle(handle)
 
     def ready_len(self) -> int:
         """Get the length of the runnable queue"""
@@ -131,36 +126,20 @@ class SchedulingMixin(_Base):
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.
         """
-        handle = self.call_soon(callback, *args, context=context)
-        handle2 = self.ready_pop(-1)
-        assert handle2 is handle
-        self.ready_insert(position, handle)
-        return handle
+        return default.call_insert(position, callback, *args, context=context, loop=self)
 
     def ready_index(self, task: TaskAny) -> int:
         """
         Look for a runnable task in the ready queue. Return its index if found
         or raise a ValueError
         """
-        # we search in reverse, since the task is likely to have been
-        # just appended to the queue
-        ready = self.get_loop_ready_queue()
-        for i, handle in enumerate(reversed(ready)):
-            found = self.get_task_from_handle(handle)
-            if found is task:
-                return len(ready) - i - 1
-        raise ValueError("task not in ready queue")
+        return default.ready_index(task, loop=self)
 
     def ready_tasks(self) -> Set[TaskAny]:
         """
         Return a set of all all runnable tasks in the ready queue.
         """
-        result = set()
-        for handle in self.get_loop_ready_queue():
-            task = self.get_task_from_handle(handle)
-            if task:
-                result.add(task)
-        return result
+        return default.ready_tasks(self)
 
 
 class SchedulingSelectorEventLoop(asyncio.SelectorEventLoop, SchedulingMixin):
