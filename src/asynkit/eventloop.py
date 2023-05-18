@@ -126,7 +126,9 @@ class SchedulingMixin(_Base):
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.
         """
-        return default.call_insert(position, callback, *args, context=context, loop=self)
+        return default.call_insert(
+            position, callback, *args, context=context, loop=self
+        )
 
     def ready_index(self, task: TaskAny) -> int:
         """
@@ -139,7 +141,7 @@ class SchedulingMixin(_Base):
         """
         Return a set of all all runnable tasks in the ready queue.
         """
-        return default.ready_tasks(self)
+        return default.ready_tasks(loop=self)
 
 
 class SchedulingSelectorEventLoop(asyncio.SelectorEventLoop, SchedulingMixin):
