@@ -1,7 +1,7 @@
 import asyncio
 from asyncio import AbstractEventLoop, Handle
 from contextvars import Context
-from typing import Any, Callable, Coroutine, Optional, Set
+from typing import Any, Callable, Coroutine, Optional, Set, cast
 
 from .default import (
     call_insert,
@@ -37,7 +37,8 @@ async def sleep_insert(pos: int) -> None:
         def post_sleep() -> None:
             # move the task wakeup, currently at the end of list
             # to the right place
-            loop.ready_insert(pos, loop.ready_pop())
+            sloop = cast(SchedulingLoopBase, loop)  # mypy fails to infer this
+            sloop.ready_insert(pos, sloop.ready_pop())
 
         # make the callback execute right after the current task goes to sleep
         loop.call_insert(0, post_sleep)
