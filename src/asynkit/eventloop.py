@@ -13,7 +13,6 @@ from typing import (
     Optional,
     Set,
     TypeVar,
-    cast,
 )
 
 from .loop import default
@@ -117,7 +116,7 @@ class SchedulingMixin(SchedulingLoopBase, _Base):
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.
         """
-        return default.loop_call_insert(
+        return default.call_insert(
             position, callback, *args, context=context, loop=self
         )
 

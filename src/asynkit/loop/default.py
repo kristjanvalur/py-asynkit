@@ -108,7 +108,7 @@ def ready_append(
     queue.append(element)
 
 
-def loop_call_insert(
+def call_insert(
     position: int,
     callback: Callable[..., Any],
     *args: Any,
