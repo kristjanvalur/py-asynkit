@@ -1,6 +1,6 @@
 import asyncio
-from asyncio import AbstractEventLoop, Coroutine
-from typing import Any, Optional, Set
+from asyncio import AbstractEventLoop
+from typing import Any, Coroutine, Optional, Set
 
 from .default import (
     get_loop_ready_queue,

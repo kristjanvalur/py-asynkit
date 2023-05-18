@@ -404,7 +404,7 @@ class TestTasks:
         This test is added for complete coverage testing.
         """
         with patch("asyncio.current_task", lambda: None):
-            with patch("asynkit.eventloop.task_is_blocked", lambda t: True):
+            with patch("asynkit.loop.extensions.task_is_blocked", lambda t: True):
                 blocked = asynkit.blocked_tasks()
         assert asyncio.current_task() in blocked
 
