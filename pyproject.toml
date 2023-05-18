@@ -75,6 +75,7 @@ warn_unused_ignores=false
 exclude_lines = [
   "pragma: no cover",
   "@overload",
+  "@abstractmethod",
   "assert False",
   "TYPE_CHECKING",
   "PYTHON_37",
