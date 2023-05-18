@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional, Set
 from asyncio import Handle
 from contextvars import Context
+from typing import Any, Callable, Optional, Set
 
-from .types import TaskAny, QueueType
+from .types import QueueType, TaskAny
 
 """
 Here we define a certain base class for event loops which

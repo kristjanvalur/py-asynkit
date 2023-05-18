@@ -3,8 +3,8 @@ import types
 from types import TracebackType
 from typing import (
     Any,
-    AsyncIterator,
     AsyncGenerator,
+    AsyncIterator,
     Awaitable,
     Callable,
     Coroutine,
@@ -18,7 +18,6 @@ from typing import (
     cast,
     overload,
 )
-
 
 from .coroutine import coro_is_finished, coro_is_new
 

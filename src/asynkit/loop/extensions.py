@@ -3,8 +3,8 @@ from asyncio import AbstractEventLoop, Coroutine
 from typing import Any, Optional, Set
 
 from .default import (
-    loop_call_insert,
     get_loop_ready_queue,
+    loop_call_insert,
     ready_index,
     ready_insert,
     ready_pop,

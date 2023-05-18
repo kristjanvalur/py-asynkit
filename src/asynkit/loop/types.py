@@ -1,6 +1,5 @@
-from asyncio import Task, AbstractEventLoop, Handle
+from asyncio import AbstractEventLoop, Handle, Task
 from typing import TYPE_CHECKING, Any, Deque
-
 
 if TYPE_CHECKING:
 

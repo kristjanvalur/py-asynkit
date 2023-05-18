@@ -1,13 +1,14 @@
-import pytest
-from anyio import create_task_group, sleep, Event
 from contextlib import nullcontext
 
+import pytest
+from anyio import Event, create_task_group, sleep
+
+from asynkit import CoroStart
 from asynkit.experimental.anyio import (
     EagerTaskGroup,
-    create_eager_task_group,
     TaskStatusForwarder,
+    create_eager_task_group,
 )
-from asynkit import CoroStart
 
 pytestmark = pytest.mark.anyio
 

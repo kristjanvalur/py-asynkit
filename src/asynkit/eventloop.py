@@ -2,24 +2,24 @@ import asyncio
 import asyncio.base_events
 import contextlib
 import sys
-from asyncio import Handle, Task, AbstractEventLoopPolicy, AbstractEventLoop, Future
+from asyncio import AbstractEventLoop, AbstractEventLoopPolicy, Future, Handle, Task
 from contextvars import Context
 from typing import (
     TYPE_CHECKING,
-    Deque,
-    Callable,
-    Optional,
     Any,
+    Callable,
+    Coroutine,
+    Deque,
     Generator,
+    Optional,
+    Set,
     TypeVar,
     cast,
-    Coroutine,
-    Set,
 )
 
-from .tools import create_task, deque_pop
 from .loop import default
 from .loop.schedulingloop import SchedulingLoopBase
+from .tools import create_task, deque_pop
 
 __all__ = [
     "SchedulingMixin",

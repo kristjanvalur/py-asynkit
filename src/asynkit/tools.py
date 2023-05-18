@@ -1,15 +1,15 @@
 import asyncio
 import sys
 from typing import (
+    TYPE_CHECKING,
     Any,
     Coroutine,
+    Deque,
     Generator,
+    List,
     Optional,
     TypeVar,
     Union,
-    Deque,
-    List,
-    TYPE_CHECKING,
 )
 
 # 3.8 or earlier
