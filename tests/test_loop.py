@@ -11,9 +11,16 @@ from .conftest import SchedulingEventLoopPolicy
 pytestmark = pytest.mark.anyio
 
 
-@pytest.fixture
+@pytest.fixture(params=["regular", "custom"])
 def anyio_backend(request):
-    return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
+    if request.param == "custom":
+        return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
+    else:
+        return ("asyncio", {})
+
+
+def ready_len():
+    return asynkit.loop_ready_len()
 
 
 class TestReadyRotate:
@@ -27,7 +34,7 @@ class TestReadyRotate:
 
     async def tasks(self, n=3):
         await asyncio.sleep(0)
-        assert asyncio.get_running_loop().ready_len() == 0
+        assert ready_len() == 0
 
         self.log = []
         self.tasks = [asyncio.create_task(self.simple(k)) for k in range(n)]
@@ -48,13 +55,13 @@ class TestReadyRotate:
 
     async def test_two_shift_one(self):
         log0 = await self.tasks()
-        asyncio.get_running_loop().ready_rotate(1)
+        asynkit.loop_ready_rotate(1)
         assert await self.gather() == self.rotate(log0, 1)
 
     @pytest.mark.parametrize("shift", [-3, -2, -1, 0, 1, 2, 3])
     async def test_five_multi(self, shift):
         log0 = await self.tasks(5)
-        asyncio.get_running_loop().ready_rotate(shift)
+        asynkit.loop_ready_rotate(shift)
         assert await self.gather() == self.rotate(log0, shift)
 
 
@@ -69,7 +76,7 @@ class TestCallInsertReady:
         def callback():
             self.log.append(label)
 
-        asyncio.get_running_loop().call_insert(pos, callback)
+        asynkit.loop_call_insert(pos, callback)
 
     def prepare(self, n=3):
         self.log = []
@@ -90,7 +97,7 @@ class TestCallInsertReady:
     @pytest.mark.parametrize("count", [2, 6])
     async def test_reverse(self, count):
         await asyncio.sleep(0)
-        assert asyncio.get_running_loop().ready_len() == 0
+        assert ready_len() == 0
 
         self.log = []
         expect = []
@@ -105,7 +112,7 @@ class TestCallInsertReady:
     @pytest.mark.parametrize("count", [2, 6])
     async def test_cut(self, count):
         await asyncio.sleep(0)
-        assert asyncio.get_running_loop().ready_len() == 0
+        assert ready_len() == 0
         self.log = []
         expect = []
         perm = list(range(count))
@@ -120,10 +127,10 @@ class TestCallInsertReady:
 
 @pytest.mark.parametrize("count", [2, 6])
 async def test_ready_len(count):
-    # proactor loop may start out with a propactor task in place.
+    # proactor loop may start out with a proactor task in place.
     # flush it.
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().ready_len() == 0
+    assert ready_len() == 0
 
     for i in range(count):
 
@@ -132,12 +139,12 @@ async def test_ready_len(count):
 
         asyncio.create_task(foo())
 
-    assert asyncio.get_running_loop().ready_len() == count
+    assert ready_len() == count
     await asyncio.sleep(0)
     # add a non-runnable callback to ready loop
     asyncio.get_running_loop().call_soon(lambda: None)
-    assert asyncio.get_running_loop().ready_len() == 1
-    assert len(asyncio.get_running_loop().ready_tasks()) == 0
+    assert ready_len() == 1
+    assert len(asynkit.runnable_tasks()) == 0
 
     # and add a proper method callback
     class Foo:
@@ -145,13 +152,13 @@ async def test_ready_len(count):
             pass
 
     asyncio.get_running_loop().call_soon(Foo().cb)
-    assert len(asyncio.get_running_loop().ready_tasks()) == 0
+    assert len(asynkit.runnable_tasks()) == 0
 
 
 @pytest.mark.parametrize("pos", [0, 1, 3])
 async def test_sleep_insert(pos):
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().ready_len() == 0
+    assert ready_len() == 0
     log = []
     for i in range(6):
 
@@ -160,9 +167,9 @@ async def test_sleep_insert(pos):
 
         asyncio.create_task(foo(i))
 
-    assert asyncio.get_running_loop().ready_len() == 6
+    assert ready_len() == 6
     await asynkit.sleep_insert(pos)
-    assert asyncio.get_running_loop().ready_len() == 6 - pos
+    assert ready_len() == 6 - pos
     log.append("me")
     await asyncio.sleep(0)
 
@@ -174,7 +181,7 @@ async def test_sleep_insert(pos):
 @pytest.mark.parametrize("pos", [0, 1, 6])
 async def test_task_reinsert(pos):
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().ready_len() == 0
+    assert ready_len() == 0
     log = []
     tasks = []
     for i in range(6):
@@ -210,7 +217,7 @@ async def test_task_reinsert_blocked():
 @pytest.mark.parametrize("pos", [0, 1, 3, 5])
 async def test_task_switch(pos):
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().ready_len() == 0
+    assert ready_len() == 0
     log = []
     tasks = []
     for i in range(6):
@@ -236,7 +243,7 @@ async def test_task_switch(pos):
 @pytest.mark.parametrize("pos", [0, 1, 3, 5])
 async def test_task_switch_insert(pos):
     await asyncio.sleep(0)
-    assert asyncio.get_running_loop().ready_len() == 0
+    assert ready_len() == 0
     log = []
     tasks = []
     for i in range(6):
@@ -264,11 +271,10 @@ async def test_task_switch_notfound():
         pass
 
     task = asyncio.create_task(foo())
-    loop = asyncio.get_running_loop()
-    item = loop.ready_pop(loop.ready_index(task))
+    item = asynkit.loop_ready_pop(asynkit.loop_ready_index(task))
     with pytest.raises(ValueError):
         await asynkit.task_switch(task)
-    loop.ready_append(item)
+    asynkit.loop_ready_append(item)
 
 
 async def test_task_switch_blocked():
@@ -293,7 +299,7 @@ class TestReadyPopInsert:
 
     async def tasks(self, n=3):
         await asyncio.sleep(0)
-        assert asyncio.get_running_loop().ready_len() == 0
+        assert ready_len() == 0
 
         self.log = []
         self.tasks = [asyncio.create_task(self.simple(k)) for k in range(n)]
@@ -306,12 +312,12 @@ class TestReadyPopInsert:
     @pytest.mark.parametrize("source,destination", [(0, 4), (-1, 2), (3, 3), (-2, 2)])
     async def test_pop_insert(self, source, destination):
         log0 = await self.tasks(5)
-        loop = asyncio.get_running_loop()
-        len = loop.ready_len()
-        tmp = loop.ready_pop(source)
-        assert loop.ready_len() == len - 1
-        loop.ready_insert(destination, tmp)
-        assert loop.ready_len() == len
+        asyncio.get_running_loop()
+        len = asynkit.loop_ready_len()
+        tmp = asynkit.loop_ready_pop(source)
+        assert asynkit.loop_ready_len() == len - 1
+        asynkit.loop_ready_insert(destination, tmp)
+        assert asynkit.loop_ready_len() == len
 
         # manually manipulate our reference list
         log0.insert(destination, log0.pop(source))
@@ -336,36 +342,35 @@ class TestTasks:
 
     async def test_find_task(self):
         await asyncio.sleep(0)
-        loop = asyncio.get_running_loop()
-        n = loop.ready_len()
+        n = asynkit.loop_ready_len()
         tasks = self.tasks()
         for i, t in enumerate(tasks):
-            assert loop.ready_index(t) == i + n
+            assert asynkit.loop_ready_index(t) == i + n
 
         async def foo():
             pass
 
         task = asyncio.create_task(foo())
-        item = loop.ready_pop(-1)
+        item = asynkit.loop_ready_pop(-1)
         with pytest.raises(ValueError):
-            loop.ready_index(task)
-        loop.ready_append(item)
+            asynkit.loop_ready_index(task)
+        asynkit.loop_ready_append(item)
 
     async def test_get_task(self):
         tasks = self.tasks()
-        loop = asyncio.get_running_loop()
-        tasks2 = loop.ready_tasks()
+        asyncio.get_running_loop()
+        tasks2 = asynkit.loop_ready_tasks()
         assert tasks2 == set(tasks)
 
     async def test_get_task_extra(self):
         loop = asyncio.get_running_loop()
         await asyncio.sleep(0)  # flush ready queue
-        initial = loop.ready_len()
+        initial = asynkit.loop_ready_len()
         tasks = self.tasks()
-        assert loop.ready_len() == len(tasks) + initial
+        assert asynkit.loop_ready_len() == len(tasks) + initial
         loop.call_soon(lambda: None)
-        assert loop.ready_len() > len(tasks) + initial
-        tasks2 = loop.ready_tasks()
+        assert asynkit.loop_ready_len() > len(tasks) + initial
+        tasks2 = asynkit.loop_ready_tasks()
         assert tasks2 == set(tasks)
 
     async def test_runnable_tasks(self):
@@ -409,47 +414,6 @@ class TestTasks:
         assert asyncio.current_task() in blocked
 
 
-class TestRegularLoop:
-    """
-    Test that we get AttributeErrors when using scheduling functions on an
-    eventloop that does not support scheduling
-    """
-
-    # for pytest-asyncio
-    @pytest.fixture
-    def event_loop(request):
-        loop = asyncio.SelectorEventLoop()
-        try:
-            yield loop
-        finally:
-            loop.close()
-
-    # for pytest-anyio
-    @pytest.fixture
-    def anyio_backend(self, request):
-        return ("asyncio", {"policy": asyncio.DefaultEventLoopPolicy()})
-
-    async def test_sleep_insert(self):
-        with pytest.raises(AttributeError):
-            await asynkit.sleep_insert(0)
-
-    async def test_task_reinsert(self):
-        async def foo():
-            return None
-
-        with pytest.raises(AttributeError):
-            task = asyncio.create_task(foo())
-            asynkit.task_reinsert(task, 0)
-            await task
-
-    async def test_create_task_descend(self):
-        async def foo():
-            return None
-
-        with pytest.raises(AttributeError):
-            await asynkit.create_task_descend(foo())
-
-
 class TestTaskIsBlocked:
     async def test_blocked_sleep(self):
         async def foo():
@@ -482,7 +446,7 @@ class TestTaskIsBlocked:
         # settle on the await
         await asyncio.sleep(0)
         with pytest.raises(ValueError):
-            asyncio.get_running_loop().ready_index(task)
+            asynkit.loop_ready_index(task)
         assert asynkit.task_is_blocked(task)
 
         task.cancel()
@@ -501,11 +465,11 @@ class TestTaskIsBlocked:
         # settle on the await
         await asyncio.sleep(0)
         with pytest.raises(ValueError):
-            asyncio.get_running_loop().ready_index(task)
+            asynkit.loop_ready_index(task)
         assert asynkit.task_is_blocked(task)
 
         fut.set_result(None)
-        assert asyncio.get_running_loop().ready_index(task) >= 0
+        assert asynkit.loop_ready_index(task) >= 0
         assert not asynkit.task_is_blocked(task)
         await task
 
@@ -520,11 +484,11 @@ class TestTaskIsBlocked:
         # settle on the await
         await asyncio.sleep(0)
         with pytest.raises(ValueError):
-            asyncio.get_running_loop().ready_index(task)
+            asynkit.loop_ready_index(task)
         assert asynkit.task_is_blocked(task)
 
         fut.set_exception(ZeroDivisionError())
-        assert asyncio.get_running_loop().ready_index(task) >= 0
+        assert asynkit.loop_ready_index(task) >= 0
         assert not asynkit.task_is_blocked(task)
         with pytest.raises(ZeroDivisionError):
             await task
@@ -540,11 +504,11 @@ class TestTaskIsBlocked:
         # settle on the await
         await asyncio.sleep(0)
         with pytest.raises(ValueError):
-            asyncio.get_running_loop().ready_index(task)
+            asynkit.loop_ready_index(task)
         assert asynkit.task_is_blocked(task)
 
         fut.cancel()
-        assert asyncio.get_running_loop().ready_index(task) >= 0
+        assert asynkit.loop_ready_index(task) >= 0
         assert not asynkit.task_is_blocked(task)
         with pytest.raises(asyncio.CancelledError):
             await task
@@ -573,7 +537,7 @@ class TestTaskIsBlocked:
         # task is still blocked
         assert asynkit.task_is_blocked(task)
         with pytest.raises(ValueError):
-            asyncio.get_running_loop().ready_index(task)
+            asynkit.loop_ready_index(task)
 
         # give task2 a chance to finish, unblocking task
         await asyncio.sleep(0)
