@@ -1,7 +1,6 @@
 import asyncio
 from asyncio import AbstractEventLoop, Handle
 from contextvars import Context
-from types import ModuleType
 from typing import Any, Callable, Deque, Optional, Set, cast
 
 from . import default

@@ -76,7 +76,7 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
         Handle does not represent a runnable Task. Can be subclassed
         for other non-default Task implementations.
         """
-        return default.get_task_from_handle(handle)
+        return default.get_task_from_handle_impl(handle)
 
     def ready_len(self) -> int:
         """Get the length of the runnable queue"""
@@ -116,8 +116,8 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.
         """
-        return default.call_insert(
-            position, callback, *args, context=context, loop=self
+        return default.call_insert_impl(
+            self, position, callback, *args, context=context
         )
 
     def ready_index(self, task: TaskAny) -> int:
@@ -125,13 +125,13 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
         Look for a runnable task in the ready queue. Return its index if found
         or raise a ValueError
         """
-        return default.ready_index(task, loop=self)
+        return default.ready_index_impl(self._ready, task)
 
     def ready_tasks(self) -> Set[TaskAny]:
         """
         Return a set of all all runnable tasks in the ready queue.
         """
-        return default.ready_tasks(loop=self)
+        return default.ready_tasks_impl(self._ready)
 
 
 class SchedulingSelectorEventLoop(asyncio.SelectorEventLoop, SchedulingMixin):

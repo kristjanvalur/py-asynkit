@@ -7,6 +7,9 @@ import pytest
 
 import asynkit
 from asynkit.loop.extensions import (
+    call_insert,
+    get_ready_queue,
+    get_task_from_handle,
     ready_append,
     ready_index,
     ready_insert,
@@ -14,9 +17,6 @@ from asynkit.loop.extensions import (
     ready_pop,
     ready_rotate,
     ready_tasks,
-    call_insert,
-    get_ready_queue,
-    get_task_from_handle,
 )
 
 from .conftest import SchedulingEventLoopPolicy
@@ -30,6 +30,7 @@ def anyio_backend(request):
         return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
     else:
         return ("asyncio", {"policy": DefaultEventLoopPolicy()})
+
 
 class TestReadyRotate:
     """
