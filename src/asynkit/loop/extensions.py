@@ -1,11 +1,12 @@
 import asyncio
 from asyncio import AbstractEventLoop, Handle
 from contextvars import Context
-from typing import Any, Callable, Coroutine, Optional, Set, cast
+from typing import Any, Callable, Coroutine, Deque, Optional, Set, cast
 
 from .default import (
     call_insert,
-    get_loop_ready_queue,
+    get_ready_queue,
+    get_task_from_handle,
     ready_append,
     ready_index,
     ready_insert,
@@ -47,7 +48,7 @@ async def sleep_insert(pos: int) -> None:
         def post_sleep() -> None:
             # move the task wakeup, currently at the end of list
             # to the right place
-            queue = get_loop_ready_queue(loop)
+            queue = loop_get_ready_queue(loop)
             ready_insert(pos, ready_pop(queue=queue), queue=queue)
 
         call_insert(0, post_sleep, loop=loop)
@@ -62,7 +63,7 @@ def task_reinsert(task: TaskAny, pos: int) -> None:
         item = loop.ready_pop(current_pos)
         loop.ready_insert(pos, item)
     else:
-        queue = get_loop_ready_queue(loop)
+        queue = loop_get_ready_queue(loop)
         current_pos = ready_index(task, queue=queue)
         item = ready_pop(current_pos, queue=queue)
         ready_insert(pos, item, queue=queue)
@@ -84,7 +85,7 @@ async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     else:
         pos = ready_index(task)
         # move the task to the head
-        queue = get_loop_ready_queue(loop)
+        queue = loop_get_ready_queue(loop)
         ready_insert(0, ready_pop(pos, queue=queue), queue=queue)
 
     # go to sleep so that target runs
@@ -261,3 +262,32 @@ def loop_ready_tasks(
         return loop.ready_tasks()
     else:
         return ready_tasks(loop=loop)
+
+
+def loop_get_ready_queue(
+    loop: Optional[AbstractEventLoop] = None,
+) -> Deque[Handle]:
+    """
+    Low level routine, mostly used for testing.  May
+    raise NotImplementedError if not supported.
+    """
+    loop = loop or asyncio.get_running_loop()
+    if isinstance(loop, SchedulingLoopBase):
+        return loop.get_ready_queue()
+    else:
+        return get_ready_queue(loop=loop)
+
+
+def loop_get_task_from_handle(
+    handle: Handle,
+    loop: Optional[AbstractEventLoop] = None,
+) -> Optional[TaskAny]:
+    """
+    Low level routine, mostly used for testing.  May
+    raise NotImplementedError if not supported.
+    """
+    loop = loop or asyncio.get_running_loop()
+    if isinstance(loop, SchedulingLoopBase):
+        return loop.get_task_from_handle(handle)
+    else:
+        return get_task_from_handle(handle, loop=loop)

@@ -414,6 +414,19 @@ class TestTasks:
                 blocked = asynkit.blocked_tasks()
         assert asyncio.current_task() in blocked
 
+    async def test_task_from_handle(self):
+        async def foo():
+            pass
+
+        task = asyncio.create_task(foo())
+        queue = asynkit.loop_get_ready_queue()
+        for handle in queue:
+            if asynkit.loop_get_task_from_handle(handle) == task:
+                break
+        else:
+            assert False, "task not found in ready queue"
+        await task
+
 
 class TestTaskIsBlocked:
     async def test_blocked_sleep(self):

@@ -13,7 +13,7 @@ implement extended scheduling primitives.
 
 class SchedulingLoopBase(ABC):
     @abstractmethod
-    def get_loop_ready_queue(self) -> QueueType:
+    def get_ready_queue(self) -> QueueType:
         """
         Default implementation to get the Ready Queue of the loop.
         Subclassable by other implementations.

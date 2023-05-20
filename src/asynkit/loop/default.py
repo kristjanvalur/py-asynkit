@@ -20,7 +20,7 @@ LoopType = AbstractEventLoop
 QueueType = Deque[Handle]
 
 
-def get_loop_ready_queue(loop: Optional[LoopType] = None) -> QueueType:
+def get_ready_queue(loop: Optional[LoopType] = None) -> QueueType:
     """
     Default implementation to get the Ready Queue of the loop.
     Subclassable by other implementations.
@@ -29,7 +29,9 @@ def get_loop_ready_queue(loop: Optional[LoopType] = None) -> QueueType:
     return loop._ready  # type: ignore
 
 
-def get_task_from_handle(handle: Handle) -> Optional[TaskAny]:
+def get_task_from_handle(
+    handle: Handle, loop: Optional[LoopType] = None
+) -> Optional[TaskAny]:
     """
     Extract the runnable Task object
     from its scheduled __step() callback.  Returns None if the
@@ -50,7 +52,7 @@ def ready_len(
     queue: Optional[QueueType] = None, loop: Optional[LoopType] = None
 ) -> int:
     """Get the length of the runnable queue"""
-    queue = queue or get_loop_ready_queue(loop)
+    queue = queue or get_ready_queue(loop)
     return len(queue)
 
 
@@ -69,7 +71,7 @@ def ready_rotate(
     entry at the end. A Positive values will move callbacks from the end
     to the front, making them next in line.
     """
-    queue = queue or get_loop_ready_queue(loop)
+    queue = queue or get_ready_queue(loop)
     queue.rotate(n)
 
 
@@ -80,7 +82,7 @@ def ready_pop(
     loop: Optional[AbstractEventLoop] = None,
 ) -> Handle:
     """Pop an element off the ready list at the given position."""
-    queue = queue or get_loop_ready_queue(loop)
+    queue = queue or get_ready_queue(loop)
     return deque_pop(queue, pos)
 
 
@@ -93,7 +95,7 @@ def ready_insert(
 ) -> None:
     """Insert a previously popped `element` back into the
     ready queue at `pos`"""
-    queue = queue or get_loop_ready_queue(loop)
+    queue = queue or get_ready_queue(loop)
     queue.insert(pos, element)
 
 
@@ -104,7 +106,7 @@ def ready_append(
     loop: Optional[AbstractEventLoop] = None,
 ) -> None:
     """Append a previously popped `element` to the end of the queue."""
-    queue = queue or get_loop_ready_queue(loop)
+    queue = queue or get_ready_queue(loop)
     queue.append(element)
 
 
@@ -120,7 +122,7 @@ def call_insert(
     called later.
     """
     loop = loop or asyncio.get_running_loop()
-    queue = get_loop_ready_queue(loop)
+    queue = get_ready_queue(loop)
     handle = loop.call_soon(callback, *args, context=context)
     handle2 = ready_pop(-1, queue=queue)
     assert handle2 is handle
@@ -140,7 +142,7 @@ def ready_index(
     """
     # we search in reverse, since the task is likely to have been
     # just appended to the queue
-    ready = queue or get_loop_ready_queue(loop)
+    ready = queue or get_ready_queue(loop)
     for i, handle in enumerate(reversed(ready)):
         found = get_task_from_handle(handle)
         if found is task:
@@ -157,7 +159,7 @@ def ready_tasks(
     Return a set of all all runnable tasks in the ready queue.
     """
     result = set()
-    queue = queue or get_loop_ready_queue(loop)
+    queue = queue or get_ready_queue(loop)
     for handle in queue:
         task = get_task_from_handle(handle)
         if task:

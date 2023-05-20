@@ -62,7 +62,7 @@ class SchedulingMixin(SchedulingLoopBase, _Base):
     A mixin class adding features to the base event loop.
     """
 
-    def get_loop_ready_queue(self) -> Deque[Handle]:
+    def get_ready_queue(self) -> Deque[Handle]:
         """
         Default implementation to get the Ready Queue of the loop.
         Subclassable by other implementations.
@@ -80,7 +80,7 @@ class SchedulingMixin(SchedulingLoopBase, _Base):
 
     def ready_len(self) -> int:
         """Get the length of the runnable queue"""
-        return len(self.get_loop_ready_queue())
+        return len(self.get_ready_queue())
 
     def ready_rotate(self, n: int) -> None:
         """Rotate the ready queue.
@@ -91,20 +91,20 @@ class SchedulingMixin(SchedulingLoopBase, _Base):
         entry at the end. A Positive values will move callbacks from the end
         to the front, making them next in line.
         """
-        self.get_loop_ready_queue().rotate(n)
+        self.get_ready_queue().rotate(n)
 
     def ready_pop(self, pos: int = -1) -> Handle:
         """Pop an element off the ready list at the given position."""
-        return deque_pop(self.get_loop_ready_queue(), pos)
+        return deque_pop(self.get_ready_queue(), pos)
 
     def ready_insert(self, pos: int, element: Handle) -> None:
         """Insert a previously popped `element` back into the
         ready queue at `pos`"""
-        self.get_loop_ready_queue().insert(pos, element)
+        self.get_ready_queue().insert(pos, element)
 
     def ready_append(self, element: Handle) -> None:
         """Append a previously popped `element` to the end of the queue."""
-        self.get_loop_ready_queue().append(element)
+        self.get_ready_queue().append(element)
 
     def call_insert(
         self,
