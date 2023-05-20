@@ -21,7 +21,7 @@ class SchedulingHelper(AbstractSchedulingLoop):
 
     def __init__(self, loop: Optional[AbstractEventLoop] = None) -> None:
         self._loop = loop or asyncio.get_running_loop()
-        self._queue = loop._ready
+        self._queue = loop._ready  # type: ignore
 
     def get_ready_queue(self) -> QueueType:
         return self._queue
@@ -92,7 +92,7 @@ def call_insert_impl(
     called later.
     """
     handle = loop.call_soon(callback, *args, context=context)
-    queue = loop._ready
+    queue = loop._ready  # type: ignore
     handle2 = deque_pop(queue, -1)
     assert handle2 is handle
     queue.insert(position, handle)
