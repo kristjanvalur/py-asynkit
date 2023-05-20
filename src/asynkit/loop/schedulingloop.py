@@ -15,18 +15,20 @@ class SchedulingLoopBase(ABC):
     @abstractmethod
     def get_ready_queue(self) -> QueueType:
         """
-        Default implementation to get the Ready Queue of the loop.
-        Subclassable by other implementations.
+        Return the ready queue of the loop.
+        Internal method, exposed for unittests.
+        May raise NotImplemented if not supported
         """
         ...
 
     @abstractmethod
     def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
         """
-        Default implementation to extract the runnable Task object
+        Extract the runnable Task object
         from its scheduled __step() callback.  Returns None if the
-        Handle does not represent a runnable Task. Can be subclassed
-        for other non-default Task implementations.
+        Handle does not represent a runnable Task.
+        Internal method, exposed for unittests.
+        May raise NotImplemented if not supported.
         """
         ...
 
