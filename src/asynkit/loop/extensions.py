@@ -2,10 +2,10 @@ import asyncio
 from asyncio import AbstractEventLoop, Handle
 from contextvars import Context
 from types import ModuleType
-from typing import Any, Callable, Deque, Optional, Set
+from typing import Any, Callable, Deque, Optional, Set, cast
 
 from . import default
-from .schedulingloop import ReadyQueueBase, SchedulingLoopBase
+from .schedulingloop import AbstractSchedulingLoop
 from .types import TaskAny
 
 """
@@ -13,18 +13,26 @@ This module contains extensions to the asyncio loop API.
 These are primarily aimed at doing better scheduling, and
 achieving specific scheduling goals.
 
-If the current loop is an SchedulingLoopBase, then the
+If the current loop is an AbstractSchedulingLoop, then the
 extensions are implemented directly on the loop.
 Otherwise, we call special extensions that work for the
 default loop implementation.
 """
 
 
-def loop_helpers(loop: AbstractEventLoop) -> ModuleType:
+def get_scheduling_loop(
+    loop: Optional[AbstractEventLoop] = None,
+) -> AbstractSchedulingLoop:
     """
-    get the helpers module for the given loop
+    get the AbstractSchedulingLoop for the given loop
     """
-    return default  # currently only support this
+    loop = loop or asyncio.get_running_loop()
+    if isinstance(loop, AbstractSchedulingLoop):
+        return loop
+    else:
+        # in future, select other loop types here
+        helpers = default
+        return cast(AbstractSchedulingLoop, helpers.SchedulingHelper(loop))
 
 
 # loop extensions
@@ -36,56 +44,36 @@ def call_insert(
     context: Optional[Context] = None,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Handle:
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        return loop.call_insert(position, callback, *args, context=context)
-    else:
-        return loop_helpers(loop).call_insert(
-            position, callback, *args, context=context, loop=loop
-        )
+    return get_scheduling_loop(loop).call_insert(
+        position, callback, *args, context=context
+    )
 
 
 def ready_len(
     loop: Optional[AbstractEventLoop] = None,
 ) -> int:
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        return loop.ready_len()
-    else:
-        return loop_helpers(loop).ready_len(loop=loop)
+    return get_scheduling_loop(loop).ready_len()
 
 
 def ready_pop(
     position: int = -1,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Any:
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        return loop.ready_pop(position)
-    else:
-        return loop_helpers(loop).ready_pop(position, loop=loop)
+    return get_scheduling_loop(loop).ready_pop(position)
 
 
 def ready_index(
     task: TaskAny,
     loop: Optional[AbstractEventLoop] = None,
 ) -> int:
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        return loop.ready_index(task)
-    else:
-        return loop_helpers(loop).ready_index(task, loop=loop)
+    return get_scheduling_loop(loop).ready_index(task)
 
 
 def ready_append(
     item: Any,
     loop: Optional[AbstractEventLoop] = None,
 ) -> None:
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        loop.ready_append(item)
-    else:
-        loop_helpers(loop).ready_append(item, loop=loop)
+    get_scheduling_loop(loop).ready_append(item)
 
 
 def ready_insert(
@@ -93,32 +81,20 @@ def ready_insert(
     item: Any,
     loop: Optional[AbstractEventLoop] = None,
 ) -> None:
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        loop.ready_insert(position, item)
-    else:
-        loop_helpers(loop).ready_insert(position, item, loop=loop)
+    get_scheduling_loop(loop).ready_insert(position, item)
 
 
 def ready_rotate(
     n: int = -1,
     loop: Optional[AbstractEventLoop] = None,
 ) -> None:
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        loop.ready_rotate(n)
-    else:
-        loop_helpers(loop).ready_rotate(n, loop=loop)
+    get_scheduling_loop(loop).ready_rotate(n)
 
 
 def ready_tasks(
     loop: Optional[AbstractEventLoop] = None,
 ) -> Set[TaskAny]:
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        return loop.ready_tasks()
-    else:
-        return loop_helpers(loop).ready_tasks(loop=loop)
+    return get_scheduling_loop(loop).ready_tasks()
 
 
 def get_ready_queue(
@@ -128,11 +104,7 @@ def get_ready_queue(
     Low level routine, mostly used for testing.  May
     raise NotImplementedError if not supported.
     """
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        return loop.get_ready_queue()
-    else:
-        return loop_helpers(loop).get_ready_queue(loop=loop)
+    return get_scheduling_loop(loop).get_ready_queue()
 
 
 def get_task_from_handle(
@@ -143,22 +115,4 @@ def get_task_from_handle(
     Low level routine, mostly used for testing.  May
     raise NotImplementedError if not supported.
     """
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        return loop.get_task_from_handle(handle)
-    else:
-        return loop_helpers(loop).get_task_from_handle(handle, loop=loop)
-
-
-def get_ready_queue_instance(
-    loop: Optional[AbstractEventLoop] = None,
-) -> ReadyQueueBase:
-    """
-    Low level routine, mostly used for testing.  May
-    raise NotImplementedError if not supported.
-    """
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        return loop
-    else:
-        return loop_helpers(loop).ReadyQueue(loop=loop)
+    return get_scheduling_loop(loop).get_task_from_handle(handle)

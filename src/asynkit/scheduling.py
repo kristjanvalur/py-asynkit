@@ -2,10 +2,10 @@ import asyncio
 from typing import Any, Coroutine, Optional, Set
 
 from .loop.extensions import (
-    get_ready_queue_instance,
+    get_scheduling_loop,
     ready_tasks,
 )
-from .loop.schedulingloop import ReadyQueueBase, SchedulingLoopBase
+from .loop.schedulingloop import AbstractSchedulingLoop
 from .loop.types import FutureAny, TaskAny
 
 """
@@ -33,11 +33,11 @@ async def sleep_insert(pos: int) -> None:
     in the ready queue. This position may subsequently change due to other
     scheduling operations
     """
-    await _sleep_insert(get_ready_queue_instance(), pos)
+    await _sleep_insert(get_scheduling_loop(), pos)
 
 
-async def _sleep_insert(queue: ReadyQueueBase, pos: int) -> None:
-    queue = get_ready_queue_instance()
+async def _sleep_insert(queue: AbstractSchedulingLoop, pos: int) -> None:
+    queue = get_scheduling_loop()
 
     def post_sleep() -> None:
         # move the task wakeup, currently at the end of list
@@ -50,7 +50,7 @@ async def _sleep_insert(queue: ReadyQueueBase, pos: int) -> None:
 
 def task_reinsert(task: TaskAny, pos: int) -> None:
     """Place a just-created task at position 'pos' in the runnable queue."""
-    queue = get_ready_queue_instance()
+    queue = get_scheduling_loop()
     current_pos = queue.ready_index(task)
     item = queue.ready_pop(current_pos)
     queue.ready_insert(pos, item)
@@ -63,7 +63,7 @@ async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     queue, otherwise it is inserted at the given position, typically
     at position 1, right after the target task.
     """
-    queue = get_ready_queue_instance()
+    queue = get_scheduling_loop()
 
     # Move target task to the head of the queue
     pos = queue.ready_index(task)
@@ -133,7 +133,7 @@ async def create_task_start(
 def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[TaskAny]:
     """Return a set of the runnable tasks for the loop."""
     loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
+    if isinstance(loop, AbstractSchedulingLoop):
         result = loop.ready_tasks()
     else:
         result = ready_tasks(loop=loop)

@@ -16,7 +16,7 @@ from typing import (
 )
 
 from .loop import default
-from .loop.schedulingloop import SchedulingLoopBase
+from .loop.schedulingloop import AbstractSchedulingLoop
 from .tools import deque_pop
 
 __all__ = [
@@ -57,7 +57,7 @@ T = TypeVar("T")
 # EventLoop considered Tasks separately from scheduled callbacks though.
 
 
-class SchedulingMixin(SchedulingLoopBase, _Base):
+class SchedulingMixin(AbstractSchedulingLoop, _Base):
     """
     A mixin class adding features to the base event loop.
     """

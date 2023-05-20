@@ -11,10 +11,33 @@ implement extended scheduling primitives.
 """
 
 
-class ReadyQueueBase(ABC):
+class AbstractSchedulingLoop(ABC):
     """
-    This class represents basic operations on the ready queue
+    This class represents the low level scheduling operations possible for
+    an event loop.
+    It may be implemented as a mixin, or as a subclass of the default loop,
+    or as a wrapper class which wraps the default loop.
     """
+
+    @abstractmethod
+    def get_ready_queue(self) -> QueueType:
+        """
+        Return the ready queue of the loop.
+        Internal method, exposed for unittests.
+        May return None if not supported
+        """
+        ...
+
+    @abstractmethod
+    def ready_append(self, element: Handle) -> None:
+        """Append a previously popped `element` to the end of the queue."""
+        ...
+
+    @abstractmethod
+    def ready_insert(self, pos: int, element: Handle) -> None:
+        """Insert a previously popped `element` back into the
+        ready queue at `pos`"""
+        ...
 
     @abstractmethod
     def ready_index(self, task: TaskAny) -> int:
@@ -25,54 +48,13 @@ class ReadyQueueBase(ABC):
         ...
 
     @abstractmethod
-    def ready_pop(self, pos: int = -1) -> Handle:
-        """Pop an element off the ready list at the given position."""
-        ...
-
-    @abstractmethod
-    def ready_insert(self, pos: int, element: Handle) -> None:
-        """Insert a previously popped `element` back into the
-        ready queue at `pos`"""
-        ...
-
-    @abstractmethod
-    def call_insert(
-        self,
-        position: int,
-        callback: Callable[..., Any],
-        *args: Any,
-        context: Optional[Context] = None
-    ) -> Handle:
-        """Arrange for a callback to be inserted at `position` in the queue to be
-        called later.
-        """
-        ...
-
-
-class SchedulingLoopBase(ReadyQueueBase, ABC):
-    @abstractmethod
-    def get_ready_queue(self) -> QueueType:
-        """
-        Return the ready queue of the loop.
-        Internal method, exposed for unittests.
-        May raise NotImplemented if not supported
-        """
-        ...
-
-    @abstractmethod
-    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
-        """
-        Extract the runnable Task object
-        from its scheduled __step() callback.  Returns None if the
-        Handle does not represent a runnable Task.
-        Internal method, exposed for unittests.
-        May raise NotImplemented if not supported.
-        """
-        ...
-
-    @abstractmethod
     def ready_len(self) -> int:
         """Get the length of the runnable queue"""
+        ...
+
+    @abstractmethod
+    def ready_pop(self, pos: int = -1) -> Handle:
+        """Pop an element off the ready list at the given position."""
         ...
 
     @abstractmethod
@@ -88,8 +70,27 @@ class SchedulingLoopBase(ReadyQueueBase, ABC):
         ...
 
     @abstractmethod
-    def ready_append(self, element: Handle) -> None:
-        """Append a previously popped `element` to the end of the queue."""
+    def call_insert(
+        self,
+        position: int,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Optional[Context] = None
+    ) -> Handle:
+        """Arrange for a callback to be inserted at `position` in the queue to be
+        called later.
+        """
+        ...
+
+    @abstractmethod
+    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+        """
+        Extract the runnable Task object
+        from its scheduled __step() callback.  Returns None if the
+        Handle does not represent a runnable Task.
+        Internal method, exposed for unittests.
+        May raise NotImplemented if not supported.
+        """
         ...
 
     @abstractmethod
