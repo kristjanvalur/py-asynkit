@@ -94,9 +94,8 @@ def call_insert_impl(
     """
     if context is not None:
         # context was added in 3.9.10 and 3.10.2
-        if sys.version_info >= (3, 10, 2) or (
-            (3, 9, 10) <= sys.version_info < (3, 10, 0)
-        ):
+        # don't check for minor versions.
+        if sys.version_info >= (3, 9):
             handle = loop.call_soon(callback, *args, context=context)
         else:
             raise NotImplementedError("contextvars are not supported")
