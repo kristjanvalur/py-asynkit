@@ -359,6 +359,7 @@ class TestTasks:
 
     async def test_get_task_extra(self):
         loop = asyncio.get_running_loop()
+        await asyncio.sleep(0)  # flush ready queue
         tasks = self.tasks()
         assert loop.ready_len() == len(tasks)
         loop.call_soon(lambda: None)

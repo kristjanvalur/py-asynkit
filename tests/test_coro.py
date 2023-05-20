@@ -579,31 +579,90 @@ async def test_coro_is_suspended():
         asynkit.coroutine.coro_is_suspended("str")
 
 
-async def test_coro_iter():
-    async def coroutine1(val):
+class TestCoroIter:
+    async def coroutine1(self, val):
         await sleep(0)
         return "foo" + val
 
-    async def coroutine2(val):
+    async def coroutine2(self, val):
         await sleep(0)
         raise RuntimeError("foo" + val)
 
     class Awaiter:
-        def __init__(self, coro):
+        def __init__(self, coro, args=None):
             self.coro = coro
-            self.args = ["bar1", "bar2"]
+            self.args = args or ["bar1", "bar2"]
 
         def __await__(self):
             return asynkit.coro_iter(self.coro(self.args.pop(0)))
 
-    a = Awaiter(coroutine1)
-    assert await a == "foobar1"
-    assert await a == "foobar2"  # it can be awaited again
+    async def test_await(self):
+        a = self.Awaiter(self.coroutine1, ["bar1"])
+        assert await a == "foobar1"
 
-    a = Awaiter(coroutine2)
-    with pytest.raises(RuntimeError) as err:
-        await a
-    assert err.value.args[0] == "foobar1"
-    with pytest.raises(RuntimeError) as err:
-        await a
-    assert err.value.args[0] == "foobar2"
+    async def test_await_again(self):
+        a = self.Awaiter(self.coroutine1, ["bar2", "bar3"])
+        assert await a == "foobar2"
+        assert await a == "foobar3"  # it can be awaited again
+
+    async def test_await_exception(self):
+        a = self.Awaiter(self.coroutine2)
+        with pytest.raises(RuntimeError) as err:
+            await a
+        assert err.value.args[0] == "foobar1"
+        with pytest.raises(RuntimeError) as err:
+            await a
+        assert err.value.args[0] == "foobar2"
+
+    async def test_await_immediate(self):
+        async def coroutine(arg):
+            return "coro" + arg
+
+        a = self.Awaiter(coroutine)
+        assert await a == "corobar1"
+
+    async def test_raw_generator_exit(self):
+        step = 0
+
+        async def coroutine():
+            nonlocal step
+            with pytest.raises(GeneratorExit):
+                step = 1
+                await sleep(0)
+            step = 2
+
+        @types.coroutine
+        def helper():
+            yield from asynkit.coro_iter(coroutine())
+
+        c = helper()
+        c.send(None)
+        assert step == 1
+        with pytest.raises(GeneratorExit):
+            c.throw(GeneratorExit)
+        assert step == 2
+        c.close()
+
+    async def test_raw_exception(self):
+        step = 0
+
+        async def coroutine():
+            nonlocal step
+            with pytest.raises(ZeroDivisionError):
+                step = 1
+                await sleep(0)
+            step = 2
+            return "foo"
+
+        @types.coroutine
+        def helper():
+            return (yield from asynkit.coro_iter(coroutine()))
+
+        c = helper()
+        c.send(None)
+        assert step == 1
+        with pytest.raises(StopIteration) as err:
+            c.throw(ZeroDivisionError)
+        assert step == 2
+        assert err.value.value == "foo"
+        c.close()
