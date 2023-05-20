@@ -3,12 +3,10 @@ from typing import Any, Coroutine, Optional, Set
 
 from .loop.extensions import (
     call_insert,
-    ready_index,
-    ready_insert,
-    ready_pop,
+    get_ready_queue_instance,
     ready_tasks,
 )
-from .loop.schedulingloop import SchedulingLoopBase
+from .loop.schedulingloop import ReadyQueueBase, SchedulingLoopBase
 from .loop.types import FutureAny, TaskAny
 
 """
@@ -36,10 +34,16 @@ async def sleep_insert(pos: int) -> None:
     in the ready queue. This position may subsequently change due to other
     scheduling operations
     """
+    await _sleep_insert(get_ready_queue_instance(), pos)
+
+
+async def _sleep_insert(queue: ReadyQueueBase, pos: int) -> None:
+    queue = get_ready_queue_instance()
+
     def post_sleep() -> None:
         # move the task wakeup, currently at the end of list
         # to the right place
-        ready_insert(pos, ready_pop())
+        queue.ready_insert(pos, queue.ready_pop())
 
     call_insert(0, post_sleep)
     await asyncio.sleep(0)
@@ -47,9 +51,10 @@ async def sleep_insert(pos: int) -> None:
 
 def task_reinsert(task: TaskAny, pos: int) -> None:
     """Place a just-created task at position 'pos' in the runnable queue."""
-    current_pos = ready_index(task)
-    item = ready_pop(current_pos)
-    ready_insert(pos, item)
+    queue = get_ready_queue_instance()
+    current_pos = queue.ready_index(task)
+    item = queue.ready_pop(current_pos)
+    queue.ready_insert(pos, item)
 
 
 async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
@@ -59,10 +64,11 @@ async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     queue, otherwise it is inserted at the given position, typically
     at position 1, right after the target task.
     """
+    queue = get_ready_queue_instance()
+
     # Move target task to the head of the queue
-    pos = ready_index(task)
-    # move the task to the head
-    ready_insert(0, ready_pop(pos))
+    pos = queue.ready_index(task)
+    queue.ready_insert(0, queue.ready_pop(pos))
 
     # go to sleep so that target runs
     if insert_pos is None:
@@ -71,7 +77,7 @@ async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     else:
         # schedule ourselves at a given position, typically
         # position 1, right after the task.
-        await sleep_insert(insert_pos)
+        await _sleep_insert(queue, insert_pos)
 
 
 # Task helpers

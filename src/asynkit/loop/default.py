@@ -4,6 +4,7 @@ from contextvars import Context
 from typing import TYPE_CHECKING, Any, Callable, Deque, Optional, Set
 
 from ..tools import deque_pop
+from .schedulingloop import ReadyQueueBase
 
 """
 Helper methods which work with the default event loop from
@@ -165,3 +166,17 @@ def ready_tasks(
         if task:
             result.add(task)
     return result
+
+
+class ReadyQueue(ReadyQueueBase):
+    def __init__(self, loop: Optional[AbstractEventLoop] = None) -> None:
+        self._queue = get_ready_queue(loop)
+
+    def ready_index(self, task: TaskAny) -> int:
+        return ready_index(task, queue=self._queue)
+
+    def ready_pop(self, pos: int = -1) -> Handle:
+        return deque_pop(self._queue, pos)
+
+    def ready_insert(self, pos: int, element: Handle) -> None:
+        self._queue.insert(pos, element)

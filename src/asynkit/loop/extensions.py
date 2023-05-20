@@ -5,7 +5,7 @@ from types import ModuleType
 from typing import Any, Callable, Deque, Optional, Set
 
 from . import default
-from .schedulingloop import SchedulingLoopBase
+from .schedulingloop import ReadyQueueBase, SchedulingLoopBase
 from .types import TaskAny
 
 """
@@ -19,11 +19,13 @@ Otherwise, we call special extensions that work for the
 default loop implementation.
 """
 
+
 def loop_helpers(loop: AbstractEventLoop) -> ModuleType:
     """
     get the helpers module for the given loop
     """
     return default  # currently only support this
+
 
 # loop extensions
 # functions which extend the loop API
@@ -146,3 +148,17 @@ def get_task_from_handle(
         return loop.get_task_from_handle(handle)
     else:
         return loop_helpers(loop).get_task_from_handle(handle, loop=loop)
+
+
+def get_ready_queue_instance(
+    loop: Optional[AbstractEventLoop] = None,
+) -> ReadyQueueBase:
+    """
+    Low level routine, mostly used for testing.  May
+    raise NotImplementedError if not supported.
+    """
+    loop = loop or asyncio.get_running_loop()
+    if isinstance(loop, SchedulingLoopBase):
+        return loop
+    else:
+        return loop_helpers(loop).ReadyQueue(loop=loop)

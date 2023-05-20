@@ -11,7 +11,32 @@ implement extended scheduling primitives.
 """
 
 
-class SchedulingLoopBase(ABC):
+class ReadyQueueBase(ABC):
+    """
+    This class represents basic operations on the ready queue
+    """
+
+    @abstractmethod
+    def ready_index(self, task: TaskAny) -> int:
+        """
+        Look for a runnable task in the ready queue. Return its index if found
+        or raise a ValueError
+        """
+        ...
+
+    @abstractmethod
+    def ready_pop(self, pos: int = -1) -> Handle:
+        """Pop an element off the ready list at the given position."""
+        ...
+
+    @abstractmethod
+    def ready_insert(self, pos: int, element: Handle) -> None:
+        """Insert a previously popped `element` back into the
+        ready queue at `pos`"""
+        ...
+
+
+class SchedulingLoopBase(ReadyQueueBase, ABC):
     @abstractmethod
     def get_ready_queue(self) -> QueueType:
         """
@@ -50,17 +75,6 @@ class SchedulingLoopBase(ABC):
         ...
 
     @abstractmethod
-    def ready_pop(self, pos: int = -1) -> Handle:
-        """Pop an element off the ready list at the given position."""
-        ...
-
-    @abstractmethod
-    def ready_insert(self, pos: int, element: Handle) -> None:
-        """Insert a previously popped `element` back into the
-        ready queue at `pos`"""
-        ...
-
-    @abstractmethod
     def ready_append(self, element: Handle) -> None:
         """Append a previously popped `element` to the end of the queue."""
         ...
@@ -75,14 +89,6 @@ class SchedulingLoopBase(ABC):
     ) -> Handle:
         """Arrange for a callback to be inserted at `position` in the queue to be
         called later.
-        """
-        ...
-
-    @abstractmethod
-    def ready_index(self, task: TaskAny) -> int:
-        """
-        Look for a runnable task in the ready queue. Return its index if found
-        or raise a ValueError
         """
         ...
 
