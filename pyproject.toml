@@ -43,6 +43,9 @@ build-backend = "poetry.core.masonry.api"
 testpaths = [
     "tests",
 ]
+filterwarnings = [
+    'ignore:You seem to already have a custom sys.excepthook:RuntimeWarning'
+]
 
 [tool.ruff]
 # Ignore `F401` (unused import) in all `__init__.py` files
