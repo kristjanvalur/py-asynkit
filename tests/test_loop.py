@@ -1,4 +1,5 @@
 import asyncio
+from asyncio import DefaultEventLoopPolicy
 from collections import deque
 from unittest.mock import patch
 
@@ -16,7 +17,7 @@ def anyio_backend(request):
     if request.param == "custom":
         return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
     else:
-        return ("asyncio", {})
+        return ("asyncio", {"policy": DefaultEventLoopPolicy()})
 
 
 def ready_len():
