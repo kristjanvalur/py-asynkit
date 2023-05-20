@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from asyncio import AbstractEventLoop, Handle, Task
 from contextvars import Context
 from typing import Any, Callable, Deque, Optional, Set
@@ -21,7 +22,7 @@ class SchedulingHelper(AbstractSchedulingLoop):
 
     def __init__(self, loop: Optional[AbstractEventLoop] = None) -> None:
         self._loop = loop or asyncio.get_running_loop()
-        self._queue = loop._ready  # type: ignore
+        self._queue: QueueType = loop._ready  # type: ignore
 
     def get_ready_queue(self) -> QueueType:
         return self._queue
@@ -91,7 +92,16 @@ def call_insert_impl(
     Arrange for a callback to be inserted at `position` in the queue to be
     called later.
     """
-    handle = loop.call_soon(callback, *args, context=context)
+    if context is not None:
+        # context was added in 3.9.10 and 3.10.2
+        if sys.version_info >= (3, 10, 2) or (
+            (3, 9, 10) <= sys.version_info < (3, 10, 0)
+        ):
+            handle = loop.call_soon(callback, *args, context=context)
+        else:
+            raise NotImplementedError("contextvars are not supported")
+    else:
+        handle = loop.call_soon(callback, *args)
     queue = loop._ready  # type: ignore
     handle2 = deque_pop(queue, -1)
     assert handle2 is handle
