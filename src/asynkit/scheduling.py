@@ -2,7 +2,6 @@ import asyncio
 from typing import Any, Coroutine, Optional, Set
 
 from .loop.extensions import (
-    call_insert,
     get_ready_queue_instance,
     ready_tasks,
 )
@@ -45,7 +44,7 @@ async def _sleep_insert(queue: ReadyQueueBase, pos: int) -> None:
         # to the right place
         queue.ready_insert(pos, queue.ready_pop())
 
-    call_insert(0, post_sleep)
+    queue.call_insert(0, post_sleep)
     await asyncio.sleep(0)
 
 

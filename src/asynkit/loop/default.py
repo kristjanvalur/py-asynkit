@@ -170,7 +170,8 @@ def ready_tasks(
 
 class ReadyQueue(ReadyQueueBase):
     def __init__(self, loop: Optional[AbstractEventLoop] = None) -> None:
-        self._queue = get_ready_queue(loop)
+        self._loop = loop or asyncio.get_running_loop()
+        self._queue = get_ready_queue(self._loop)
 
     def ready_index(self, task: TaskAny) -> int:
         return ready_index(task, queue=self._queue)
@@ -180,3 +181,20 @@ class ReadyQueue(ReadyQueueBase):
 
     def ready_insert(self, pos: int, element: Handle) -> None:
         self._queue.insert(pos, element)
+
+    def call_insert(
+        self,
+        position: int,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Optional[Context] = None,
+    ) -> Handle:
+        """
+        Arrange for a callback to be inserted at `position` in the queue to be
+        called later.
+        """
+        handle = self._loop.call_soon(callback, *args, context=context)
+        handle2 = self.ready_pop(-1)
+        assert handle2 is handle
+        self.ready_insert(position, handle)
+        return handle

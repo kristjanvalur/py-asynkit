@@ -35,6 +35,19 @@ class ReadyQueueBase(ABC):
         ready queue at `pos`"""
         ...
 
+    @abstractmethod
+    def call_insert(
+        self,
+        position: int,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Optional[Context] = None
+    ) -> Handle:
+        """Arrange for a callback to be inserted at `position` in the queue to be
+        called later.
+        """
+        ...
+
 
 class SchedulingLoopBase(ReadyQueueBase, ABC):
     @abstractmethod
@@ -77,19 +90,6 @@ class SchedulingLoopBase(ReadyQueueBase, ABC):
     @abstractmethod
     def ready_append(self, element: Handle) -> None:
         """Append a previously popped `element` to the end of the queue."""
-        ...
-
-    @abstractmethod
-    def call_insert(
-        self,
-        position: int,
-        callback: Callable[..., Any],
-        *args: Any,
-        context: Optional[Context] = None
-    ) -> Handle:
-        """Arrange for a callback to be inserted at `position` in the queue to be
-        called later.
-        """
         ...
 
     @abstractmethod
