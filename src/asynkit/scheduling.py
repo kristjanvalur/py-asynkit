@@ -7,6 +7,7 @@ from .loop.extensions import (
 )
 from .loop.schedulingloop import AbstractSchedulingLoop
 from .loop.types import FutureAny, TaskAny
+from .tools import create_task
 
 """
 This module contains functions which extend the task scheduling
@@ -112,7 +113,7 @@ async def create_task_descend(
     initially blocks. The new task is returned.
     This facilitates a depth-first task execution pattern.
     """
-    task = asyncio.create_task(coro, name=name)
+    task = create_task(coro, name=name)
     await task_switch(task, insert_pos=1)
     return task
 
@@ -125,7 +126,7 @@ async def create_task_start(
     new task a chance to eventually run, before control is returned.
     The new task is returned.
     """
-    task = asyncio.create_task(coro, name=name)
+    task = create_task(coro, name=name)
     await asyncio.sleep(0)
     return task
 
