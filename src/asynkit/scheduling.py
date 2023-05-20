@@ -1,9 +1,8 @@
 import asyncio
-from typing import Any, Coroutine, Optional, Set, cast
+from typing import Any, Coroutine, Optional, Set
 
 from .loop.extensions import (
     call_insert,
-    loop_get_ready_queue,
     ready_index,
     ready_insert,
     ready_pop,
@@ -37,41 +36,20 @@ async def sleep_insert(pos: int) -> None:
     in the ready queue. This position may subsequently change due to other
     scheduling operations
     """
-    loop = asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
+    def post_sleep() -> None:
+        # move the task wakeup, currently at the end of list
+        # to the right place
+        ready_insert(pos, ready_pop())
 
-        def post_sleep() -> None:
-            # move the task wakeup, currently at the end of list
-            # to the right place
-            sloop = cast(SchedulingLoopBase, loop)  # mypy fails to infer this
-            sloop.ready_insert(pos, sloop.ready_pop())
-
-        # make the callback execute right after the current task goes to sleep
-        loop.call_insert(0, post_sleep)
-    else:
-
-        def post_sleep() -> None:
-            # move the task wakeup, currently at the end of list
-            # to the right place
-            queue = loop_get_ready_queue(loop)
-            ready_insert(pos, ready_pop(queue=queue), queue=queue)
-
-        call_insert(0, post_sleep, loop=loop)
+    call_insert(0, post_sleep)
     await asyncio.sleep(0)
 
 
 def task_reinsert(task: TaskAny, pos: int) -> None:
     """Place a just-created task at position 'pos' in the runnable queue."""
-    loop = asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        current_pos = loop.ready_index(task)
-        item = loop.ready_pop(current_pos)
-        loop.ready_insert(pos, item)
-    else:
-        queue = loop_get_ready_queue(loop)
-        current_pos = ready_index(task, queue=queue)
-        item = ready_pop(current_pos, queue=queue)
-        ready_insert(pos, item, queue=queue)
+    current_pos = ready_index(task)
+    item = ready_pop(current_pos)
+    ready_insert(pos, item)
 
 
 async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
@@ -82,16 +60,9 @@ async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     at position 1, right after the target task.
     """
     # Move target task to the head of the queue
-    loop = asyncio.get_running_loop()
-    if isinstance(loop, SchedulingLoopBase):
-        pos = loop.ready_index(task)
-        # move the task to the head
-        loop.ready_insert(0, loop.ready_pop(pos))
-    else:
-        pos = ready_index(task)
-        # move the task to the head
-        queue = loop_get_ready_queue(loop)
-        ready_insert(0, ready_pop(pos, queue=queue), queue=queue)
+    pos = ready_index(task)
+    # move the task to the head
+    ready_insert(0, ready_pop(pos))
 
     # go to sleep so that target runs
     if insert_pos is None:

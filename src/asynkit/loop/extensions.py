@@ -1,20 +1,10 @@
 import asyncio
 from asyncio import AbstractEventLoop, Handle
 from contextvars import Context
+from types import ModuleType
 from typing import Any, Callable, Deque, Optional, Set
 
-from .default import (
-    call_insert,
-    get_ready_queue,
-    get_task_from_handle,
-    ready_append,
-    ready_index,
-    ready_insert,
-    ready_len,
-    ready_pop,
-    ready_rotate,
-    ready_tasks,
-)
+from . import default
 from .schedulingloop import SchedulingLoopBase
 from .types import TaskAny
 
@@ -22,11 +12,22 @@ from .types import TaskAny
 This module contains extensions to the asyncio loop API.
 These are primarily aimed at doing better scheduling, and
 achieving specific scheduling goals.
+
+If the current loop is an SchedulingLoopBase, then the
+extensions are implemented directly on the loop.
+Otherwise, we call special extensions that work for the
+default loop implementation.
 """
+
+def loop_helpers(loop: AbstractEventLoop) -> ModuleType:
+    """
+    get the helpers module for the given loop
+    """
+    return default  # currently only support this
 
 # loop extensions
 # functions which extend the loop API
-def loop_call_insert(
+def call_insert(
     position: int,
     callback: Callable[..., Any],
     *args: Any,
@@ -37,20 +38,22 @@ def loop_call_insert(
     if isinstance(loop, SchedulingLoopBase):
         return loop.call_insert(position, callback, *args, context=context)
     else:
-        return call_insert(position, callback, *args, context=context, loop=loop)
+        return loop_helpers(loop).call_insert(
+            position, callback, *args, context=context, loop=loop
+        )
 
 
-def loop_ready_len(
+def ready_len(
     loop: Optional[AbstractEventLoop] = None,
 ) -> int:
     loop = loop or asyncio.get_running_loop()
     if isinstance(loop, SchedulingLoopBase):
         return loop.ready_len()
     else:
-        return ready_len(loop=loop)
+        return loop_helpers(loop).ready_len(loop=loop)
 
 
-def loop_ready_pop(
+def ready_pop(
     position: int = -1,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Any:
@@ -58,10 +61,10 @@ def loop_ready_pop(
     if isinstance(loop, SchedulingLoopBase):
         return loop.ready_pop(position)
     else:
-        return ready_pop(position, loop=loop)
+        return loop_helpers(loop).ready_pop(position, loop=loop)
 
 
-def loop_ready_index(
+def ready_index(
     task: TaskAny,
     loop: Optional[AbstractEventLoop] = None,
 ) -> int:
@@ -69,10 +72,10 @@ def loop_ready_index(
     if isinstance(loop, SchedulingLoopBase):
         return loop.ready_index(task)
     else:
-        return ready_index(task, loop=loop)
+        return loop_helpers(loop).ready_index(task, loop=loop)
 
 
-def loop_ready_append(
+def ready_append(
     item: Any,
     loop: Optional[AbstractEventLoop] = None,
 ) -> None:
@@ -80,10 +83,10 @@ def loop_ready_append(
     if isinstance(loop, SchedulingLoopBase):
         loop.ready_append(item)
     else:
-        ready_append(item, loop=loop)
+        loop_helpers(loop).ready_append(item, loop=loop)
 
 
-def loop_ready_insert(
+def ready_insert(
     position: int,
     item: Any,
     loop: Optional[AbstractEventLoop] = None,
@@ -92,10 +95,10 @@ def loop_ready_insert(
     if isinstance(loop, SchedulingLoopBase):
         loop.ready_insert(position, item)
     else:
-        ready_insert(position, item, loop=loop)
+        loop_helpers(loop).ready_insert(position, item, loop=loop)
 
 
-def loop_ready_rotate(
+def ready_rotate(
     n: int = -1,
     loop: Optional[AbstractEventLoop] = None,
 ) -> None:
@@ -103,20 +106,20 @@ def loop_ready_rotate(
     if isinstance(loop, SchedulingLoopBase):
         loop.ready_rotate(n)
     else:
-        ready_rotate(n, loop=loop)
+        loop_helpers(loop).ready_rotate(n, loop=loop)
 
 
-def loop_ready_tasks(
+def ready_tasks(
     loop: Optional[AbstractEventLoop] = None,
 ) -> Set[TaskAny]:
     loop = loop or asyncio.get_running_loop()
     if isinstance(loop, SchedulingLoopBase):
         return loop.ready_tasks()
     else:
-        return ready_tasks(loop=loop)
+        return loop_helpers(loop).ready_tasks(loop=loop)
 
 
-def loop_get_ready_queue(
+def get_ready_queue(
     loop: Optional[AbstractEventLoop] = None,
 ) -> Deque[Handle]:
     """
@@ -127,10 +130,10 @@ def loop_get_ready_queue(
     if isinstance(loop, SchedulingLoopBase):
         return loop.get_ready_queue()
     else:
-        return get_ready_queue(loop=loop)
+        return loop_helpers(loop).get_ready_queue(loop=loop)
 
 
-def loop_get_task_from_handle(
+def get_task_from_handle(
     handle: Handle,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Optional[TaskAny]:
@@ -142,4 +145,4 @@ def loop_get_task_from_handle(
     if isinstance(loop, SchedulingLoopBase):
         return loop.get_task_from_handle(handle)
     else:
-        return get_task_from_handle(handle, loop=loop)
+        return loop_helpers(loop).get_task_from_handle(handle, loop=loop)
