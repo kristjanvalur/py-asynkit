@@ -1,27 +1,24 @@
 import asyncio
 from asyncio import AbstractEventLoop, Handle, Task
 from contextvars import Context
-from typing import TYPE_CHECKING, Any, Callable, Deque, Optional, Set
+from typing import Any, Callable, Deque, Optional, Set
 
 from ..tools import deque_pop
 from .schedulingloop import AbstractSchedulingLoop
+from .types import QueueType, TaskAny
 
 """
 Helper methods which work with the default event loop from
 Python's asyncio module.
 """
 
-if TYPE_CHECKING:
-
-    TaskAny = Task[Any]
-else:
-    TaskAny = Task
-
-LoopType = AbstractEventLoop
-QueueType = Deque[Handle]
-
 
 class SchedulingHelper(AbstractSchedulingLoop):
+    """
+    Helper class providing scheduling methods for the default
+    event loop.
+    """
+
     def __init__(self, loop: Optional[AbstractEventLoop] = None) -> None:
         self._loop = loop or asyncio.get_running_loop()
         self._queue = loop._ready
