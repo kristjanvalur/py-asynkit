@@ -15,9 +15,9 @@ from typing import (
     TypeVar,
 )
 
-from .loop import default
-from .loop.schedulingloop import AbstractSchedulingLoop
-from .tools import deque_pop
+from ..tools import deque_pop
+from . import default
+from .schedulingloop import AbstractSchedulingLoop
 
 __all__ = [
     "SchedulingMixin",

@@ -1,6 +1,6 @@
 from .coroutine import *
-from .eventloop import *
 from .loop import *
+from .loop.eventloop import *
 from .monitor import (
     GeneratorObject,
     GeneratorObjectIterator,
