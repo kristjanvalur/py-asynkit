@@ -1,3 +1,5 @@
+* Release 0.8.0
+* Refactor, support scheduling functions for vanilla asyncio loop
 * Release 0.7.0
 * Add `CoroStart.as_awaitable()` method
 * Add `Monitor.awaitable()` method and `MonitorAwaitable` class
