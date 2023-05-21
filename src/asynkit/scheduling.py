@@ -37,24 +37,24 @@ async def sleep_insert(pos: int) -> None:
     await _sleep_insert(get_scheduling_loop(), pos)
 
 
-async def _sleep_insert(queue: AbstractSchedulingLoop, pos: int) -> None:
-    queue = get_scheduling_loop()
+async def _sleep_insert(loop: AbstractSchedulingLoop, pos: int) -> None:
+    loop = get_scheduling_loop()
 
     def post_sleep() -> None:
         # move the task wakeup, currently at the end of list
         # to the right place
-        queue.ready_insert(pos, queue.ready_pop())
+        loop.ready_insert(pos, loop.ready_pop())
 
-    queue.call_insert(0, post_sleep)
+    loop.call_insert(0, post_sleep)
     await asyncio.sleep(0)
 
 
 def task_reinsert(task: TaskAny, pos: int) -> None:
     """Place a just-created task at position 'pos' in the runnable queue."""
-    queue = get_scheduling_loop()
-    current_pos = queue.ready_index(task)
-    item = queue.ready_pop(current_pos)
-    queue.ready_insert(pos, item)
+    loop = get_scheduling_loop()
+    current_pos = loop.ready_index(task)
+    item = loop.ready_pop(current_pos)
+    loop.ready_insert(pos, item)
 
 
 async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
@@ -64,11 +64,11 @@ async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     queue, otherwise it is inserted at the given position, typically
     at position 1, right after the target task.
     """
-    queue = get_scheduling_loop()
+    loop = get_scheduling_loop()
 
     # Move target task to the head of the queue
-    pos = queue.ready_index(task)
-    queue.ready_insert(0, queue.ready_pop(pos))
+    pos = loop.ready_index(task)
+    loop.ready_insert(0, loop.ready_pop(pos))
 
     # go to sleep so that target runs
     if insert_pos is None:
@@ -77,21 +77,27 @@ async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     else:
         # schedule ourselves at a given position, typically
         # position 1, right after the task.
-        await _sleep_insert(queue, insert_pos)
+        await _sleep_insert(loop, insert_pos)
 
 
 # Task helpers
+
+# Tasks are either "runnable", "blocked" or "done".  Only the last bit
+# can be determined by a Task method, so we add two other helpers here.
 
 
 def task_is_blocked(task: TaskAny) -> bool:
     """
     Returns True if the task is blocked, as opposed to runnable.
     """
-    # despite the comment in the Task implementation, a task on the
-    # runnable queue can have a future which is done, e.g. when the
-    # task was cancelled, or when the future it was waiting for
-    # got done or cancelled.
-    # So we check the future directly.
+    # despite the comment in the Task implementation: (asyncio.tasks.Task)
+    # # - Either _fut_waiter is None, and _step() is scheduled;
+    # # - or _fut_waiter is some Future, and _step() is *not* scheduled.
+    # a task on the runnable queue (_step() scheduled) _can_ have a
+    # non-None future (_fut_waiter) which is _done_.
+    # This can happen when a task is cancelled, or when the future it was
+    # waiting for got done or cancelled.
+    # So we check the future directly for done-ness.
     future: Optional[FutureAny] = task._fut_waiter  # type: ignore
     return future is not None and not future.done()
 

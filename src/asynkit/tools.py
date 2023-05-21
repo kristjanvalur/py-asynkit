@@ -5,18 +5,15 @@ from typing import (
     Any,
     Coroutine,
     Deque,
-    Generator,
     List,
     Optional,
     TypeVar,
-    Union,
 )
 
 # 3.8 or earlier
 PYTHON_38 = sys.version_info[:2] <= (3, 8)
 
 T = TypeVar("T")
-CoroLike = Union[Coroutine[Any, Any, T], Generator[Any, Any, T]]
 
 if TYPE_CHECKING:
     _TaskAny = asyncio.Task[Any]

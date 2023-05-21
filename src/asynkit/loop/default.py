@@ -61,6 +61,21 @@ class SchedulingHelper(AbstractSchedulingLoop):
         return ready_tasks_impl(self._queue)
 
 
+# Asyncio does not directly have the concept of "runnable"
+# or "blocked" Tasks.  The EventLoop only holds a weak dictionary
+# of all its Task objects but otherwise does not track them.
+# A Task, which is not currently running, exists either as
+# * `done()` callback on a Future, (we consider it blocked)
+# * a `Task.__step()` callback in the Loop's "ready" queue (runnable)
+# It is the Task.__step() method which handles running a Task until a
+# coroutine blocks, which it does by yielding a Future.
+#
+# To discover runnable Tasks, we must iterate over the ready queue and
+# then discover the Task objects from the scheduled __step() callbacks.
+# This is doable via some hacky introspection.  It would be nicer if the
+# EventLoop considered Tasks separately from scheduled callbacks though.
+
+
 def ready_index_impl(
     queue: Deque[Handle],
     task: TaskAny,
