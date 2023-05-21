@@ -42,7 +42,9 @@ if PYTHON_39:  # pragma: no cover
         *args: Any,
         context: Optional[Context] = None,
     ) -> Handle:
-        return loop.call_soon(callback, *args, context=context)  # type: ignore[call-arg]
+        return loop.call_soon(
+            callback, *args, context=context
+        )  # type: ignore[call-arg]
 
 else:  # pragma: no cover
 
