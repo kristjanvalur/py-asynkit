@@ -132,13 +132,15 @@ DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
 # to lint cleanly on linux where there is no ProactorEventLoop
 if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
 
-    class SchedulingProactorEventLoop(asyncio.ProactorEventLoop, SchedulingMixin):
+    class SchedulingProactorEventLoop(
+        asyncio.ProactorEventLoop, SchedulingMixin  # type: ignore
+    ):
         pass
 
     __all__.append("SchedulingProactorEventLoop")
 
     if sys.platform == "win32":  # pragma: no coverage
-        DefaultSchedulingEventLoop = SchedulingProactorEventLoop
+        DefaultSchedulingEventLoop = SchedulingProactorEventLoop  # type: ignore
 
 
 class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):

@@ -64,12 +64,17 @@ module = "asynkit.*"
 strict = true
 
 [[tool.mypy.overrides]]
-module = "asynkit.eventloop"
+module = [
+    "asynkit.loop.eventloop",
+    "asynkit.compat",
+    "asynkit.tools",
+]
 warn_unused_ignores=false
 
 [[tool.mypy.overrides]]
-module = "asynkit.tools"
-warn_unused_ignores=false
+module = "asynkit.compat"
+disable_error_code="call-arg"
+
 
 [tool.coverage.report]
 exclude_lines = [

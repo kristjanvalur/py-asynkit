@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, TypeVar
 
 """Compatibility routines for earlier asyncio versions"""
 
-
 # 3.8 or earlier
 PYTHON_38 = sys.version_info[:2] <= (3, 8)
 PYTHON_39 = sys.version_info[:2] <= (3, 9)
@@ -42,9 +41,7 @@ if PYTHON_39:  # pragma: no cover
         *args: Any,
         context: Optional[Context] = None,
     ) -> Handle:
-        return loop.call_soon(
-            callback, *args, context=context
-        )  # type: ignore[call-arg]
+        return loop.call_soon(callback, *args, context=context)
 
 else:  # pragma: no cover
 
