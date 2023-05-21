@@ -19,6 +19,9 @@ from ..tools import deque_pop
 from . import default
 from .schedulingloop import AbstractSchedulingLoop
 
+"""This module contains a mixin to extend event loops
+with scheduling features."""
+
 __all__ = [
     "SchedulingMixin",
     "SchedulingSelectorEventLoop",
@@ -130,14 +133,14 @@ DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
 if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
 
     class SchedulingProactorEventLoop(
-        asyncio.ProactorEventLoop, SchedulingMixin  # type: ignore
+        asyncio.ProactorEventLoop, SchedulingMixin
     ):
         pass
 
     __all__.append("SchedulingProactorEventLoop")
 
     if sys.platform == "win32":  # pragma: no coverage
-        DefaultSchedulingEventLoop = SchedulingProactorEventLoop  # type: ignore
+        DefaultSchedulingEventLoop = SchedulingProactorEventLoop
 
 
 class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
