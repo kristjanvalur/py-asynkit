@@ -8,7 +8,7 @@ way Python's `asyncio` module does things.
 - Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
 - Utility classes such as `GeneratorObject`
 - Coroutine helpers such as `coro_iter()`
-- `asyncio` event-loop extensions
+- Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
 
@@ -297,54 +297,14 @@ A `GeneratorObject` is a flexible way to asynchronously generate results without
 resorting to `Task` and `Queue` objects.
 
 
-# Event loop tools
+# Scheduling tools
 
-Also provided is a mixin for the built-in event loop implementations in python, providing some primitives for advanced
-scheduling of tasks.
-
-## `SchedulingMixin` mixin class
-
-This class adds some handy scheduling functions to the event loop. They primarily
-work with the _ready queue_, a queue of callbacks representing tasks ready
-to be executed.
-
-- `ready_len(self)` - returns the length of the ready queue
-- `ready_pop(self, pos=-1)` - pops an entry off the queue
-- `ready_insert(self, pos, element)` - inserts a previously popped element into the queue
-- `ready_rotate(self, n)` - rotates the queue
-- `call_insert(self, pos, ...)` - schedules a callback at position `pos` in the queue
-
-## Concrete event loop classes
-
-Concrete subclasses of Python's built-in event loop classes are provided.
-
-- `SchedulingSelectorEventLoop` is a subclass of `asyncio.SelectorEventLoop` with the `SchedulingMixin`
-- `SchedulingProactorEventLoop` is a subclass of `asyncio.ProactorEventLoop` with the `SchedulingMixin` on those platforms that support it.
-
-## Event Loop Policy
-
-A policy class is provided to automatically create the appropriate event loops.
-
-- `SchedulingEventLoopPolicy` is a subclass of `asyncio.DefaultEventLoopPolicy` which instantiates either of the above event loop classes as appropriate.
-
-Use this either directly:
-
-```python
-asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy())
-asyncio.run(myprogram())
-```
-
-or with a context manager:
-
-```python
-with asynkit.event_loop_policy():
-    asyncio.run(myprogram())
-```
+A set of functions are provided to perform advanced scheduling of `Task` objects
+with `asyncio`.  They work with the built-in event loop, and also with any eventloop
+implementing the `AbstractSchedulingLoop` abstract base class, such as the `SchedulingMixin`
+class which can be used to extend the built-in event loops.
 
 ## Scheduling functions
-
-A couple of functions are provided making use of these scheduling features.
-They require a `SchedulingMixin` event loop to be current.
 
 ### `sleep_insert(pos)`
 
@@ -390,11 +350,10 @@ created, unlike `eager`, which only creates a task if the target blocks.
 ## Runnable task helpers
 
 A few functions are added to help working with tasks.
-They require a `SchedulingMixin` event loop to be current.
 
 The following identity applies:
 ```python
-asyncio.all_tasks(loop) = asynkit.runnable_tasks(loop) | asynkit.blocked_tasks(loop) | {asyncio.current_task(loop)}
+asyncio.all_tasks() = asynkit.runnable_tasks() | asynkit.blocked_tasks() | asyncio.current_task()
 ```
 
 ### `runnable_tasks(loop=None)`
@@ -404,6 +363,51 @@ Returns a set of the tasks that are currently runnable in the given loop
 ### `blocked_tasks(loop=None)`
 
 Returns a set of the tasks that are currently blocked on some future in the given loop.
+
+## Event Loop tools
+
+Also provided is a mixin for the built-in event loop implementations in python, providing some primitives for advanced scheduling of tasks.  These primitives are what is used by the
+scheduling functions above, and so custom event loop implementations can provide custom
+implementations of these methods.
+
+### `SchedulingMixin` mixin class
+
+This class adds some handy scheduling functions to the event loop. They primarily
+work with the _ready queue_, a queue of callbacks representing tasks ready
+to be executed.
+
+- `ready_len(self)` - returns the length of the ready queue
+- `ready_pop(self, pos=-1)` - pops an entry off the queue
+- `ready_insert(self, pos, element)` - inserts a previously popped element into the queue
+- `ready_rotate(self, n)` - rotates the queue
+- `call_insert(self, pos, ...)` - schedules a callback at position `pos` in the queue
+
+### Concrete event loop classes
+
+Concrete subclasses of Python's built-in event loop classes are provided.
+
+- `SchedulingSelectorEventLoop` is a subclass of `asyncio.SelectorEventLoop` with the `SchedulingMixin`
+- `SchedulingProactorEventLoop` is a subclass of `asyncio.ProactorEventLoop` with the `SchedulingMixin` on those platforms that support it.
+
+### Event Loop Policy
+
+A policy class is provided to automatically create the appropriate event loops.
+
+- `SchedulingEventLoopPolicy` is a subclass of `asyncio.DefaultEventLoopPolicy` which instantiates either of the above event loop classes as appropriate.
+
+Use this either directly:
+
+```python
+asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy())
+asyncio.run(myprogram())
+```
+
+or with a context manager:
+
+```python
+with asynkit.event_loop_policy():
+    asyncio.run(myprogram())
+```
 
 # Coroutine helpers
 

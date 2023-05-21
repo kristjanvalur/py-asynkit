@@ -1,7 +1,5 @@
 import asyncio
 
-import pytest
-
 import asynkit
 
 DefaultLoop = asynkit.DefaultSchedulingEventLoop
@@ -31,13 +29,3 @@ class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 
     def new_event_loop(self):
         return scheduling_loop_type(self.request)()
-
-
-# fixture for pytest-asyncio plugin
-@pytest.fixture
-def event_loop(request):
-    loop = scheduling_loop_type(request)()
-    try:
-        yield loop
-    finally:
-        loop.close()

@@ -48,6 +48,10 @@ filterwarnings = [
 ]
 
 [tool.ruff]
+select = [
+    "E", "F", "I",
+]
+src = ["src", ]
 # Ignore `F401` (unused import) in all `__init__.py` files
 # Ignore `F403` (importing *) in all `__init__.py` files
 [tool.ruff.per-file-ignores]
@@ -60,17 +64,23 @@ module = "asynkit.*"
 strict = true
 
 [[tool.mypy.overrides]]
-module = "asynkit.eventloop"
+module = [
+    "asynkit.loop.eventloop",
+    "asynkit.compat",
+    "asynkit.tools",
+]
 warn_unused_ignores=false
 
 [[tool.mypy.overrides]]
-module = "asynkit.tools"
-warn_unused_ignores=false
+module = "asynkit.compat"
+disable_error_code="call-arg"
+
 
 [tool.coverage.report]
 exclude_lines = [
   "pragma: no cover",
   "@overload",
+  "@abstractmethod",
   "assert False",
   "TYPE_CHECKING",
   "PYTHON_37",

@@ -1,6 +1,6 @@
 import contextlib
-from typing import Any, AsyncIterator, Callable, Coroutine, Optional, Type
 from types import TracebackType
+from typing import Any, AsyncIterator, Callable, Coroutine, Optional, Type
 
 import pytest
 from anyio import create_task_group

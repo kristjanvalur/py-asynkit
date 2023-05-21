@@ -1,10 +1,10 @@
 import asyncio
 import sys
-from anyio import sleep
 
 import pytest
+from anyio import sleep
 
-from asynkit import GeneratorObject, Monitor, OOBData, MonitorAwaitable
+from asynkit import GeneratorObject, Monitor, MonitorAwaitable, OOBData
 
 pytestmark = pytest.mark.anyio
 # Most tests here are just testing coroutine behaviour.
