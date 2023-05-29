@@ -32,7 +32,7 @@ pytest = "^7.1.1"
 pytest-cov = "^3.0.0"
 poethepoet = "^0.13.1"
 ruff = "~0.0.190"
-anyio = {extras = ["trio"], version = "^3.6.2"}
+anyio = {extras = ["trio"], version = ">=3.6.0 <3.7.0"}  # typing introduced in 3.7
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
