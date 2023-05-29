@@ -26,6 +26,7 @@ from .tools import create_task
 
 __all__ = [
     "CoroStart",
+    "awaitmethod",
     "coro_await",
     "coro_eager",
     "func_eager",
@@ -396,3 +397,17 @@ def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
                 out_value = coro.send(in_value)
             except StopIteration as exc:
                 return cast(T, exc.value)
+
+
+def awaitmethod(func):
+    """
+    Decorator to make a function return an awaitable.
+    The function must be a coroutine function.
+    Specifically intended to be used for __await__ methods.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return coro_iter(func(*args, **kwargs))
+
+    return wrapper
