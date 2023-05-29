@@ -12,6 +12,7 @@ from typing import (
     Callable,
     Coroutine,
     Generator,
+    Iterator,
     Optional,
     Tuple,
     TypeVar,
@@ -26,6 +27,7 @@ from .tools import create_task
 
 __all__ = [
     "CoroStart",
+    "awaitmethod",
     "coro_await",
     "coro_eager",
     "func_eager",
@@ -40,6 +42,7 @@ __all__ = [
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 T = TypeVar("T")
+S = TypeVar("S")
 P = ParamSpec("P")
 T_co = TypeVar("T_co", covariant=True)
 CoroLike = Union[Coroutine[Any, Any, T], Generator[Any, Any, T]]
@@ -396,3 +399,19 @@ def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
                 out_value = coro.send(in_value)
             except StopIteration as exc:
                 return cast(T, exc.value)
+
+
+def awaitmethod(
+    func: Callable[[S], Coroutine[Any, Any, T]]
+) -> Callable[[S], Iterator[T]]:
+    """
+    Decorator to make a function return an awaitable.
+    The function must be a coroutine function.
+    Specifically intended to be used for __await__ methods.
+    """
+
+    @functools.wraps(func)
+    def wrapper(self: S) -> Iterator[T]:
+        return coro_iter(func(self))
+
+    return wrapper

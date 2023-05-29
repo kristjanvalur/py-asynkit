@@ -11,7 +11,7 @@ from anyio import Event, create_task_group, sleep
 import asynkit
 import asynkit.tools
 
-eager_var: ContextVar = ContextVar("eager_var")
+eager_var: ContextVar[str] = ContextVar("eager_var")
 
 pytestmark = pytest.mark.anyio
 
@@ -387,17 +387,17 @@ class TestCoroAwait:
         assert await task is d
 
 
-contextvar1: ContextVar = ContextVar("contextvar1")
+contextvar1: ContextVar[Any] = ContextVar("contextvar1")
 
 
 @pytest.mark.parametrize("block", [True, False])
 class TestContext:
-    async def coro_block(self, var: ContextVar, val: Any):
+    async def coro_block(self, var: ContextVar[Any], val: Any) -> None:
         var.set(val)
         await sleep(0)
         assert var.get() is val
 
-    async def coro_noblock(self, var: ContextVar, val: Any):
+    async def coro_noblock(self, var: ContextVar[Any], val: Any) -> None:
         var.set(val)
         assert var.get() is val
 
@@ -596,17 +596,29 @@ class TestCoroIter:
         def __await__(self):
             return asynkit.coro_iter(self.coro(self.args.pop(0)))
 
-    async def test_await(self):
-        a = self.Awaiter(self.coroutine1, ["bar1"])
+    class Awaiter2(Awaiter):
+        """
+        Test the awaitable decorator
+        """
+
+        @asynkit.awaitmethod
+        async def __await__(self):
+            return await self.coro(self.args.pop(0))
+
+    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2])
+    async def test_await(self, awaiter):
+        a = awaiter(self.coroutine1, ["bar1"])
         assert await a == "foobar1"
 
-    async def test_await_again(self):
-        a = self.Awaiter(self.coroutine1, ["bar2", "bar3"])
+    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2])
+    async def test_await_again(self, awaiter):
+        a = awaiter(self.coroutine1, ["bar2", "bar3"])
         assert await a == "foobar2"
         assert await a == "foobar3"  # it can be awaited again
 
-    async def test_await_exception(self):
-        a = self.Awaiter(self.coroutine2)
+    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2])
+    async def test_await_exception(self, awaiter):
+        a = awaiter(self.coroutine2)
         with pytest.raises(RuntimeError) as err:
             await a
         assert err.value.args[0] == "foobar1"
@@ -614,11 +626,12 @@ class TestCoroIter:
             await a
         assert err.value.args[0] == "foobar2"
 
-    async def test_await_immediate(self):
+    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2])
+    async def test_await_immediate(self, awaiter):
         async def coroutine(arg):
             return "coro" + arg
 
-        a = self.Awaiter(coroutine)
+        a = awaiter(coroutine)
         assert await a == "corobar1"
 
     async def test_raw_generator_exit(self):

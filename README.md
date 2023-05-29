@@ -7,7 +7,7 @@ way Python's `asyncio` module does things.
 
 - Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
 - Utility classes such as `GeneratorObject`
-- Coroutine helpers such as `coro_iter()`
+- Coroutine helpers such as `coro_iter()` and the `awaitmethod()` decorator
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
@@ -153,25 +153,33 @@ async def main():
 This is similar to `contextvars.Context.run()` but works for async functions.  This function is
 implemented using `CoroStart`
 
-## `coro_iter` - helper for `__await__` methods
+## `awaitmethod` - decorator for `__await__` methods
 
-This helper function returns an `Generator` for a coroutine.  This is useful, if one
-wants to make an object _awaitable_ via the `__await__` method, which must only
-return `Iterator` objects.
+This decorator turns the decorated method into a `Generator` as required for
+`__await__` methods, which must only return `Iterator` objects.
+It does so by invoking the `coro_iter()` helper.
+
+This makes it simple to make a class _awaitable_ by decorating an `async`
+`__await__()` method.
 
 ```python
 class Awaitable:
     def __init__(self, cofunc):
         self.cofunc = cofunc
-    def __await__(self):
-        return asynkit.coro_iter(self.cofunc())
+        self.count = 0
+
+    @asynckit.awaitmethod
+    async def __await__(self):
+        await self.cofunc()
+        return self.count
+        self.count += 1
 
 async def main():
     async def sleeper():
         await asyncio.sleep(1)
     a = Awaitable(sleeper)
-    await a  # sleep once
-    await a  # sleep again
+    assert (await a) == 0  # sleep once
+    assert (await a) == 1  # sleep again
 
 asyncio.run(main())
 ```
