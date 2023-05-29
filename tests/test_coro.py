@@ -11,7 +11,7 @@ from anyio import Event, create_task_group, sleep
 import asynkit
 import asynkit.tools
 
-eager_var: ContextVar = ContextVar("eager_var")
+eager_var: ContextVar[str] = ContextVar("eager_var")
 
 pytestmark = pytest.mark.anyio
 
@@ -387,17 +387,17 @@ class TestCoroAwait:
         assert await task is d
 
 
-contextvar1: ContextVar = ContextVar("contextvar1")
+contextvar1: ContextVar[Any] = ContextVar("contextvar1")
 
 
 @pytest.mark.parametrize("block", [True, False])
 class TestContext:
-    async def coro_block(self, var: ContextVar, val: Any):
+    async def coro_block(self, var: ContextVar[Any], val: Any) -> None:
         var.set(val)
         await sleep(0)
         assert var.get() is val
 
-    async def coro_noblock(self, var: ContextVar, val: Any):
+    async def coro_noblock(self, var: ContextVar[Any], val: Any) -> None:
         var.set(val)
         assert var.get() is val
 
@@ -600,6 +600,7 @@ class TestCoroIter:
         """
         Test the awaitable decorator
         """
+
         @asynkit.awaitmethod
         async def __await__(self):
             return await self.coro(self.args.pop(0))
@@ -632,7 +633,7 @@ class TestCoroIter:
 
         a = awaiter(coroutine)
         assert await a == "corobar1"
-    
+
     async def test_raw_generator_exit(self):
         step = 0
 

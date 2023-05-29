@@ -19,7 +19,7 @@ lint = "ruff ."
 black = "black ."
 test = "pytest"
 cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
-typing = "mypy -p asynkit"
+typing = "mypy -p asynkit -p tests"
 
 [tool.poetry.dependencies]
 python = "^3.7"
@@ -62,6 +62,12 @@ src = ["src", ]
 [[tool.mypy.overrides]]
 module = "asynkit.*"
 strict = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+check_untyped_defs = false
+allow_untyped_defs = true
+allow_untyped_calls = true
 
 [[tool.mypy.overrides]]
 module = [
