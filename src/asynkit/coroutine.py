@@ -12,6 +12,7 @@ from typing import (
     Callable,
     Coroutine,
     Generator,
+    Iterator,
     Optional,
     Tuple,
     TypeVar,
@@ -41,6 +42,7 @@ __all__ = [
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 T = TypeVar("T")
+S = TypeVar("S")
 P = ParamSpec("P")
 T_co = TypeVar("T_co", covariant=True)
 CoroLike = Union[Coroutine[Any, Any, T], Generator[Any, Any, T]]
@@ -399,7 +401,9 @@ def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
                 return cast(T, exc.value)
 
 
-def awaitmethod(func):
+def awaitmethod(
+    func: Callable[[S], Coroutine[Any, Any, T]]
+) -> Callable[[S], Iterator[T]]:
     """
     Decorator to make a function return an awaitable.
     The function must be a coroutine function.
@@ -407,7 +411,7 @@ def awaitmethod(func):
     """
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        return coro_iter(func(*args, **kwargs))
+    def wrapper(self: S) -> Iterator[T]:
+        return coro_iter(func(self))
 
     return wrapper
