@@ -216,9 +216,42 @@ class CoroStart(Awaitable[T_co]):
                 except StopIteration as exc:
                     return cast(T_co, exc.value)
 
+    async def athrow(self, value: BaseException) -> T_co:
+        """
+        Throw an exception into a started coroutine if it is not done, instead
+        of continuing it.
+        """
+        try:
+            self.start_result = (
+                self.context.run(self.coro.throw, type(value), value)
+                if self.context
+                else self.coro.throw(type(value), value)
+            ), None
+        except BaseException as exception:
+            self.start_result = (None, exception)
+        return await self
+
     def close(self) -> None:
-        self.coro.close()
+        """
+        Close the coroutine.  It must immediatly exit.
+        """
         self.start_result = None
+        self.coro.close()
+
+    async def aclose(self) -> None:
+        """
+        Close the coroutine, throwing a GeneratorExit() into it if it is not done.
+        It may perform async cleanup before exiting.
+        """
+        if self.start_result is None:
+            return
+        if self.done():
+            self.start_result = None
+            return
+        try:
+            await self.athrow(GeneratorExit())
+        except GeneratorExit:
+            pass
 
     def done(self) -> bool:
         """returns true if the coroutine finished without blocking"""

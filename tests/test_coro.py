@@ -334,6 +334,100 @@ class TestCoroStart:
             assert self.gen_exit is True
 
 
+class TestCoroStartClose:
+
+    stage = [0]
+
+    async def cleanupper(self):
+        """A an async function which does async cleanup when interrupted"""
+        try:
+            self.stage[0] = 1
+            await sleep(0)
+        except ZeroDivisionError:
+            pass
+        finally:
+            self.stage[0] = 2
+            await sleep(0)
+            self.stage[0] = 3
+        self.stage[0] = 4
+        return "result"
+
+    async def simple(self):
+        return "simple"
+
+    async def test_close(self):
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert not starter.done()
+        assert self.stage[0] == 1
+        with pytest.raises(RuntimeError) as err:
+            starter.close()
+        assert err.match("coroutine ignored GeneratorExit")
+        assert self.stage[0] == 2
+
+    async def test_aclose(self):
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        await starter.aclose()
+        assert self.stage[0] == 3
+
+    async def test_athrow(self):
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        with pytest.raises(RuntimeError) as err:
+            await starter.athrow(RuntimeError("slap face"))
+        assert self.stage[0] == 3
+        assert err.match("face")
+
+    async def test_athrow_handled(self):
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        result = await starter.athrow(ZeroDivisionError())
+        assert self.stage[0] == 4
+        assert result == "result"
+
+    async def test_close_simple(self):
+        starter = asynkit.CoroStart(self.simple())
+        assert starter.done()
+        starter.close()
+
+        starter = asynkit.CoroStart(self.simple())
+        assert await starter == "simple"
+        starter.close()
+
+    async def test_aclose_simple(self):
+        starter = asynkit.CoroStart(self.simple())
+        assert starter.done()
+        await starter.aclose()
+
+        starter = asynkit.CoroStart(self.simple())
+        assert await starter == "simple"
+        await starter.aclose()
+
+    async def test_athrow_simple(self):
+        starter = asynkit.CoroStart(self.simple())
+        assert starter.done()
+        with pytest.raises(RuntimeError) as err:
+            await starter.athrow(ZeroDivisionError())
+        assert err.match("cannot reuse")
+
+        starter = asynkit.CoroStart(self.simple())
+        assert await starter == "simple"
+        with pytest.raises(RuntimeError) as err:
+            await starter.athrow(ZeroDivisionError())
+        assert err.match("cannot reuse")
+
+
 class TestCoroAwait:
     """
     These tests test the behaviour of a coroutine wrapped in `coro_await`
@@ -679,3 +773,28 @@ class TestCoroIter:
         assert step == 2
         assert err.value.value == "foo"
         c.close()
+
+
+class TestCoroClose:
+    async def cleanupper(self):
+        """A an async function which does async cleanup when interrupted"""
+        try:
+            await sleep(0)
+        finally:
+            await sleep(0)
+
+    async def test_close(self):
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert not starter.done()
+        with pytest.raises(RuntimeError) as err:
+            starter.close()
+        assert err.match("coroutine ignored GeneratorExit")
+
+    async def test_throw(self):
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert not starter.done()
+        await starter.athrow(ZeroDivisionError())
+        # with pytest.raises(ZeroDivisionError) as err:
+        # assert err.match("coroutine ignored GeneratorExit")
