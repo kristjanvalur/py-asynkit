@@ -37,6 +37,8 @@ __all__ = [
     "coro_is_suspended",
     "coro_is_finished",
     "coro_iter",
+    "coro_sync",
+    "coro_run",
 ]
 
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
@@ -462,3 +464,30 @@ def awaitmethod(
         return coro_iter(func(self))
 
     return wrapper
+
+
+def coro_run(coro: Coroutine[Any, Any, T]) -> T:
+    start = CoroStart[T](coro)
+    if start.done():
+        return start.result()
+    # kill the coroutine
+    try:
+        start.throw(GeneratorExit())
+        raise RuntimeError(
+            "coroutine failed to complete synchronously (handled GeneratoExit)"
+        )
+    except BaseException as err:
+        raise RuntimeError("coroutine failed to complete synchronously") from err
+    finally:
+        try:
+            start.close()
+        except RuntimeError:
+            pass
+
+
+def coro_sync(afunc: Callable[..., Coroutine[Any, Any, T]]) -> Callable[..., T]:
+    @functools.wraps(afunc)
+    def helper(*args: Any, **kwargs: Any) -> T:
+        return coro_run(afunc(*args, **kwargs))
+
+    return helper

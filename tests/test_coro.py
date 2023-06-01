@@ -482,6 +482,48 @@ class TestCoroStartClose:
         assert err.match("cannot reuse")
 
 
+class TestCoroRun:
+    sync = True
+
+    async def sleep(self, t):
+        # for synchronous tests use asyncio version
+        if getattr(self, "sync", False):
+            await asyncio.sleep(t)
+        else:
+            await sleep(t)
+
+    async def cleanupper(self):
+        """A an async function which does async cleanup when interrupted"""
+        try:
+            await self.sleep(0)
+        except ZeroDivisionError:
+            pass
+        finally:
+            await self.sleep(0)
+
+    async def normal(self):
+        """A an async function which does async cleanup when interrupted"""
+        try:
+            await self.sleep(0)
+        except ZeroDivisionError:
+            pass
+        finally:
+            await self.sleep(0)
+
+    async def simple(self):
+        return "simple"
+
+    @asynkit.coro_sync
+    async def sync_simple(self):
+        return await self.simple()
+
+    def test_simple(self):
+        assert asynkit.coro_run(self.simple()) == "simple"
+
+    def test_sync_simple(self):
+        assert self.sync_simple() == "simple"
+
+
 class TestCoroAwait:
     """
     These tests test the behaviour of a coroutine wrapped in `coro_await`
