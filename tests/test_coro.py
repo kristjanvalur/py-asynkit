@@ -338,16 +338,23 @@ class TestCoroStartClose:
 
     stage = [0]
 
+    async def sleep(self, t):
+        # for synchronous tests use asyncio version
+        if getattr(self, "sync", False):
+            await asyncio.sleep(t)
+        else:
+            await sleep(t)
+
     async def cleanupper(self):
         """A an async function which does async cleanup when interrupted"""
         try:
             self.stage[0] = 1
-            await sleep(0)
+            await self.sleep(0)
         except ZeroDivisionError:
             pass
         finally:
             self.stage[0] = 2
-            await sleep(0)
+            await self.sleep(0)
             self.stage[0] = 3
         self.stage[0] = 4
         return "result"
@@ -355,7 +362,15 @@ class TestCoroStartClose:
     async def simple(self):
         return "simple"
 
-    async def test_close(self):
+    async def handler(self):
+        try:
+            await self.sleep(0)
+        except ZeroDivisionError:
+            pass
+        return "handler"
+
+    def test_close(self):
+        self.sync = True
         self.stage[0] = 0
         c = self.cleanupper()
         starter = asynkit.CoroStart(c)
@@ -395,6 +410,45 @@ class TestCoroStartClose:
         result = await starter.athrow(ZeroDivisionError())
         assert self.stage[0] == 4
         assert result == "result"
+
+    def test_throw_handled(self):
+        self.sync = True
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        with pytest.raises(RuntimeError) as err:
+            starter.throw(asyncio.CancelledError())
+        assert err.match("coroutine ignored")
+        assert self.stage[0] == 2
+
+    def test_throw_handled_2(self):
+        self.sync = True
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        with pytest.raises(asyncio.CancelledError):
+            starter.throw(asyncio.CancelledError(), tries=2)
+        assert self.stage[0] == 2
+
+    def test_throw_simple(self):
+        self.sync = True
+        c = self.simple()
+        starter = asynkit.CoroStart(c)
+        assert starter.done()
+        with pytest.raises(RuntimeError) as err:
+            starter.throw(asyncio.CancelledError())
+        assert err.match("cannot reuse already awaited coroutine")
+
+    def test_throw_handled_return(self):
+        self.sync = True
+        c = self.handler()
+        starter = asynkit.CoroStart(c)
+        assert not starter.done()
+        assert starter.throw(ZeroDivisionError()) == "handler"
 
     async def test_close_simple(self):
         starter = asynkit.CoroStart(self.simple())

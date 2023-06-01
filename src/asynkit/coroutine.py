@@ -231,6 +231,20 @@ class CoroStart(Awaitable[T_co]):
             self.start_result = (None, exception)
         return await self
 
+    def throw(self, value: BaseException, tries: int = 1) -> T_co:
+        """
+        Throw an exception into the started coroutine. If the coroutine fails to
+        exit, the exception will be re-thrown, up to 'tries' times.  If the coroutine
+        handles the error and returns, the value is returned
+        """
+        for i in range(tries):
+            try:
+                self.coro.throw(type(value), value)
+            except StopIteration as err:
+                return cast(T_co, err.value)
+        else:
+            raise RuntimeError(f"coroutine ignored {type(value).__name__}")
+
     def close(self) -> None:
         """
         Close the coroutine.  It must immediatly exit.
