@@ -7,7 +7,7 @@ way Python's `asyncio` module does things.
 
 - Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
 - Utility classes such as `GeneratorObject`
-- Coroutine helpers such as `coro_iter()` and the `awaitmethod()` decorator
+- Coroutine helpers such as `coro_sync()`, `coro_iter()` and the `awaitmethod()` decorator
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
@@ -33,6 +33,7 @@ async def get_slow_remote_data():
     result = await execute_remote_request()
     return result.important_data
 
+
 async def my_complex_thing():
     # kick off the request as soon as possible
     future = get_slow_remote_data()
@@ -57,22 +58,26 @@ still being able to asynchronously wait for the result.
 `asynckit.eager` can also be used directly on the returned coroutine:
 ```python
 log = []
+
+
 async def test():
     log.append(1)
-    await asyncio.sleep(0.2) # some long IO
+    await asyncio.sleep(0.2)  # some long IO
     log.append(2)
+
 
 async def caller(convert):
     del log[:]
     log.append("a")
     future = convert(test())
     log.append("b")
-    await asyncio.sleep(0.1) # some other IO
+    await asyncio.sleep(0.1)  # some other IO
     log.append("c")
     await future
 
+
 # do nothing
-asyncio.run(caller(lambda c:c))
+asyncio.run(caller(lambda c: c))
 assert log == ["a", "b", "c", 1, 2]
 
 # Create a Task
@@ -104,11 +109,75 @@ just as would happen if it were directly turned into a `Task`.
 
 `func_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
+## `coro_sync()` - Running coroutines synchronously
+
+If you are writing code which should work both synchronously and asynchronously,
+you can now write the code fully _async_ and then syn it _synchronously_ in the absence
+of an event loop.  Should the code cause any async features to be triggered, an exception is raised.  This helps avoid writing duplicate code.
+
+```python
+async def get_processed_data(datagetter):
+    data = datagetter()  # could be an async callback
+    data = await data if isawaitable(data) else data
+    return process_data(data)
+
+
+# will raise SynchronousError if it datagetter to be async
+def static_get_processed_data(datagetter):
+    return asynkit.coro_sync(combine_stuff(cb1, cb2))
+```
+
+This sort of code might previously have been written thus:
+```python
+# may return an awaitable
+def get_processed_data(datagetter):
+    data = datagetter()
+    if isawaitable(data):
+        # return an awaitable helper function
+        async def helper():
+            data = await data
+            return process_data(await data)
+
+        return helper
+    return process_data(data)  # duplication
+
+
+async def async_get_processed_data(datagetter):
+    r = get_processed_data(datagetter)
+    return await r if isawaitable(r) else r
+
+
+def sync_get_processed_data(datagetter):
+    r = get_processed_data(datagetter)
+    if isawaitable(r):
+        raise RuntimeError("callbacks failed to run statically")
+```
+
+The above pattern, writing async methods as sync and returning async helpers,
+is common in library code which needs to work both in synchronous and asynchronous
+context.  Needless to say, it is very convoluted, hard to debug and contains a lot
+of code duplication where the same logic is repeated inside async helper methods.
+
+Using `coro_sync()` it is possible to write the entire logic as `async` methods and
+then selectively fail if the logic tries to invoke any truly async operations.
+
+`coro_sync()` can also be applied as a decorator:
+
+```python
+@asynkit.coro_sync
+async def sync_function():
+    return "look ma, no async!"
+
+
+assert sync_function().contains("look")
+```
+
+
 ## `CoroStart`
 
-This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. 
+This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` and `coro_sync()` functions. 
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
-an exception.
+an exception.  It can subsequently be _awaited_ to retreive the result.
 
 Similarly to a `Future`, it has these methods:
 
@@ -118,13 +187,28 @@ Similarly to a `Future`, it has these methods:
 
  But more importly it has these:
 
-- `as_coroutine()` - Returns an coroutine encapsulating the original coroutine's _continuation_.
-  If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it continues the original coroutine's execution.
+- `__await__()` - A magic method making it directly _awaitable_. If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it awaits the original coroutine's continued execution
+- `as_coroutine()` - A helper which returns a proper _coroutine_ object to await the `CoroStart`
 - `as_future()` - If `done()`, returns a `Future` holding its result, otherwise, a `RuntimeError`
-  is raised. This is suitable for using with
-  `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.
-- `as_awaitable()` - If `done()`, returns `as_future()`, else returns `as_coroutine()`.
-  This is a convenience method for use with functions such as `asyncio.gather()`. 
+  is raised.
+- `as_awaitable()` - If `done()`, returns `as_future()`, else returns `self`.
+  This is a convenience method for use with functions such as `asyncio.gather()`, which would otherwise wrap a completed coroutine in a `Task`.
+
+In addition it has:
+
+- `aclose()` - If `not done()`, will throw a `GeneratorError` into the coroutine and wait for it to finish.  Otherwise does nothing.
+- `athrow(exc)` - If `not done()`, will throw the given error into the coroutine and wait for it to raise or return a value.
+- `close()` and `throw(exc)` - Synchronous versions of the above, will raise `RuntimeError` if the coroutine does not immediately exit.
+
+This means that a context manager such as `aclosing()` can be used to ensure
+that the coroutine is cleaned up in case of errors before it is awaited:
+
+```python
+# start foo() and run until it blocks
+async with aclosing(CoroStart(foo())) as coro:
+    ...  # do things, which may result in an error
+    return await coro
+```
 
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
@@ -137,11 +221,13 @@ object to activate:
 ```python
 var1 = contextvars.ContextVar("myvar")
 
+
 async def my_method():
     var1.set("foo")
-    
+
+
 async def main():
-    context=contextvars.copy_context()
+    context = contextvars.copy_context()
     var1.set("bar")
     await asynkit.coro_await(my_method(), context=context)
     # the coroutine didn't modify _our_ context
@@ -174,12 +260,15 @@ class Awaitable:
         return self.count
         self.count += 1
 
+
 async def main():
     async def sleeper():
         await asyncio.sleep(1)
+
     a = Awaitable(sleeper)
     assert (await a) == 0  # sleep once
     assert (await a) == 1  # sleep again
+
 
 asyncio.run(main())
 ```
@@ -197,6 +286,7 @@ async def coro(monitor):
     await asyncio.sleep(0)
     await monitor.oob("dolly")
     return "done"
+
 
 async def runner():
     m = Monitor()
@@ -249,24 +339,25 @@ Consider the following scenario. A _parser_ wants to read a line from a buffer, 
 this to the monitor:
 
 ```python
-    async def readline(m, buffer):
-        l = buffer.readline()
-        while not l.endswith("\n"):
-            await m.oob(None)  # ask for more data in the buffer
-            l += buffer.readline()
-        return l
+async def readline(m, buffer):
+    l = buffer.readline()
+    while not l.endswith("\n"):
+        await m.oob(None)  # ask for more data in the buffer
+        l += buffer.readline()
+    return l
 
-    async def manager(buffer, io):
-        m = Monitor()
-        a = m.awaitable(readline(m, buffer))
-        while True:
+
+async def manager(buffer, io):
+    m = Monitor()
+    a = m.awaitable(readline(m, buffer))
+    while True:
+        try:
+            return await a
+        except OOBData:
             try:
-                return await a
-            except OOBData:
-                try:
-                    buffer.fill(await io.read())
-                except Exception as exc:
-                    await m.athrow(c, exc)
+                buffer.fill(await io.read())
+            except Exception as exc:
+                await m.athrow(c, exc)
 ```
 
 In this example, `readline()` is trivial, but if it were a complicated parser with hierarchical
@@ -285,11 +376,13 @@ The `GeneratorObject` leverages the `Monitor.oob()` method to deliver the _ayiel
 ```python
 async def generator(gen_obj):
     # yield directly to the generator
-    await gen_obj.ayield(1):
+    await gen_obj.ayield(1)
     # have someone else yield to it
     async def helper():
         await gen_obj.ayield(2)
+
     await asyncio.create_task(helper())
+
 
 async def runner():
     gen_obj = GeneratorObject()
@@ -361,7 +454,9 @@ A few functions are added to help working with tasks.
 
 The following identity applies:
 ```python
-asyncio.all_tasks() = asynkit.runnable_tasks() | asynkit.blocked_tasks() | asyncio.current_task()
+asyncio.all_tasks() = (
+    asynkit.runnable_tasks() | asynkit.blocked_tasks() | asyncio.current_task()
+)
 ```
 
 ### `runnable_tasks(loop=None)`
@@ -444,11 +539,13 @@ behaviour to task creation.  It will return an `EagerTaskGroup` context manager:
 from asynkit.experimental.anyio import create_eager_task_group
 from anyio import run, sleep
 
+
 async def func(task_status):
     print("hello")
-    task_status->started("world")
+    task_status.started("world")
     await sleep(0.01)
     print("goodbye")
+
 
 async def main():
 
@@ -456,7 +553,8 @@ async def main():
         start = tg.start(func)
         print("fine")
         print(await start)
-    print ("world")
+    print("world")
+
 
 run(main, backend="asyncio")
 ```

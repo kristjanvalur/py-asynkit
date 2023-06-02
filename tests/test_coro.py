@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import types
+from contextlib import asynccontextmanager
 from contextvars import ContextVar, copy_context
 from typing import Any
 from unittest.mock import Mock
@@ -10,6 +11,18 @@ from anyio import Event, create_task_group, sleep
 
 import asynkit
 import asynkit.tools
+
+try:
+    from contextlib import aclosing  # type: ignore[attr-defined]
+except ImportError:
+
+    @asynccontextmanager
+    async def aclosing(obj):
+        try:
+            yield obj
+        finally:
+            await obj.aclose()
+
 
 eager_var: ContextVar[str] = ContextVar("eager_var")
 
@@ -167,11 +180,13 @@ class TestCoroStart:
         return log
 
     async def coro1_nb(self, log):
+        self.gen_exit = False
         log.append(1)
         log.append(2)
         return log
 
     async def coro2(self, log):
+        self.gen_exit = False
         1 / 0
 
     def get_coro1(self, block):
@@ -284,7 +299,7 @@ class TestCoroStart:
         log.append("a")
         awaitable = cs.as_awaitable()
         if block:
-            assert inspect.iscoroutine(awaitable)
+            assert inspect.isawaitable(awaitable)
         else:
             assert isinstance(awaitable, asyncio.Future)
         assert await awaitable == expect
@@ -332,6 +347,239 @@ class TestCoroStart:
         cont.close()
         if block:
             assert self.gen_exit is True
+
+    async def test_closing(self, block):
+        coro, _ = self.get_coro1(block)
+        async with aclosing(asynkit.CoroStart(coro([]))) as cs:
+            return await cs
+
+    async def test_closing_abort(self, block):
+        coro, _ = self.get_coro1(block)
+        async with aclosing(asynkit.CoroStart(coro([]))) as cs:
+            assert not self.gen_exit
+            if cs.done():
+                return await cs
+        if block:
+            #  Assert that a generator exit was sent into the coroutine
+            assert self.gen_exit
+
+
+class TestCoroStartClose:
+    # A separate test class to test close semantics
+    # with no parametrization
+
+    stage = [0]
+
+    async def sleep(self, t):
+        # for synchronous tests use asyncio version
+        if getattr(self, "sync", False):
+            await asyncio.sleep(t)
+        else:
+            await sleep(t)
+
+    async def cleanupper(self):
+        """A an async function which does async cleanup when interrupted"""
+        try:
+            self.stage[0] = 1
+            await self.sleep(0)
+        except ZeroDivisionError:
+            pass
+        finally:
+            self.stage[0] = 2
+            await self.sleep(0)
+            self.stage[0] = 3
+        self.stage[0] = 4
+        return "result"
+
+    async def simple(self):
+        return "simple"
+
+    async def handler(self):
+        try:
+            await self.sleep(0)
+        except ZeroDivisionError:
+            pass
+        return "handler"
+
+    def test_close(self):
+        self.sync = True
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert not starter.done()
+        assert self.stage[0] == 1
+        with pytest.raises(RuntimeError) as err:
+            starter.close()
+        assert err.match("coroutine ignored GeneratorExit")
+        assert self.stage[0] == 2
+
+    async def test_aclose(self):
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        await starter.aclose()
+        assert self.stage[0] == 3
+
+    async def test_athrow(self):
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        with pytest.raises(RuntimeError) as err:
+            await starter.athrow(RuntimeError("slap face"))
+        assert self.stage[0] == 3
+        assert err.match("face")
+
+    async def test_athrow_handled(self):
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        result = await starter.athrow(ZeroDivisionError)
+        assert self.stage[0] == 4
+        assert result == "result"
+
+    def test_throw_handled(self):
+        self.sync = True
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        with pytest.raises(RuntimeError) as err:
+            starter.throw(asyncio.CancelledError())
+        assert err.match("coroutine ignored")
+        assert self.stage[0] == 2
+
+    def test_throw_handled_2(self):
+        self.sync = True
+        self.stage[0] = 0
+        c = self.cleanupper()
+        starter = asynkit.CoroStart(c)
+        assert self.stage[0] == 1
+        assert not starter.done()
+        with pytest.raises(asyncio.CancelledError):
+            starter.throw(asyncio.CancelledError, tries=2)
+        assert self.stage[0] == 2
+
+    def test_throw_simple(self):
+        self.sync = True
+        c = self.simple()
+        starter = asynkit.CoroStart(c)
+        assert starter.done()
+        with pytest.raises(RuntimeError) as err:
+            starter.throw(asyncio.CancelledError())
+        assert err.match("cannot reuse already awaited coroutine")
+
+    def test_throw_handled_return(self):
+        self.sync = True
+        c = self.handler()
+        starter = asynkit.CoroStart(c)
+        assert not starter.done()
+        assert starter.throw(ZeroDivisionError()) == "handler"
+
+    async def test_close_simple(self):
+        starter = asynkit.CoroStart(self.simple())
+        assert starter.done()
+        starter.close()
+
+        starter = asynkit.CoroStart(self.simple())
+        assert await starter == "simple"
+        starter.close()
+
+    async def test_aclose_simple(self):
+        starter = asynkit.CoroStart(self.simple())
+        assert starter.done()
+        await starter.aclose()
+
+        starter = asynkit.CoroStart(self.simple())
+        assert await starter == "simple"
+        await starter.aclose()
+
+    async def test_athrow_simple(self):
+        starter = asynkit.CoroStart(self.simple())
+        assert starter.done()
+        with pytest.raises(RuntimeError) as err:
+            await starter.athrow(ZeroDivisionError())
+        assert err.match("cannot reuse")
+
+        starter = asynkit.CoroStart(self.simple())
+        assert await starter == "simple"
+        with pytest.raises(RuntimeError) as err:
+            await starter.athrow(ZeroDivisionError())
+        assert err.match("cannot reuse")
+
+
+class TestCoroRun:
+    sync = True
+
+    async def sleep(self, t):
+        # for synchronous tests use asyncio version
+        if getattr(self, "sync", False):
+            await asyncio.sleep(t)
+        else:
+            await sleep(t)
+
+    async def cleanupper(self):
+        try:
+            await self.sleep(0)
+        finally:
+            await self.sleep(0)
+
+    async def genexit(self):
+        """A an async function which does async cleanup when interrupted"""
+        try:
+            await self.sleep(0)
+        except BaseException:
+            pass
+
+    async def noexit(self):
+        while True:
+            try:
+                await self.sleep(0)
+            except BaseException:
+                pass
+
+    async def simple(self):
+        return "simple"
+
+    @asynkit.coro_sync
+    async def sync_simple(self):
+        return await self.simple()
+
+    @asynkit.coro_sync
+    async def sync_cleanup(self):
+        return await self.cleanupper()
+
+    @asynkit.coro_sync
+    async def sync_genexit(self):
+        return await self.genexit()
+
+    def test_simple(self):
+        assert asynkit.coro_sync(self.simple()) == "simple"
+
+    def test_sync_simple(self):
+        assert self.sync_simple() == "simple"
+
+    def test_cleanup(self):
+        with pytest.raises(asynkit.SynchronousError) as err:
+            self.sync_cleanup()
+        assert err.match("failed to complete synchronously")
+
+    def test_genexit(self):
+        with pytest.raises(asynkit.SynchronousError) as err:
+            self.sync_genexit()
+        assert err.match("failed to complete synchronously")
+        assert err.match("caught BaseException")
+
+    def test_noexit(self):
+        with pytest.raises(asynkit.SynchronousError) as err:
+            asynkit.coro_sync(self.noexit())
+        assert err.match("failed to complete synchronously")
 
 
 class TestCoroAwait:

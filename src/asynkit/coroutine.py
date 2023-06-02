@@ -4,6 +4,7 @@ import inspect
 import sys
 import types
 from contextvars import Context, copy_context
+from inspect import iscoroutinefunction
 from types import FrameType
 from typing import (
     Any,
@@ -15,6 +16,7 @@ from typing import (
     Iterator,
     Optional,
     Tuple,
+    Type,
     TypeVar,
     Union,
     cast,
@@ -37,6 +39,9 @@ __all__ = [
     "coro_is_suspended",
     "coro_is_finished",
     "coro_iter",
+    "coro_sync",
+    "SynchronousError",
+    "CoroutineAbort",
 ]
 
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
@@ -51,6 +56,19 @@ Suspendable = Union[Coroutine, Generator, AsyncGenerator]
 """
 Tools and utilities for advanced management of coroutines
 """
+
+
+class SynchronousError(RuntimeError):
+    """
+    An exception thrown when a coroutine does not complete
+    synchronously.
+    """
+
+
+class CoroutineAbort(BaseException):
+    """
+    Exception thrown into coroutine to abort it.
+    """
 
 
 # Helpers to find if a coroutine (or a generator as created by types.coroutine)
@@ -216,9 +234,77 @@ class CoroStart(Awaitable[T_co]):
                 except StopIteration as exc:
                     return cast(T_co, exc.value)
 
+    @overload
+    async def athrow(self, exc: Type[BaseException]) -> T_co:
+        ...
+
+    @overload
+    async def athrow(self, exc: BaseException) -> T_co:
+        ...
+
+    async def athrow(self, exc: Union[Type[BaseException], BaseException]) -> T_co:
+        """
+        Throw an exception into a started coroutine if it is not done, instead
+        of continuing it.
+        """
+        value = exc if isinstance(exc, BaseException) else exc()
+
+        try:
+            self.start_result = (
+                self.context.run(self.coro.throw, type(value), value)
+                if self.context
+                else self.coro.throw(type(value), value)
+            ), None
+        except BaseException as exception:
+            self.start_result = (None, exception)
+        return await self
+
+    @overload
+    def throw(self, exc: Type[BaseException]) -> T_co:
+        ...
+
+    @overload
+    def throw(self, exc: BaseException) -> T_co:
+        ...
+
+    def throw(
+        self, exc: Union[Type[BaseException], BaseException], tries: int = 1
+    ) -> T_co:
+        """
+        Throw an exception into the started coroutine. If the coroutine fails to
+        exit, the exception will be re-thrown, up to 'tries' times.  If the coroutine
+        handles the error and returns, the value is returned
+        """
+        value = exc if isinstance(exc, BaseException) else exc()
+        for i in range(tries):
+            try:
+                self.coro.throw(type(value), value)
+            except StopIteration as err:
+                return cast(T_co, err.value)
+        else:
+            raise RuntimeError(f"coroutine ignored {type(value).__name__}")
+
     def close(self) -> None:
-        self.coro.close()
+        """
+        Close the coroutine.  It must immediatly exit.
+        """
         self.start_result = None
+        self.coro.close()
+
+    async def aclose(self) -> None:
+        """
+        Close the coroutine, throwing a GeneratorExit() into it if it is not done.
+        It may perform async cleanup before exiting.
+        """
+        if self.start_result is None:
+            return
+        if self.done():
+            self.start_result = None
+            return
+        try:
+            await self.athrow(GeneratorExit())
+        except GeneratorExit:
+            pass
 
     def done(self) -> bool:
         """returns true if the coroutine finished without blocking"""
@@ -248,7 +334,7 @@ class CoroStart(Awaitable[T_co]):
 
     async def as_coroutine(self) -> T_co:
         """
-        Continue execution of the coroutine that was started by start()
+        Continue execution of the coroutine that was started by start().
         Returns a coroutine which can be awaited
         """
         return await self
@@ -281,7 +367,7 @@ class CoroStart(Awaitable[T_co]):
         if self.done():
             return self.as_future()
         else:
-            return self.as_coroutine()
+            return self
 
 
 async def coro_await(coro: CoroLike[T], *, context: Optional[Context] = None) -> T:
@@ -415,3 +501,54 @@ def awaitmethod(
         return coro_iter(func(self))
 
     return wrapper
+
+
+@overload
+def coro_sync(coro: Coroutine[Any, Any, T]) -> T:
+    ...
+
+
+@overload
+def coro_sync(coro: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
+    ...
+
+
+def coro_sync(
+    coro: Union[Coroutine[Any, Any, T], Callable[P, Coroutine[Any, Any, T]]]
+) -> Union[T, Callable[P, T]]:
+
+    """Runs a corouting synchronlously.  If the coroutine blocks, a
+    SynchronousError is raised.
+
+    Can also be used as a decorator for an async function.
+    """
+    if iscoroutinefunction(coro):
+        # we are a decorator
+        coro2 = cast(Callable[..., Coroutine[Any, Any, T]], coro)
+
+        @functools.wraps(coro)
+        def helper(*args: Any, **kwargs: Any) -> T:
+            return coro_sync(coro2(*args, **kwargs))
+
+        return helper
+    coro = cast(Coroutine[Any, Any, T], coro)
+    # We are running a coroutine synchronously
+    start = CoroStart[T](coro)
+    if start.done():
+        return start.result()
+    # kill the coroutine
+    try:
+        # we can't use GeneratorExit because that gets special handling and
+        # a traceback is not collected.
+        start.throw(CoroutineAbort())
+    except BaseException as err:
+        raise SynchronousError("coroutine failed to complete synchronously") from err
+    else:
+        raise SynchronousError(
+            "coroutine failed to complete synchronously (caught BaseException)"
+        )
+    finally:
+        try:
+            start.close()
+        except RuntimeError:
+            pass
