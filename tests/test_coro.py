@@ -495,7 +495,6 @@ class TestCoroRun:
             await sleep(t)
 
     async def cleanupper(self):
-        """A an async function which does async cleanup when interrupted"""
         try:
             await self.sleep(0)
         finally:
@@ -507,6 +506,13 @@ class TestCoroRun:
             await self.sleep(0)
         except BaseException:
             pass
+
+    async def noexit(self):
+        while True:
+            try:
+                await self.sleep(0)
+            except BaseException:
+                pass
 
     async def simple(self):
         return "simple"
@@ -539,6 +545,11 @@ class TestCoroRun:
             self.sync_genexit()
         assert err.match("failed to complete synchronously")
         assert err.match("caught BaseException")
+
+    def test_noexit(self):
+        with pytest.raises(asynkit.SynchronousError) as err:
+            asynkit.coro_sync(self.noexit())
+        assert err.match("failed to complete synchronously")
 
 
 class TestCoroAwait:
