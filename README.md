@@ -7,7 +7,7 @@ way Python's `asyncio` module does things.
 
 - Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
 - Utility classes such as `GeneratorObject`
-- Coroutine helpers such as `coro_iter()` and the `awaitmethod()` decorator
+- Coroutine helpers such as `coro_sync()`, `coro_iter()` and the `awaitmethod()` decorator
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
@@ -104,9 +104,68 @@ just as would happen if it were directly turned into a `Task`.
 
 `func_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
+## `coro_sync()` - Running coroutines synchronously
+
+If you are writing code which should work both synchronously and asynchronously,
+you can now write the code fully _async_ and then syn it _synchronously_ in the absence
+of an event loop.  Should the code cause any async features to be triggered, an exception is raised.  This helps avoid writing duplicate code.
+
+```python
+async def get_processed_data(datagetter):
+    data = datagetter()  # could be an async callback
+    data = await data if isawaitable(data) else data
+    return process_data(data)
+    
+# will raise SynchronousError if it datagetter to be async
+def static_get_processed_data(datagetter):
+    return asynkit.coro_sync(combine_stuff(cb1, cb2))
+```
+
+This sort of code might previously have been written thus:
+```python
+# may return an awaitable
+def get_processed_data(datagetter):
+    data = datagetter()
+    if isawaitable(data):
+        # return an awaitable helper function
+        async def helper():
+            data = await data
+            return process_data(await data)
+        return helper
+    return process_data(data)  # duplication
+    
+async def async_get_processed_data(datagetter):
+    r = get_processed_data(datagetter)
+    return await r if isawaitable(r) else r
+
+def sync_get_processed_data(datagetter):
+    r = get_processed_data(datagetter)
+    if isawaitable(r):
+        raise RuntimeError("callbacks failed to run statically")
+```
+
+The above pattern, writing async methods as sync and returning async helpers,
+is common in library code which needs to work both in synchronous and asynchronous
+context.  Needless to say, it is very convoluted, hard to debug and contains a lot
+of code duplication where the same logic is repeated inside async helper methods.
+
+Using `coro_sync()` it is possible to write the entire logic as `async` methods and
+then selectively fail if the logic tries to invoke any truly async operations.
+
+`coro_sync()` can also be applied as a decorator:
+
+```python
+@asynkit.coro_sync
+async def sync_function():
+    return "look ma, no async!"
+
+assert sync_function().contains("look")
+```
+
+
 ## `CoroStart`
 
-This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. 
+This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` and `coro_sync()` functions. 
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
 an exception.  It can subsequently be _awaited_ to retreive the result.
 
