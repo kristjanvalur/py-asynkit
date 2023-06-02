@@ -123,7 +123,7 @@ async def get_processed_data(datagetter):
 
 
 # will raise SynchronousError if it datagetter to be async
-def static_get_processed_data(datagetter):
+def sync_get_processed_data(datagetter):
     return asynkit.coro_sync(combine_stuff(cb1, cb2))
 ```
 
@@ -136,7 +136,7 @@ def get_processed_data(datagetter):
         # return an awaitable helper function
         async def helper():
             data = await data
-            return process_data(await data)
+            return process_data(data)
 
         return helper
     return process_data(data)  # duplication
@@ -150,7 +150,8 @@ async def async_get_processed_data(datagetter):
 def sync_get_processed_data(datagetter):
     r = get_processed_data(datagetter)
     if isawaitable(r):
-        raise RuntimeError("callbacks failed to run statically")
+        raise RuntimeError("callbacks failed to run synchronously")
+    return r
 ```
 
 The above pattern, writing async methods as sync and returning async helpers,
