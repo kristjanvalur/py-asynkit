@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import types
+from contextlib import asynccontextmanager
 from contextvars import ContextVar, copy_context
 from typing import Any
 from unittest.mock import Mock
@@ -10,6 +11,18 @@ from anyio import Event, create_task_group, sleep
 
 import asynkit
 import asynkit.tools
+
+try:
+    from contextlib import aclosing  # type: ignore[attr-defined]
+except ImportError:
+
+    @asynccontextmanager
+    async def aclosing(obj):
+        try:
+            yield obj
+        finally:
+            await obj.aclose()
+
 
 eager_var: ContextVar[str] = ContextVar("eager_var")
 
@@ -167,11 +180,13 @@ class TestCoroStart:
         return log
 
     async def coro1_nb(self, log):
+        self.gen_exit = False
         log.append(1)
         log.append(2)
         return log
 
     async def coro2(self, log):
+        self.gen_exit = False
         1 / 0
 
     def get_coro1(self, block):
@@ -332,6 +347,21 @@ class TestCoroStart:
         cont.close()
         if block:
             assert self.gen_exit is True
+
+    async def test_closing(self, block):
+        coro, _ = self.get_coro1(block)
+        async with aclosing(asynkit.CoroStart(coro([]))) as cs:
+            return await cs
+
+    async def test_closing_abort(self, block):
+        coro, _ = self.get_coro1(block)
+        async with aclosing(asynkit.CoroStart(coro([]))) as cs:
+            assert not self.gen_exit
+            if cs.done():
+                return await cs
+        if block:
+            #  Assert that a generator exit was sent into the coroutine
+            assert self.gen_exit
 
 
 class TestCoroStartClose:
