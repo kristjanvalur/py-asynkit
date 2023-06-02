@@ -33,6 +33,7 @@ async def get_slow_remote_data():
     result = await execute_remote_request()
     return result.important_data
 
+
 async def my_complex_thing():
     # kick off the request as soon as possible
     future = get_slow_remote_data()
@@ -57,22 +58,26 @@ still being able to asynchronously wait for the result.
 `asynckit.eager` can also be used directly on the returned coroutine:
 ```python
 log = []
+
+
 async def test():
     log.append(1)
-    await asyncio.sleep(0.2) # some long IO
+    await asyncio.sleep(0.2)  # some long IO
     log.append(2)
+
 
 async def caller(convert):
     del log[:]
     log.append("a")
     future = convert(test())
     log.append("b")
-    await asyncio.sleep(0.1) # some other IO
+    await asyncio.sleep(0.1)  # some other IO
     log.append("c")
     await future
 
+
 # do nothing
-asyncio.run(caller(lambda c:c))
+asyncio.run(caller(lambda c: c))
 assert log == ["a", "b", "c", 1, 2]
 
 # Create a Task
@@ -115,7 +120,8 @@ async def get_processed_data(datagetter):
     data = datagetter()  # could be an async callback
     data = await data if isawaitable(data) else data
     return process_data(data)
-    
+
+
 # will raise SynchronousError if it datagetter to be async
 def static_get_processed_data(datagetter):
     return asynkit.coro_sync(combine_stuff(cb1, cb2))
@@ -131,12 +137,15 @@ def get_processed_data(datagetter):
         async def helper():
             data = await data
             return process_data(await data)
+
         return helper
     return process_data(data)  # duplication
-    
+
+
 async def async_get_processed_data(datagetter):
     r = get_processed_data(datagetter)
     return await r if isawaitable(r) else r
+
 
 def sync_get_processed_data(datagetter):
     r = get_processed_data(datagetter)
@@ -158,6 +167,7 @@ then selectively fail if the logic tries to invoke any truly async operations.
 @asynkit.coro_sync
 async def sync_function():
     return "look ma, no async!"
+
 
 assert sync_function().contains("look")
 ```
@@ -212,11 +222,13 @@ object to activate:
 ```python
 var1 = contextvars.ContextVar("myvar")
 
+
 async def my_method():
     var1.set("foo")
-    
+
+
 async def main():
-    context=contextvars.copy_context()
+    context = contextvars.copy_context()
     var1.set("bar")
     await asynkit.coro_await(my_method(), context=context)
     # the coroutine didn't modify _our_ context
@@ -249,12 +261,15 @@ class Awaitable:
         return self.count
         self.count += 1
 
+
 async def main():
     async def sleeper():
         await asyncio.sleep(1)
+
     a = Awaitable(sleeper)
     assert (await a) == 0  # sleep once
     assert (await a) == 1  # sleep again
+
 
 asyncio.run(main())
 ```
@@ -272,6 +287,7 @@ async def coro(monitor):
     await asyncio.sleep(0)
     await monitor.oob("dolly")
     return "done"
+
 
 async def runner():
     m = Monitor()
@@ -324,24 +340,25 @@ Consider the following scenario. A _parser_ wants to read a line from a buffer, 
 this to the monitor:
 
 ```python
-    async def readline(m, buffer):
-        l = buffer.readline()
-        while not l.endswith("\n"):
-            await m.oob(None)  # ask for more data in the buffer
-            l += buffer.readline()
-        return l
+async def readline(m, buffer):
+    l = buffer.readline()
+    while not l.endswith("\n"):
+        await m.oob(None)  # ask for more data in the buffer
+        l += buffer.readline()
+    return l
 
-    async def manager(buffer, io):
-        m = Monitor()
-        a = m.awaitable(readline(m, buffer))
-        while True:
+
+async def manager(buffer, io):
+    m = Monitor()
+    a = m.awaitable(readline(m, buffer))
+    while True:
+        try:
+            return await a
+        except OOBData:
             try:
-                return await a
-            except OOBData:
-                try:
-                    buffer.fill(await io.read())
-                except Exception as exc:
-                    await m.athrow(c, exc)
+                buffer.fill(await io.read())
+            except Exception as exc:
+                await m.athrow(c, exc)
 ```
 
 In this example, `readline()` is trivial, but if it were a complicated parser with hierarchical
@@ -360,11 +377,13 @@ The `GeneratorObject` leverages the `Monitor.oob()` method to deliver the _ayiel
 ```python
 async def generator(gen_obj):
     # yield directly to the generator
-    await gen_obj.ayield(1):
+    await gen_obj.ayield(1)
     # have someone else yield to it
     async def helper():
         await gen_obj.ayield(2)
+
     await asyncio.create_task(helper())
+
 
 async def runner():
     gen_obj = GeneratorObject()
@@ -436,7 +455,9 @@ A few functions are added to help working with tasks.
 
 The following identity applies:
 ```python
-asyncio.all_tasks() = asynkit.runnable_tasks() | asynkit.blocked_tasks() | asyncio.current_task()
+asyncio.all_tasks() = (
+    asynkit.runnable_tasks() | asynkit.blocked_tasks() | asyncio.current_task()
+)
 ```
 
 ### `runnable_tasks(loop=None)`
@@ -519,11 +540,13 @@ behaviour to task creation.  It will return an `EagerTaskGroup` context manager:
 from asynkit.experimental.anyio import create_eager_task_group
 from anyio import run, sleep
 
+
 async def func(task_status):
     print("hello")
-    task_status->started("world")
+    task_status.started("world")
     await sleep(0.01)
     print("goodbye")
+
 
 async def main():
 
@@ -531,7 +554,8 @@ async def main():
         start = tg.start(func)
         print("fine")
         print(await start)
-    print ("world")
+    print("world")
+
 
 run(main, backend="asyncio")
 ```
