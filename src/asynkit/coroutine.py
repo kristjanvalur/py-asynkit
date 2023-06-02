@@ -4,6 +4,7 @@ import inspect
 import sys
 import types
 from contextvars import Context, copy_context
+from inspect import iscoroutinefunction
 from types import FrameType
 from typing import (
     Any,
@@ -38,7 +39,6 @@ __all__ = [
     "coro_is_finished",
     "coro_iter",
     "coro_sync",
-    "coro_run",
     "SynchronousError",
     "CoroutineAbort",
 ]
@@ -481,7 +481,31 @@ def awaitmethod(
     return wrapper
 
 
-def coro_run(coro: Coroutine[Any, Any, T]) -> T:
+@overload
+def coro_sync(coro: Coroutine[Any, Any, T]) -> T:
+    ...
+
+
+@overload
+def coro_sync(coro: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
+    ...
+
+
+def coro_sync(
+    coro: Union[Coroutine[Any, Any, T], Callable[P, Coroutine[Any, Any, T]]]
+) -> Union[T, Callable[P, T]]:
+
+    if iscoroutinefunction(coro):
+        # we are a decorator
+        coro2 = cast(Callable[..., Coroutine[Any, Any, T]], coro)
+
+        @functools.wraps(coro)
+        def helper(*args: Any, **kwargs: Any) -> T:
+            return coro_sync(coro2(*args, **kwargs))
+
+        return helper
+    coro = cast(Coroutine[Any, Any, T], coro)
+    # We are running a coroutine synchronously
     start = CoroStart[T](coro)
     if start.done():
         return start.result()
@@ -501,11 +525,3 @@ def coro_run(coro: Coroutine[Any, Any, T]) -> T:
             start.close()
         except RuntimeError:
             pass
-
-
-def coro_sync(afunc: Callable[..., Coroutine[Any, Any, T]]) -> Callable[..., T]:
-    @functools.wraps(afunc)
-    def helper(*args: Any, **kwargs: Any) -> T:
-        return coro_run(afunc(*args, **kwargs))
-
-    return helper

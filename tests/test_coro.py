@@ -335,6 +335,8 @@ class TestCoroStart:
 
 
 class TestCoroStartClose:
+    # A separate test class to test close semantics
+    # with no parametrization
 
     stage = [0]
 
@@ -522,7 +524,7 @@ class TestCoroRun:
         return await self.genexit()
 
     def test_simple(self):
-        assert asynkit.coro_run(self.simple()) == "simple"
+        assert asynkit.coro_sync(self.simple()) == "simple"
 
     def test_sync_simple(self):
         assert self.sync_simple() == "simple"
@@ -884,28 +886,3 @@ class TestCoroIter:
         assert step == 2
         assert err.value.value == "foo"
         c.close()
-
-
-class TestCoroClose:
-    async def cleanupper(self):
-        """A an async function which does async cleanup when interrupted"""
-        try:
-            await sleep(0)
-        finally:
-            await sleep(0)
-
-    async def test_close(self):
-        c = self.cleanupper()
-        starter = asynkit.CoroStart(c)
-        assert not starter.done()
-        with pytest.raises(RuntimeError) as err:
-            starter.close()
-        assert err.match("coroutine ignored GeneratorExit")
-
-    async def test_throw(self):
-        c = self.cleanupper()
-        starter = asynkit.CoroStart(c)
-        assert not starter.done()
-        await starter.athrow(ZeroDivisionError())
-        # with pytest.raises(ZeroDivisionError) as err:
-        # assert err.match("coroutine ignored GeneratorExit")
