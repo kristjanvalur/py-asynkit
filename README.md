@@ -108,7 +108,7 @@ just as would happen if it were directly turned into a `Task`.
 
 This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` function. 
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
-an exception.
+an exception.  It can subsequently be _awaited_ to retreive the result.
 
 Similarly to a `Future`, it has these methods:
 
@@ -121,10 +121,10 @@ Similarly to a `Future`, it has these methods:
 - `as_coroutine()` - Returns an coroutine encapsulating the original coroutine's _continuation_.
   If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it continues the original coroutine's execution.
 - `as_future()` - If `done()`, returns a `Future` holding its result, otherwise, a `RuntimeError`
-  is raised. This is suitable for using with
-  `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.
-- `as_awaitable()` - If `done()`, returns `as_future()`, else returns `as_coroutine()`.
-  This is a convenience method for use with functions such as `asyncio.gather()`.
+  is raised.
+- `as_awaitable()` - If `done()`, returns `as_future()`, else returns `self`.
+  This is a convenience method for use with functions such as `asyncio.gather()`, which would otherwise wrap a completed coroutine in a `Task`.
+- `__await__()` - a magic method making it directly _awaitable_.
 
 In addition it has:
 

@@ -334,7 +334,7 @@ class CoroStart(Awaitable[T_co]):
 
     async def as_coroutine(self) -> T_co:
         """
-        Continue execution of the coroutine that was started by start()
+        Continue execution of the coroutine that was started by start().
         Returns a coroutine which can be awaited
         """
         return await self
@@ -367,7 +367,7 @@ class CoroStart(Awaitable[T_co]):
         if self.done():
             return self.as_future()
         else:
-            return self.as_coroutine()
+            return self
 
 
 async def coro_await(coro: CoroLike[T], *, context: Optional[Context] = None) -> T:

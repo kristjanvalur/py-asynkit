@@ -299,7 +299,7 @@ class TestCoroStart:
         log.append("a")
         awaitable = cs.as_awaitable()
         if block:
-            assert inspect.iscoroutine(awaitable)
+            assert inspect.isawaitable(awaitable)
         else:
             assert isinstance(awaitable, asyncio.Future)
         assert await awaitable == expect
