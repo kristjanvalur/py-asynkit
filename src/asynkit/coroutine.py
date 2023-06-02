@@ -50,7 +50,6 @@ T = TypeVar("T")
 S = TypeVar("S")
 P = ParamSpec("P")
 T_co = TypeVar("T_co", covariant=True)
-CoroLike = Union[Coroutine[Any, Any, T], Generator[Any, Any, T]]
 Suspendable = Union[Coroutine, Generator, AsyncGenerator]
 
 """
@@ -164,7 +163,7 @@ class CoroStart(Awaitable[T_co]):
 
     def __init__(
         self,
-        coro: CoroLike[T_co],
+        coro: Coroutine[Any, Any, T_co],
         *,
         context: Optional[Context] = None,
     ):
@@ -370,7 +369,9 @@ class CoroStart(Awaitable[T_co]):
             return self
 
 
-async def coro_await(coro: CoroLike[T], *, context: Optional[Context] = None) -> T:
+async def coro_await(
+    coro: Coroutine[Any, Any, T], *, context: Optional[Context] = None
+) -> T:
     """
     A simple await, using the partial run primitives, equivalent to
     `async def coro_await(coro): return await coro`
