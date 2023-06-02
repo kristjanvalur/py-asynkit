@@ -124,7 +124,23 @@ Similarly to a `Future`, it has these methods:
   is raised. This is suitable for using with
   `asyncio.gather()` to avoid wrapping the result of an already completed coroutine into a `Task`.
 - `as_awaitable()` - If `done()`, returns `as_future()`, else returns `as_coroutine()`.
-  This is a convenience method for use with functions such as `asyncio.gather()`. 
+  This is a convenience method for use with functions such as `asyncio.gather()`.
+
+In addition it has:
+
+- `aclose()` - If `not done()`, will throw a `GeneratorError` into the coroutine and wait for it to finish.  Otherwise does nothing.
+- `athrow(exc)` - If `not done()`, will throw the given error into the coroutine and wait for it to raise or return a value.
+- `close()` and `throw(exc)` - Synchronous versions of the above, will raise `RuntimeError` if the coroutine does not immediately exit.
+
+This means that a context manager such as `aclosing()` can be used to ensure
+that the coroutine is cleaned up in case of errors before it is awaited:
+
+```python
+# start foo() and run until it blocks
+async with aclosing(CoroStart(foo())) as coro:
+    ...  # do things, which may result in an error
+    return await coro
+```
 
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
