@@ -187,13 +187,12 @@ Similarly to a `Future`, it has these methods:
 
  But more importly it has these:
 
-- `as_coroutine()` - Returns an coroutine encapsulating the original coroutine's _continuation_.
-  If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it continues the original coroutine's execution.
+- `__await__()` - A magic method making it directly _awaitable_. If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it awaits the original coroutine's continued execution
+- `as_coroutine()` - A helper which returns a proper _coroutine_ object to await the `CoroStart`
 - `as_future()` - If `done()`, returns a `Future` holding its result, otherwise, a `RuntimeError`
   is raised.
 - `as_awaitable()` - If `done()`, returns `as_future()`, else returns `self`.
   This is a convenience method for use with functions such as `asyncio.gather()`, which would otherwise wrap a completed coroutine in a `Task`.
-- `__await__()` - a magic method making it directly _awaitable_.
 
 In addition it has:
 
