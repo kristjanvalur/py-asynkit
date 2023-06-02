@@ -496,19 +496,15 @@ class TestCoroRun:
         """A an async function which does async cleanup when interrupted"""
         try:
             await self.sleep(0)
-        except ZeroDivisionError:
-            pass
         finally:
             await self.sleep(0)
 
-    async def normal(self):
+    async def genexit(self):
         """A an async function which does async cleanup when interrupted"""
         try:
             await self.sleep(0)
-        except ZeroDivisionError:
+        except BaseException:
             pass
-        finally:
-            await self.sleep(0)
 
     async def simple(self):
         return "simple"
@@ -517,11 +513,30 @@ class TestCoroRun:
     async def sync_simple(self):
         return await self.simple()
 
+    @asynkit.coro_sync
+    async def sync_cleanup(self):
+        return await self.cleanupper()
+
+    @asynkit.coro_sync
+    async def sync_genexit(self):
+        return await self.genexit()
+
     def test_simple(self):
         assert asynkit.coro_run(self.simple()) == "simple"
 
     def test_sync_simple(self):
         assert self.sync_simple() == "simple"
+
+    def test_cleanup(self):
+        with pytest.raises(asynkit.SynchronousError) as err:
+            self.sync_cleanup()
+        assert err.match("failed to complete synchronously")
+
+    def test_genexit(self):
+        with pytest.raises(asynkit.SynchronousError) as err:
+            self.sync_genexit()
+        assert err.match("failed to complete synchronously")
+        assert err.match("caught BaseException")
 
 
 class TestCoroAwait:

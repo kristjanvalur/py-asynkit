@@ -39,6 +39,8 @@ __all__ = [
     "coro_iter",
     "coro_sync",
     "coro_run",
+    "SynchronousError",
+    "CoroutineAbort",
 ]
 
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
@@ -53,6 +55,19 @@ Suspendable = Union[Coroutine, Generator, AsyncGenerator]
 """
 Tools and utilities for advanced management of coroutines
 """
+
+
+class SynchronousError(RuntimeError):
+    """
+    An exception thrown when a coroutine does not complete
+    synchronously.
+    """
+
+
+class CoroutineAbort(BaseException):
+    """
+    Exception thrown into coroutine to abort it.
+    """
 
 
 # Helpers to find if a coroutine (or a generator as created by types.coroutine)
@@ -472,12 +487,15 @@ def coro_run(coro: Coroutine[Any, Any, T]) -> T:
         return start.result()
     # kill the coroutine
     try:
-        start.throw(GeneratorExit())
-        raise RuntimeError(
-            "coroutine failed to complete synchronously (handled GeneratoExit)"
-        )
+        # we can't use GeneratorExit because that gets special handling and
+        # a traceback is not collected.
+        start.throw(CoroutineAbort())
     except BaseException as err:
-        raise RuntimeError("coroutine failed to complete synchronously") from err
+        raise SynchronousError("coroutine failed to complete synchronously") from err
+    else:
+        raise SynchronousError(
+            "coroutine failed to complete synchronously (caught BaseException)"
+        )
     finally:
         try:
             start.close()
