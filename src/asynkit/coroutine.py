@@ -16,6 +16,7 @@ from typing import (
     Iterator,
     Optional,
     Tuple,
+    Type,
     TypeVar,
     Union,
     cast,
@@ -233,11 +234,21 @@ class CoroStart(Awaitable[T_co]):
                 except StopIteration as exc:
                     return cast(T_co, exc.value)
 
-    async def athrow(self, value: BaseException) -> T_co:
+    @overload
+    async def athrow(self, exc: Type[BaseException]) -> T_co:
+        ...
+
+    @overload
+    async def athrow(self, exc: BaseException) -> T_co:
+        ...
+
+    async def athrow(self, exc: Union[Type[BaseException], BaseException]) -> T_co:
         """
         Throw an exception into a started coroutine if it is not done, instead
         of continuing it.
         """
+        value = exc if isinstance(exc, BaseException) else exc()
+
         try:
             self.start_result = (
                 self.context.run(self.coro.throw, type(value), value)
@@ -248,12 +259,23 @@ class CoroStart(Awaitable[T_co]):
             self.start_result = (None, exception)
         return await self
 
-    def throw(self, value: BaseException, tries: int = 1) -> T_co:
+    @overload
+    def throw(self, exc: Type[BaseException]) -> T_co:
+        ...
+
+    @overload
+    def throw(self, exc: BaseException) -> T_co:
+        ...
+
+    def throw(
+        self, exc: Union[Type[BaseException], BaseException], tries: int = 1
+    ) -> T_co:
         """
         Throw an exception into the started coroutine. If the coroutine fails to
         exit, the exception will be re-thrown, up to 'tries' times.  If the coroutine
         handles the error and returns, the value is returned
         """
+        value = exc if isinstance(exc, BaseException) else exc()
         for i in range(tries):
             try:
                 self.coro.throw(type(value), value)
@@ -495,6 +517,11 @@ def coro_sync(
     coro: Union[Coroutine[Any, Any, T], Callable[P, Coroutine[Any, Any, T]]]
 ) -> Union[T, Callable[P, T]]:
 
+    """Runs a corouting synchronlously.  If the coroutine blocks, a
+    SynchronousError is raised.
+
+    Can also be used as a decorator for an async function.
+    """
     if iscoroutinefunction(coro):
         # we are a decorator
         coro2 = cast(Callable[..., Coroutine[Any, Any, T]], coro)

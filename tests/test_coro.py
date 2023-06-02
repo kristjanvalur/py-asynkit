@@ -439,7 +439,7 @@ class TestCoroStartClose:
         starter = asynkit.CoroStart(c)
         assert self.stage[0] == 1
         assert not starter.done()
-        result = await starter.athrow(ZeroDivisionError())
+        result = await starter.athrow(ZeroDivisionError)
         assert self.stage[0] == 4
         assert result == "result"
 
@@ -463,7 +463,7 @@ class TestCoroStartClose:
         assert self.stage[0] == 1
         assert not starter.done()
         with pytest.raises(asyncio.CancelledError):
-            starter.throw(asyncio.CancelledError(), tries=2)
+            starter.throw(asyncio.CancelledError, tries=2)
         assert self.stage[0] == 2
 
     def test_throw_simple(self):
