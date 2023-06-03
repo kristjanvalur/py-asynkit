@@ -1,3 +1,6 @@
+* Relase 0.9.0
+* Add `coro_sync`
+* Add `CoroStart.aclose()` and related
 * Release 0.8.0
 * Refactor, support scheduling functions for vanilla asyncio loop
 * Release 0.7.0
