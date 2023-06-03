@@ -112,22 +112,23 @@ just as would happen if it were directly turned into a `Task`.
 ## `coro_sync()` - Running coroutines synchronously
 
 If you are writing code which should work both synchronously and asynchronously,
-you can now write the code fully _async_ and then syn it _synchronously_ in the absence
-of an event loop.  Should the code cause any async features to be triggered, an exception is raised.  This helps avoid writing duplicate code.
+you can now write the code fully _async_ and then run it _synchronously_ in the absence
+of an event loop.  As long as the code doesn't _block_ (await unfinished _futures_) and doesn't try to access the event loop, it can successfully be executed.  This helps avoid writing duplicate code.
 
 ```python
-async def get_processed_data(datagetter):
+async def async_get_processed_data(datagetter):
     data = datagetter()  # could be an async callback
     data = await data if isawaitable(data) else data
     return process_data(data)
 
 
-# will raise SynchronousError if it datagetter to be async
+# raises SynchronousError if datagetter blocks
 def sync_get_processed_data(datagetter):
-    return asynkit.coro_sync(combine_stuff(cb1, cb2))
+    return asynkit.coro_sync(async_get_processed_data(datagetter))
 ```
 
 This sort of code might previously have been written thus:
+
 ```python
 # may return an awaitable
 def get_processed_data(datagetter):
@@ -160,17 +161,24 @@ context.  Needless to say, it is very convoluted, hard to debug and contains a l
 of code duplication where the same logic is repeated inside async helper methods.
 
 Using `coro_sync()` it is possible to write the entire logic as `async` methods and
-then selectively fail if the logic tries to invoke any truly async operations.
+then simply fail if the code tries to invoke any truly async operations.
+If the invoked coroutine blocks, a `SynchronousError` is raised _from_ a `SynchronousAbort` exception which
+contains a traceback.  This makes it easy to pinpoint the location in the code where the
+async code blocked.  If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.  
+
 
 `coro_sync()` can also be applied as a decorator:
 
-```python
-@asynkit.coro_sync
-async def sync_function():
-    return "look ma, no async!"
-
-
-assert sync_function().contains("look")
+```pycon
+>>> @asynkit.coro_sync           
+... async def sync_function():
+...     async def async_function():
+...         return "look, no async!"
+...     return await async_function()
+...
+>>> sync_function()
+'look, no async!'
+>>>
 ```
 
 
@@ -295,6 +303,7 @@ async def runner():
     while True:
         try:
             print(await m.aawait(c))
+            break
         except OOBData as oob:
             print(oob.data)
 ```
@@ -321,7 +330,8 @@ m = Monitor()
 a = m.awaitable(coro(m))
 while True:
     try:
-        return await a
+        await a
+        break
     except OOBData as oob:
         handle_oob(oob.data)
 ```

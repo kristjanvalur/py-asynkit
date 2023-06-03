@@ -41,7 +41,7 @@ __all__ = [
     "coro_iter",
     "coro_sync",
     "SynchronousError",
-    "CoroutineAbort",
+    "SynchronousAbort",
 ]
 
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
@@ -64,7 +64,7 @@ class SynchronousError(RuntimeError):
     """
 
 
-class CoroutineAbort(BaseException):
+class SynchronousAbort(BaseException):
     """
     Exception thrown into coroutine to abort it.
     """
@@ -541,7 +541,7 @@ def coro_sync(
     try:
         # we can't use GeneratorExit because that gets special handling and
         # a traceback is not collected.
-        start.throw(CoroutineAbort())
+        start.throw(SynchronousAbort())
     except BaseException as err:
         raise SynchronousError("coroutine failed to complete synchronously") from err
     else:
