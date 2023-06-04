@@ -181,6 +181,9 @@ async code blocked.  If the code tries to access the event loop, e.g. by creatin
 >>>
 ```
 
+the `ensure_corofunc()` utility can be used when passing callbacks to async
+code, to ensure that the callbacks are async.  This, with `coro_sync*()` can help integrating
+synchronous code with async middleware.
 
 ## `CoroStart`
 
