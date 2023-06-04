@@ -170,7 +170,7 @@ async code blocked.  If the code tries to access the event loop, e.g. by creatin
 `coro_sync()` can also be applied as a decorator:
 
 ```pycon
->>> @asynkit.coro_sync           
+>>> @asynkit.coro_sync
 ... async def sync_function():
 ...     async def async_function():
 ...         return "look, no async!"
@@ -181,6 +181,34 @@ async code blocked.  If the code tries to access the event loop, e.g. by creatin
 >>>
 ```
 
+the `ensure_corofunc()` utility can be used when passing callbacks to async
+code, to ensure that the callbacks are async.  This, with `coro_sync()`, can help integrate
+synchronous code with async middleware:
+
+```python
+def sync_client(sync_callback):
+    middleware = AsyncMiddleware(asynkit.ensure_corofunc(sync_callback))
+    return asynkit.coro_sync(middleware.run())
+```
+
+Using this pattern, one can avoid writing special synchronous versions of middleware, or having
+_hybrid_ methods which _optionally_ return awaitables:
+
+```python
+# the hybrid method antipattern
+def hybrid_method(callable):
+    """A hybrid method, possibly returning awaitable"""
+    data = callable()
+    if isawaitable(data):
+        # inner async method with duplicate code
+        async def async_helper(data):
+            data2 = await data
+            return process_data(data2)
+
+        return async_helper
+    else:
+        return process_data(data)  # duplicate code
+```
 
 ## `CoroStart`
 

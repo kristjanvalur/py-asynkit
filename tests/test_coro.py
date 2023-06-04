@@ -927,3 +927,14 @@ class TestCoroIter:
         assert step == 2
         assert err.value.value == "foo"
         c.close()
+
+
+async def test_ensure_corofunc():
+    def sync_method():
+        return "foo"
+
+    async def async_method():
+        return "bar"
+
+    assert await asynkit.ensure_corofunc(sync_method)() == "foo"
+    assert await asynkit.ensure_corofunc(async_method)() == "bar"

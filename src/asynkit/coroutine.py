@@ -34,6 +34,7 @@ __all__ = [
     "coro_eager",
     "func_eager",
     "eager",
+    "ensure_corofunc",
     "coro_get_frame",
     "coro_is_new",
     "coro_is_suspended",
@@ -553,3 +554,19 @@ def coro_sync(
             start.close()
         except RuntimeError:
             pass
+
+
+def ensure_corofunc(
+    callable: Union[Callable[P, T], Callable[P, Coroutine[Any, Any, T]]]
+) -> Callable[P, Coroutine[Any, Any, T]]:
+    """Make a callable async, so that the result needs to be awaited.
+    Useful for adding synchronous callbacs to async code.
+    """
+    if inspect.iscoroutinefunction(callable):
+        return callable
+
+    async def helper(*args: P.args, **kwargs: P.kwargs) -> T:
+        callable2 = cast(Callable[P, T], callable)
+        return callable2(*args, **kwargs)
+
+    return helper
