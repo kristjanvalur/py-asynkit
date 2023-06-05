@@ -16,7 +16,7 @@ try:
     from contextlib import aclosing  # type: ignore[attr-defined]
 except ImportError:
 
-    @asynccontextmanager
+    @asynccontextmanager  # type: ignore[no-redef]
     async def aclosing(obj):
         try:
             yield obj

@@ -75,6 +75,7 @@ module = [
     "asynkit.loop.eventloop",
     "asynkit.compat",
     "asynkit.tools",
+    "tests.test_coro",
 ]
 warn_unused_ignores=false
 

@@ -506,7 +506,6 @@ def awaitmethod(
 
 
 def coro_sync(coro: Coroutine[Any, Any, T]) -> T:
-
     """Runs a corouting synchronlously.  If the coroutine blocks, a
     SynchronousError is raised.
     """
