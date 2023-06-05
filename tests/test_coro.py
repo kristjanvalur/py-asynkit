@@ -541,7 +541,10 @@ class TestCoroRun:
         while True:
             try:
                 await self.sleep(0)
+            except GeneratorExit:
+                raise  # sent by asyncio
             except BaseException:
+                # ignore our SyncronousAbort error
                 pass
 
     async def simple(self):
