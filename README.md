@@ -166,11 +166,11 @@ If the invoked coroutine blocks, a `SynchronousError` is raised _from_ a `Synchr
 contains a traceback.  This makes it easy to pinpoint the location in the code where the
 async code blocked.  If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.  
 
-
-`coro_sync()` can also be applied as a decorator:
+The `syncfunction()` decorator can be used to automatically wrap an async function
+so that it is executed using `coro_sync()`:
 
 ```pycon
->>> @asynkit.coro_sync
+>>> @asynkit.syncfunction
 ... async def sync_function():
 ...     async def async_function():
 ...         return "look, no async!"
@@ -181,14 +181,15 @@ async code blocked.  If the code tries to access the event loop, e.g. by creatin
 >>>
 ```
 
-the `ensure_corofunc()` utility can be used when passing callbacks to async
-code, to ensure that the callbacks are async.  This, with `coro_sync()`, can help integrate
-synchronous code with async middleware:
+the `asyncfunction()` utility can be used when passing callbacks to async
+code, to ensure that the callbacks are async.  This, with `syncfunction()` and `coro_sync()`,
+can be used to integrate synchronous code with async middleware:
 
 ```python
-def sync_client(sync_callback):
-    middleware = AsyncMiddleware(asynkit.ensure_corofunc(sync_callback))
-    return asynkit.coro_sync(middleware.run())
+@asynkit.syncfunction
+async def sync_client(sync_callback):
+    middleware = AsyncMiddleware(asynkit.asyncfunction(sync_callback))
+    return await middleware.run()
 ```
 
 Using this pattern, one can avoid writing special synchronous versions of middleware, or having

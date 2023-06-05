@@ -1,3 +1,4 @@
+* rename `ensure_corofunc` to `asyncfunction`, add `syncfunction`
 * Relase 0.9.1
 * Add `ensure_corofunc`
 * Relase 0.9.0

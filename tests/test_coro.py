@@ -550,15 +550,15 @@ class TestCoroRun:
     async def simple(self):
         return "simple"
 
-    @asynkit.coro_sync
+    @asynkit.syncfunction
     async def sync_simple(self):
         return await self.simple()
 
-    @asynkit.coro_sync
+    @asynkit.syncfunction
     async def sync_cleanup(self):
         return await self.cleanupper()
 
-    @asynkit.coro_sync
+    @asynkit.syncfunction
     async def sync_genexit(self):
         return await self.genexit()
 
@@ -932,12 +932,25 @@ class TestCoroIter:
         c.close()
 
 
-async def test_ensure_corofunc():
+async def test_async_function():
     def sync_method():
         return "foo"
 
-    async def async_method():
+    @asynkit.asyncfunction
+    def sync_method2():
         return "bar"
 
-    assert await asynkit.ensure_corofunc(sync_method)() == "foo"
-    assert await asynkit.ensure_corofunc(async_method)() == "bar"
+    assert await asynkit.asyncfunction(sync_method)() == "foo"
+    assert await sync_method2() == "bar"
+
+
+async def test_sync_function():
+    async def async_method():
+        return "foo"
+
+    @asynkit.syncfunction
+    async def async_method2():
+        return "bar"
+
+    assert asynkit.syncfunction(async_method)() == "foo"
+    assert async_method2() == "bar"

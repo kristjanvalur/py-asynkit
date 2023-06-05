@@ -29,7 +29,7 @@ def sync_client():
     def data_getter():
         return "hello"
 
-    middleware = AsyncMiddleWare(data_getter=asynkit.ensure_corofunc(data_getter))
+    middleware = AsyncMiddleWare(data_getter=asynkit.asyncfunction(data_getter))
     assert asynkit.coro_sync(middleware.get_processed_data()) == "hellohello"
 
 

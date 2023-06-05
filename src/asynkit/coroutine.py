@@ -4,7 +4,6 @@ import inspect
 import sys
 import types
 from contextvars import Context, copy_context
-from inspect import iscoroutinefunction
 from types import FrameType
 from typing import (
     Any,
@@ -34,7 +33,6 @@ __all__ = [
     "coro_eager",
     "func_eager",
     "eager",
-    "ensure_corofunc",
     "coro_get_frame",
     "coro_is_new",
     "coro_is_suspended",
@@ -43,6 +41,8 @@ __all__ = [
     "coro_sync",
     "SynchronousError",
     "SynchronousAbort",
+    "asyncfunction",
+    "syncfunction",
 ]
 
 PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
@@ -515,26 +515,11 @@ def coro_sync(coro: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
     ...
 
 
-def coro_sync(
-    coro: Union[Coroutine[Any, Any, T], Callable[P, Coroutine[Any, Any, T]]]
-) -> Union[T, Callable[P, T]]:
+def coro_sync(coro: Coroutine[Any, Any, T]) -> Union[T, Callable[P, T]]:
 
     """Runs a corouting synchronlously.  If the coroutine blocks, a
     SynchronousError is raised.
-
-    Can also be used as a decorator for an async function.
     """
-    if iscoroutinefunction(coro):
-        # we are a decorator
-        coro2 = cast(Callable[..., Coroutine[Any, Any, T]], coro)
-
-        @functools.wraps(coro)
-        def helper(*args: Any, **kwargs: Any) -> T:
-            return coro_sync(coro2(*args, **kwargs))
-
-        return helper
-    coro = cast(Coroutine[Any, Any, T], coro)
-    # We are running a coroutine synchronously
     start = CoroStart[T](coro)
     if start.done():
         return start.result()
@@ -556,17 +541,25 @@ def coro_sync(
             pass
 
 
-def ensure_corofunc(
-    callable: Union[Callable[P, T], Callable[P, Coroutine[Any, Any, T]]]
-) -> Callable[P, Coroutine[Any, Any, T]]:
-    """Make a callable async, so that the result needs to be awaited.
-    Useful for adding synchronous callbacs to async code.
+def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
+    """Make an async function synchronous, by invoking
+    `coro_sync()` on its coroutine.  Useful as a decorator.
     """
-    if inspect.iscoroutinefunction(callable):
-        return callable
 
+    @functools.wraps(func)
+    def helper(*args: P.args, **kwargs: P.kwargs) -> T:
+        return coro_sync(func(*args, **kwargs))
+
+    return helper
+
+
+def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
+    """Make a regular function async, so that its result needs to be awaited.
+    Useful when providing synchronous callbacks to async code.
+    """
+
+    @functools.wraps(func)
     async def helper(*args: P.args, **kwargs: P.kwargs) -> T:
-        callable2 = cast(Callable[P, T], callable)
-        return callable2(*args, **kwargs)
+        return func(*args, **kwargs)
 
     return helper
