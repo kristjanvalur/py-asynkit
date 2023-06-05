@@ -505,17 +505,7 @@ def awaitmethod(
     return wrapper
 
 
-@overload
 def coro_sync(coro: Coroutine[Any, Any, T]) -> T:
-    ...
-
-
-@overload
-def coro_sync(coro: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
-    ...
-
-
-def coro_sync(coro: Coroutine[Any, Any, T]) -> Union[T, Callable[P, T]]:
 
     """Runs a corouting synchronlously.  If the coroutine blocks, a
     SynchronousError is raised.
