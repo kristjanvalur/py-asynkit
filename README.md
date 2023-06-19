@@ -55,7 +55,7 @@ calling order is maintained as much as possible. We call this _depth-first-execu
 This allows you to prepare and dispatch long running operations __as soon as possible__ while
 still being able to asynchronously wait for the result.
 
-`asynckit.eager` can also be used directly on the returned coroutine:
+`asynkit.eager` can also be used directly on the returned coroutine:
 ```python
 log = []
 
@@ -276,7 +276,7 @@ class Awaitable:
         self.cofunc = cofunc
         self.count = 0
 
-    @asynckit.awaitmethod
+    @asynkit.awaitmethod
     async def __await__(self):
         await self.cofunc()
         return self.count
