@@ -117,7 +117,7 @@ of an event loop.  As long as the code doesn't _block_ (await unfinished _future
 
 ```python
 async def async_get_processed_data(datagetter):
-    data = datagetter()  # could be an async callback
+    data = datagetter()  # an optionally async callback
     data = await data if isawaitable(data) else data
     return process_data(data)
 
@@ -130,11 +130,11 @@ def sync_get_processed_data(datagetter):
 This sort of code might previously have been written thus:
 
 ```python
-# may return an awaitable
-def get_processed_data(datagetter):
+# A hybrid function, _may_ return an _awaitable_
+def hybrid_get_processed_data(datagetter):
     data = datagetter()
     if isawaitable(data):
-        # return an awaitable helper function
+        # return an awaitable helper closure
         async def helper():
             data = await data
             return process_data(data)
@@ -144,12 +144,12 @@ def get_processed_data(datagetter):
 
 
 async def async_get_processed_data(datagetter):
-    r = get_processed_data(datagetter)
+    r = hybrid_get_processed_data(datagetter)
     return await r if isawaitable(r) else r
 
 
 def sync_get_processed_data(datagetter):
-    r = get_processed_data(datagetter)
+    r = hybrid_get_processed_data(datagetter)
     if isawaitable(r):
         raise RuntimeError("callbacks failed to run synchronously")
     return r
@@ -158,7 +158,7 @@ def sync_get_processed_data(datagetter):
 The above pattern, writing async methods as sync and returning async helpers,
 is common in library code which needs to work both in synchronous and asynchronous
 context.  Needless to say, it is very convoluted, hard to debug and contains a lot
-of code duplication where the same logic is repeated inside async helper methods.
+of code duplication where the same logic is repeated inside async helper closures.
 
 Using `coro_sync()` it is possible to write the entire logic as `async` methods and
 then simply fail if the code tries to invoke any truly async operations.
@@ -181,8 +181,8 @@ so that it is executed using `coro_sync()`:
 >>>
 ```
 
-the `asyncfunction()` utility can be used when passing callbacks to async
-code, to ensure that the callbacks are async.  This, with `syncfunction()` and `coro_sync()`,
+the `asyncfunction()` utility can be used when passing synchronous callbacks to async
+code, to make them async.  This, along with `syncfunction()` and `coro_sync()`,
 can be used to integrate synchronous code with async middleware:
 
 ```python
@@ -192,24 +192,8 @@ async def sync_client(sync_callback):
     return await middleware.run()
 ```
 
-Using this pattern, one can avoid writing special synchronous versions of middleware, or having
-_hybrid_ methods which _optionally_ return awaitables:
-
-```python
-# the hybrid method antipattern
-def hybrid_method(callable):
-    """A hybrid method, possibly returning awaitable"""
-    data = callable()
-    if isawaitable(data):
-        # inner async method with duplicate code
-        async def async_helper(data):
-            data2 = await data
-            return process_data(data2)
-
-        return async_helper
-    else:
-        return process_data(data)  # duplicate code
-```
+Using this pattern, one can write the middleware completely async, make it also work
+for synchronous code, while avoiding the hybrid function _antipattern._
 
 ## `CoroStart`
 
