@@ -4,7 +4,7 @@ import sys
 import pytest
 from anyio import sleep
 
-from asynkit import GeneratorObject, Monitor, MonitorAwaitable, OOBData
+from asynkit import BoundMonitor, GeneratorObject, Monitor, OOBData
 
 pytestmark = pytest.mark.anyio
 # Most tests here are just testing coroutine behaviour.
@@ -51,7 +51,7 @@ class TestMonitor:
             return str(back) + "foo"
 
         m = Monitor()
-        a = m.awaitable(helper(m))
+        a = m.bind(helper(m))
         with pytest.raises(OOBData) as data:
             await a
         assert data.value.data == "foo"
@@ -62,7 +62,7 @@ class TestMonitor:
         assert back == "Nonefoo"
 
         # create the awaitable directly
-        a = MonitorAwaitable(m, helper(m))
+        a = BoundMonitor(m, helper(m))
         with pytest.raises(OOBData) as data:
             await a
         assert data.value.data == "foo"
@@ -87,7 +87,7 @@ class TestMonitor:
                 finished = True
 
         m = Monitor()
-        a = m.awaitable(helper(m))
+        a = m.bind(helper(m))
         with pytest.raises(OOBData):
             await a
         assert not finished

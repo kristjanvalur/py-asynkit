@@ -25,7 +25,7 @@ __all__ = [
     "GeneratorObject",
     "GeneratorObjectIterator",
     "Monitor",
-    "MonitorAwaitable",
+    "BoundMonitor",
     "OOBData",
 ]
 
@@ -129,15 +129,15 @@ class Monitor(Generic[T]):
         """
         return await self._asend(coro, coro.send, (data,))
 
-    def awaitable(
+    def bind(
         self,
         coro: Coroutine[Any, Any, T],
     ) -> Awaitable[T]:
         """
-        Return a `MontiorAwaitable` object which can be awaited instead
-        of explicitly awaiting `Montiro.aawait()`
+        Return a `BoundMonitor` object which can be used without always
+        specifying a `coro` argument, and can be awaited directly.`
         """
-        return MonitorAwaitable(self, coro)
+        return BoundMonitor(self, coro)
 
     @overload
     async def athrow(
@@ -201,7 +201,7 @@ class Monitor(Generic[T]):
             raise RuntimeError("Monitor coroutine ignored GeneratorExit")
 
 
-class MonitorAwaitable(Generic[T]):
+class BoundMonitor(Generic[T]):
     """
     An awaitable helper class which can be awaited to invoke a
     `await Monitior.aawait(coroutine)`
