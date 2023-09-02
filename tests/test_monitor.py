@@ -72,6 +72,28 @@ class TestMonitor:
         back = await a
         assert back == "Nonefoo"
 
+    async def test_monitor_awaitable_aclose(self):
+        """
+        Test closing a monitor awaitable object
+        """
+
+        finished = False
+
+        async def helper(m):
+            nonlocal finished
+            try:
+                await m.oob("foo")
+            finally:
+                finished = True
+
+        m = Monitor()
+        a = m.awaitable(helper(m))
+        with pytest.raises(OOBData):
+            await a
+        assert not finished
+        await a.aclose()
+        assert finished
+
     async def test_throw(self):
         """
         Assert that throwing an error into the coroutine after the first OOB
@@ -205,6 +227,75 @@ class TestMonitor:
             cc.throw(EOFError())
         assert err.value.value == 1
         cc.close()
+
+    async def test_monitor_aclose(self):
+        """
+        Test aclose of a coroutine suspended with oob()
+        """
+        finished = False
+
+        async def helper(m):
+            nonlocal finished
+            try:
+                await m.oob()
+            finally:
+                finished = True
+
+        m = Monitor()
+        c = helper(m)
+        try:
+            await m.aawait(c)
+        except OOBData:
+            pass
+        assert not finished
+        await m.aclose(c)
+        assert finished
+
+    async def test_monitor_aclose_finished(self):
+        """
+        Test aclose of a coroutine that has finished
+        """
+
+        async def helper(m):
+            pass
+
+        m = Monitor()
+        c = helper(m)
+        await m.aawait(c)
+        await m.aclose(c)
+
+    async def test_monitor_aclosed_new(self):
+        """
+        Test aclose of a coroutine that has not been started
+        """
+
+        async def helper(m):
+            pass
+
+        m = Monitor()
+        c = helper(m)
+        await m.aclose(c)
+
+    async def test_monitor_aclose_ignore(self):
+        """
+        test aclose of couritine which ignores
+        GeneratorExit and continues to send oob
+        """
+
+        async def helper(m):
+            try:
+                await m.oob()
+            except GeneratorExit:
+                await m.oob()
+
+        m = Monitor()
+        b = m.bind(helper(m))
+        with pytest.raises(OOBData):
+            await b
+
+        with pytest.raises(RuntimeError) as err:
+            await b.aclose()
+        assert "ignored GeneratorExit" in str(err)
 
 
 async def top(g):

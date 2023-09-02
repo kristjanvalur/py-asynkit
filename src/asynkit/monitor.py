@@ -186,6 +186,20 @@ class Monitor(Generic[T]):
         self.state = -1
         return (yield data)
 
+    async def aclose(
+        self,
+        coro: Coroutine[Any, Any, T],
+    ) -> None:
+        """Close the coroutine, by sending a GeneratorExit exception into it."""
+        if coro.cr_frame is None:
+            return  # already closed
+        try:
+            await self.athrow(coro, GeneratorExit)
+        except GeneratorExit:
+            pass
+        except OOBData:
+            raise RuntimeError("Monitor coroutine ignored GeneratorExit")
+
 
 class MonitorAwaitable(Generic[T]):
     """
@@ -199,6 +213,9 @@ class MonitorAwaitable(Generic[T]):
 
     def __await__(self) -> Generator[Any, Any, T]:
         return self.monitor._asend_iter(self.coro, self.coro.send, (None,))
+
+    async def aclose(self) -> None:
+        await self.monitor.aclose(self.coro)
 
 
 class GeneratorObject(Generic[T, V]):
