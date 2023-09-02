@@ -381,11 +381,23 @@ async def manager(buffer, io):
             try:
                 buffer.fill(await io.read())
             except Exception as exc:
-                await m.athrow(c, exc)
+                await m.athrow(a.coro, exc)
 ```
 
 In this example, `readline()` is trivial, but if it were a complicated parser with hierarchical
 invocation structure, then this pattern allows the decoupling of IO and the parsing of buffered data, maintaining the state of the parser while _the caller_ fills up the buffer.
+
+Any IO exception is sent to the coroutine in this example.  This ensures that it cleans
+up properly.  Alternatively, `aclose()` could have been used:
+
+```python
+m = Monitor()
+with aclosing(m.awaitable(readline(m, bufer))) as a:
+    # the aclosing context manager ensures that the corutine is closed
+    # with `await a.aclose()`
+    # even if we don't finish running it.
+    ...
+```
 
 ## `GeneratorObject`
 
