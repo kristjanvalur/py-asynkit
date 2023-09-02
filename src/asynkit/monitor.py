@@ -214,6 +214,41 @@ class BoundMonitor(Generic[T]):
     def __await__(self) -> Generator[Any, Any, T]:
         return self.monitor._asend_iter(self.coro, self.coro.send, (None,))
 
+    async def aawait(self, data: Optional[Any] = None) -> T:
+        return await self.monitor.aawait(self.coro, data)
+
+    @overload
+    async def athrow(
+        self,
+        type: Type[BaseException],
+        value: Union[BaseException, object] = ...,
+        traceback: Optional[TracebackType] = ...,
+    ) -> T:
+        ...
+
+    @overload
+    async def athrow(
+        self,
+        type: BaseException,
+        value: None = ...,
+        traceback: Optional[TracebackType] = ...,
+    ) -> T:
+        ...
+
+    async def athrow(
+        self,
+        type: Union[BaseException, Type[BaseException]],
+        value: Union[BaseException, object] = None,
+        traceback: Optional[TracebackType] = None,
+    ) -> T:
+        """
+        Similar to `aawait()` but throws an exception into the coroutine at the
+        point where it is suspended.
+        """
+        return await self.monitor.athrow(
+            self.coro, type, value, traceback  # type: ignore [arg-type]
+        )
+
     async def aclose(self) -> None:
         await self.monitor.aclose(self.coro)
 

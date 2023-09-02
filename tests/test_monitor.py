@@ -38,9 +38,9 @@ class TestMonitor:
         back = await m.aawait(c, "how")
         assert back == "howfoo"
 
-    async def test_monitor_awaitable(self):
+    async def test_bound_monitor_await(self):
         """
-        Test basic monitor awaitable object
+        Test basic BoundMonitor object
         """
 
         async def helper(m):
@@ -51,30 +51,76 @@ class TestMonitor:
             return str(back) + "foo"
 
         m = Monitor()
-        a = m.bind(helper(m))
+        b = m.bind(helper(m))
         with pytest.raises(OOBData) as data:
-            await a
+            await b
         assert data.value.data == "foo"
         with pytest.raises(OOBData) as data:
-            await a
+            await b
         assert data.value.data == "Nonefoo"
-        back = await a
+        back = await b
         assert back == "Nonefoo"
 
-        # create the awaitable directly
-        a = BoundMonitor(m, helper(m))
+        # create the BoundMonitor directly
+        b = BoundMonitor(m, helper(m))
         with pytest.raises(OOBData) as data:
-            await a
+            await b
         assert data.value.data == "foo"
         with pytest.raises(OOBData) as data:
-            await a
+            await b
         assert data.value.data == "Nonefoo"
-        back = await a
+        back = await b
         assert back == "Nonefoo"
 
-    async def test_monitor_awaitable_aclose(self):
+    async def test_bound_monitor_aawait(self):
         """
-        Test closing a monitor awaitable object
+        Test basic BoundMonitor object
+        """
+
+        async def helper(m):
+            back = await m.oob("foo")
+            await sleep(0)
+            back = await m.oob(str(back) + "foo")
+            await sleep(0)
+            return str(back) + "foo"
+
+        m = Monitor()
+        b = m.bind(helper(m))
+        with pytest.raises(OOBData) as data:
+            await b.aawait()
+        assert data.value.data == "foo"
+        with pytest.raises(OOBData) as data:
+            await b.aawait()
+        assert data.value.data == "Nonefoo"
+        back = await b.aawait("hello")
+        assert back == "hellofoo"
+
+    async def test_bound_monitor_athrow(self):
+        """
+        Test basic BoundMonitor object
+        """
+
+        async def helper(m):
+            back = await m.oob("foo")
+            await sleep(0)
+            back = await m.oob(str(back) + "foo")
+            await sleep(0)
+            return str(back) + "foo"
+
+        m = Monitor()
+        b = m.bind(helper(m))
+        with pytest.raises(OOBData) as data:
+            await b.aawait()
+        assert data.value.data == "foo"
+        with pytest.raises(OOBData) as data:
+            await b.aawait()
+        assert data.value.data == "Nonefoo"
+        with pytest.raises(EOFError):
+            await b.athrow(EOFError())
+
+    async def test_bound_monitor_aclose(self):
+        """
+        Test closing a BoundMonitor object
         """
 
         finished = False

@@ -1,3 +1,4 @@
+* rename MonitorAwaitable to BoundMonitor, add convenience
 * add `aclose()` to Monitor and MonitorAwaitable
 * Relase 0.9.2
 * rename `ensure_corofunc` to `asyncfunction`, add `syncfunction`

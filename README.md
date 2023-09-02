@@ -340,7 +340,7 @@ the syntax:
 
 ```python
 m = Monitor()
-a = m.awaitable(coro(m))
+a = m.bind(coro(m))
 while True:
     try:
         await a
@@ -348,11 +348,11 @@ while True:
     except OOBData as oob:
         handle_oob(oob.data)
 ```
-The returned awaitable is a `MonitorAwaitable` instance, and it can also be created
+The returned awaitable is a `BoundMonitor` instance, and it can also be created
 directly:
 
 ```python
-a = MonitorAwaitable(m, coro(m))
+a = BoundMonitor(m, coro(m))
 ```
 
 A `Monitor` can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
@@ -373,7 +373,7 @@ async def readline(m, buffer):
 
 async def manager(buffer, io):
     m = Monitor()
-    a = m.awaitable(readline(m, buffer))
+    a = m.bind(readline(m, buffer))
     while True:
         try:
             return await a
@@ -392,7 +392,7 @@ up properly.  Alternatively, `aclose()` could have been used:
 
 ```python
 m = Monitor()
-with aclosing(m.awaitable(readline(m, bufer))) as a:
+with aclosing(m.bind(readline(m, bufer))) as a:
     # the aclosing context manager ensures that the corutine is closed
     # with `await a.aclose()`
     # even if we don't finish running it.
