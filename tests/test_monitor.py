@@ -51,7 +51,7 @@ class TestMonitor:
             return str(back) + "foo"
 
         m = Monitor()
-        b = m.bind(helper(m))
+        b = m(helper(m))
         with pytest.raises(OOBData) as data:
             await b
         assert data.value.data == "foo"
@@ -85,7 +85,7 @@ class TestMonitor:
             return str(back) + "foo"
 
         m = Monitor()
-        b = m.bind(helper(m))
+        b = m(helper(m))
         with pytest.raises(OOBData) as data:
             await b.aawait()
         assert data.value.data == "foo"
@@ -108,7 +108,7 @@ class TestMonitor:
             return str(back) + "foo"
 
         m = Monitor()
-        b = m.bind(helper(m))
+        b = m(helper(m))
         with pytest.raises(OOBData) as data:
             await b.aawait()
         assert data.value.data == "foo"
@@ -133,7 +133,7 @@ class TestMonitor:
                 finished = True
 
         m = Monitor()
-        a = m.bind(helper(m))
+        a = m(helper(m))
         with pytest.raises(OOBData):
             await a
         assert not finished
@@ -335,7 +335,7 @@ class TestMonitor:
                 await m.oob()
 
         m = Monitor()
-        b = m.bind(helper(m))
+        b = m(helper(m))
         with pytest.raises(OOBData):
             await b
 

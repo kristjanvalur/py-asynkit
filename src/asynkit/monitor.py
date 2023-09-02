@@ -129,7 +129,7 @@ class Monitor(Generic[T]):
         """
         return await self._asend(coro, coro.send, (data,))
 
-    def bind(
+    def __call__(
         self,
         coro: Coroutine[Any, Any, T],
     ) -> Awaitable[T]:
