@@ -727,10 +727,7 @@ class TestGenerator:
         # simultanous use of generator by different coroutines is not
         # allowed.
         # https://github.com/python/cpython/issues/74956
-        # skipped for std generator in 3.7 version
         if gentype == "std":
-            if sys.version_info < (3, 8):
-                pytest.skip("broken prior to 3.8")
 
             async def consumer():
                 while True:

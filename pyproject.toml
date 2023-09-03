@@ -22,7 +22,7 @@ cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 typing = "mypy -p asynkit -p tests"
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.8"
 typing-extensions = "^4.4.0"
 
 [tool.poetry.group.dev.dependencies]
@@ -91,6 +91,4 @@ exclude_lines = [
   "@abstractmethod",
   "assert False",
   "TYPE_CHECKING",
-  "PYTHON_37",
-  "PYTHON_38",
   ]

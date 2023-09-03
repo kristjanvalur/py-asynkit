@@ -1,7 +1,6 @@
 import asyncio
 import functools
 import inspect
-import sys
 import types
 from contextvars import Context, copy_context
 from types import FrameType
@@ -44,8 +43,6 @@ __all__ = [
     "asyncfunction",
     "syncfunction",
 ]
-
-PYTHON_37 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 T = TypeVar("T")
 S = TypeVar("S")
@@ -110,10 +107,7 @@ def coro_is_new(coro: Suspendable) -> bool:
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_CREATED
     elif inspect.isasyncgen(coro):
-        if PYTHON_37:
-            return coro.ag_frame is not None and coro.ag_frame.f_lasti < 0
-        else:
-            return coro.ag_frame is not None and not coro.ag_running
+        return coro.ag_frame is not None and not coro.ag_running
     else:
         raise TypeError(
             f"a coroutine or coroutine like object is required. Got: {type(coro)}"
@@ -129,14 +123,9 @@ def coro_is_suspended(coro: Suspendable) -> bool:
     elif inspect.isgenerator(coro):
         return inspect.getgeneratorstate(coro) == inspect.GEN_SUSPENDED
     elif inspect.isasyncgen(coro):
-        if PYTHON_37:
-            # frame is None if it has already exited
-            # the currently running coroutine is also not suspended by definition.
-            return coro.ag_frame is not None and coro.ag_frame.f_lasti >= 0
-        else:
-            # This is true only if we are inside an anext() or athrow(), not if the
-            # inner coroutine is itself doing an await before yielding a value.
-            return coro.ag_running
+        # This is true only if we are inside an anext() or athrow(), not if the
+        # inner coroutine is itself doing an await before yielding a value.
+        return coro.ag_running
     else:
         raise TypeError(
             f"a coroutine or coroutine like object is required. Got: {type(coro)}"
