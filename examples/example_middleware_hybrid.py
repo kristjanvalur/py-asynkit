@@ -1,6 +1,12 @@
 import asyncio
 from inspect import isawaitable
 
+"""
+Traditional "hybrid" middleware.
+It accepts bot sync and async callables, and its methods aren't async.
+Instead, it returns async helpers when callbacks return awaitables.
+"""
+
 
 class HybridMiddleWare:
     """Hybrid middleware, assuming optionally async callables
@@ -45,6 +51,14 @@ def sync_client():
     assert data == "hellohello"
 
 
-if __name__ == "__main__":
+def test_sync():
     sync_client()
+
+
+def test_async():
     asyncio.run(async_client())
+
+
+if __name__ == "__main__":
+    test_sync()
+    test_async()

@@ -4,6 +4,13 @@ import pytest
 
 from asynkit import Monitor, coro_sync
 
+"""
+Example of a stateful parser, implemented via recursive async calls,
+and suspended via Monitor.
+Can be used both in async and sync code.
+An example of a `generator` based parser is also included, for comparison.
+"""
+
 pytestmark = pytest.mark.anyio
 
 
@@ -22,6 +29,7 @@ def parse_resp_gen(
     This is a generator function that parses a Redis RESP string.
     we only support ints and arrays of ints for simplicity
     the generator approach maintains state between calls
+    Invoking a sub-generator requires some standard boilerplate.
     """
     # wait until we have the first line
     parts = unparsed.split(CRNL, 1)
@@ -42,6 +50,7 @@ def parse_resp_gen(
         result_array: List[Any] = []
         for _ in range(count):
             # recursively parse each sub-object
+            # boilerplate required.
             parser = parse_resp_gen(unparsed)
             parsed = parser.send(None)
             while parsed is None:
@@ -96,6 +105,7 @@ async def parse_resp_mon(
         count = int(value)
         result_array: List[Any] = []
         # recursively parse each sub-object
+        # no boilerplate required.
         for _ in range(count):
             item, unparsed = await parse_resp_mon(monitor, unparsed)
             result_array.append(item)
