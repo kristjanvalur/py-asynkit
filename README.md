@@ -417,6 +417,33 @@ with aclosing(m(readline(m, buffer))) as a:
     ...
 ```
 
+A standalone parser can also be simply implemented by two helper methods, `start()` and
+`try_await()`.
+
+```python
+async def stateful_parser(monitor, input_data):
+    while input_short(input_data):
+        input_data += await monitor.oob()  # request more
+    # continue parsing, maye requesting more data
+    return await parsed_data(monitor, input_data)
+
+m: Monitor[Tuple[Any, bytes]] = Monitor()
+initial_data = b""
+p = m(stateful_parser(m, b""))
+await p.start()  # set the parser running, calling oob()
+
+# feed data until a value is returned
+while True:
+    parsed = await p.try_await(await get_more_data())
+    if parsed is not None:
+        break
+```
+
+This pattern can even be employed in non-async applications, by using
+the `coro_sync()` method instead of the `await` keyword to drive the `Monitor`.
+
+For a more complete example, have a look at `examples/test_resp.py`
+
 ## `GeneratorObject`
 
 A `GeneratorObject` builds on top of the `Monitor` to create an `AsyncGenerator`.  It is in many ways

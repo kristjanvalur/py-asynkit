@@ -1,0 +1,145 @@
+from typing import Any, Generator, List, Optional, Tuple
+
+import pytest
+
+from asynkit import Monitor, coro_sync
+
+pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+CRNL = b"\r\n"
+
+
+def parse_resp_gen(
+    unparsed: bytes,
+) -> Generator[Optional[Tuple[Any, bytes]], Optional[bytes], None]:
+    """
+    This is a generator function that parses a Redis RESP string.
+    we only support ints and arrays of ints for simplicity
+    the generator approach maintains state between calls
+    """
+    # wait until we have the first line
+    parts = unparsed.split(CRNL, 1)
+    while len(parts) == 1:
+        incoming = yield None
+        assert incoming is not None
+        unparsed += incoming
+        parts = unparsed.split(CRNL, 1)
+
+    line, unparsed = parts
+    cmd, value = line[:1], line[1:]
+
+    if cmd == b":":
+        yield int(value), unparsed
+
+    elif cmd == b"*":
+        count = int(value)
+        result_array: List[Any] = []
+        for _ in range(count):
+            # recursively parse each sub-object
+            parser = parse_resp_gen(unparsed)
+            parsed = parser.send(None)
+            while parsed is None:
+                incoming = yield None
+                assert incoming is not None
+                parsed = parser.send(incoming)
+            item, unparsed = parsed
+            result_array.append(item)
+        yield result_array, unparsed
+
+
+def test_generator() -> None:
+    """
+    Test our generator based parser for Redis RESP strings.
+    """
+    # construct a resp string constisting of an array of arrays of ints
+    resp = b"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n:4\r\n:5\r\n"
+    # split it up into chunks of two bytes
+    chunks = [resp[i : i + 2] for i in range(0, len(resp), 2)]
+
+    # create the parser
+    parser = parse_resp_gen(b"")
+    parsed = parser.send(None)
+    assert parsed is None
+    # send the chunks to the parser
+    while True:
+        parsed = parser.send(chunks.pop(0))
+        if parsed is not None:
+            break
+    assert parsed == ([[1, 2, 3], [4, 5]], b"")
+
+
+async def parse_resp_mon(
+    monitor: Monitor[Tuple[Any, bytes]], unparsed: bytes
+) -> Tuple[Any, bytes]:
+    """
+    A Monitor based parser for Redis RESP strings.
+    """
+    # get first line
+    parts = unparsed.split(CRNL, 1)
+    while len(parts) == 1:
+        # request more data
+        unparsed += await monitor.oob()
+        parts = unparsed.split(CRNL, 1)
+    line, unparsed = parts
+    cmd, value = line[:1], line[1:]
+
+    if cmd == b":":
+        return int(value), unparsed
+
+    elif cmd == b"*":
+        count = int(value)
+        result_array: List[Any] = []
+        # recursively parse each sub-object
+        for _ in range(count):
+            item, unparsed = await parse_resp_mon(monitor, unparsed)
+            result_array.append(item)
+        return result_array, unparsed
+    raise ValueError(f"unknown command '{cmd.decode()}'")
+
+
+async def test_monitor() -> None:
+    """Test our monitor based parser for Redis RESP strings."""
+    # construct a resp string constisting of an array of arrays of ints
+    resp = b"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n:4\r\n:5\r\n"
+    # split it up into chunks of two bytes
+    chunks = [resp[i : i + 2] for i in range(0, len(resp), 2)]
+
+    # create the parser
+    m: Monitor[Tuple[Any, bytes]] = Monitor()
+    parser = parse_resp_mon(m, b"")
+    await m.start(parser)
+
+    while True:
+        parsed = await m.try_await(parser, chunks.pop(0))
+        if parsed is not None:
+            break
+
+    assert parsed == ([[1, 2, 3], [4, 5]], b"")
+
+
+def test_monitor_sync() -> None:
+    """Test our monitor based parser for Redis RESP strings.
+    from synchronous code.
+    """
+    # construct a resp string constisting of an array of arrays of ints
+    resp = b"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n:4\r\n:5\r\n"
+    # split it up into chunks of two bytes
+    chunks = [resp[i : i + 2] for i in range(0, len(resp), 2)]
+
+    # create the parser
+    m: Monitor[Tuple[Any, bytes]] = Monitor()
+    parser = parse_resp_mon(m, b"")
+    coro_sync(m.start(parser))
+
+    while True:
+        parsed = coro_sync(m.try_await(parser, chunks.pop(0)))
+        if parsed is not None:
+            break
+
+    assert parsed == ([[1, 2, 3], [4, 5]], b"")
