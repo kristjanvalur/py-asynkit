@@ -563,7 +563,7 @@ class TestCoroRun:
         return await self.genexit()
 
     def test_simple(self):
-        assert asynkit.coro_sync(self.simple()) == "simple"
+        assert asynkit.await_sync(self.simple()) == "simple"
 
     def test_sync_simple(self):
         assert self.sync_simple() == "simple"
@@ -581,7 +581,7 @@ class TestCoroRun:
 
     def test_noexit(self):
         with pytest.raises(asynkit.SynchronousError) as err:
-            asynkit.coro_sync(self.noexit())
+            asynkit.await_sync(self.noexit())
         assert err.match("failed to complete synchronously")
 
 

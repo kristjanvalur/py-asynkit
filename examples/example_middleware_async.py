@@ -6,7 +6,7 @@ import asynkit
 Fully asynchronous middleware, assuming async callables
 and returning async results.
 When used in synchronous environment, the entire middleware
-is invoked using asynkit.coro_sync.
+is invoked using asynkit.await_sync.
 """
 
 
@@ -37,7 +37,7 @@ def sync_client():
         return "hello"
 
     middleware = AsyncMiddleWare(data_getter=asynkit.asyncfunction(data_getter))
-    assert asynkit.coro_sync(middleware.get_processed_data()) == "hellohello"
+    assert asynkit.await_sync(middleware.get_processed_data()) == "hellohello"
 
 
 def test_sync():

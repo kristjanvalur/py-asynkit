@@ -37,7 +37,7 @@ __all__ = [
     "coro_is_suspended",
     "coro_is_finished",
     "coro_iter",
-    "coro_sync",
+    "await_sync",
     "SynchronousError",
     "SynchronousAbort",
     "asyncfunction",
@@ -497,7 +497,7 @@ def awaitmethod(
     return wrapper
 
 
-def coro_sync(coro: Coroutine[Any, Any, T]) -> T:
+def await_sync(coro: Coroutine[Any, Any, T]) -> T:
     """Runs a corouting synchronlously.  If the coroutine blocks, a
     SynchronousError is raised.
     """
@@ -521,12 +521,12 @@ def coro_sync(coro: Coroutine[Any, Any, T]) -> T:
 
 def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
     """Make an async function synchronous, by invoking
-    `coro_sync()` on its coroutine.  Useful as a decorator.
+    `await_sync()` on its coroutine.  Useful as a decorator.
     """
 
     @functools.wraps(func)
     def helper(*args: P.args, **kwargs: P.kwargs) -> T:
-        return coro_sync(func(*args, **kwargs))
+        return await_sync(func(*args, **kwargs))
 
     return helper
 

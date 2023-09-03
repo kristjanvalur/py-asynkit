@@ -2,7 +2,7 @@ from typing import Any, Generator, List, Optional, Tuple
 
 import pytest
 
-from asynkit import Monitor, coro_sync
+from asynkit import Monitor, await_sync
 
 """
 Example of a stateful parser, implemented via recursive async calls,
@@ -145,10 +145,10 @@ def test_monitor_sync() -> None:
     # create the parser
     m: Monitor[Tuple[Any, bytes]] = Monitor()
     parser = parse_resp_mon(m, b"")
-    coro_sync(m.start(parser))
+    await_sync(m.start(parser))
 
     while True:
-        parsed = coro_sync(m.try_await(parser, chunks.pop(0)))
+        parsed = await_sync(m.try_await(parser, chunks.pop(0)))
         if parsed is not None:
             break
 
