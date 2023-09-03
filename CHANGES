@@ -1,3 +1,4 @@
+* Add support for PyPy
 * Drop support for EOL Python 3.7
 * Rename MonitorAwaitable to BoundMonitor, add convenience
   BoundMonitor is returned by calling Monitor with coroutine.
