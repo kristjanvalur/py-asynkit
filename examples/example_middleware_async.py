@@ -2,6 +2,13 @@ import asyncio
 
 import asynkit
 
+"""
+Fully asynchronous middleware, assuming async callables
+and returning async results.
+When used in synchronous environment, the entire middleware
+is invoked using asynkit.coro_sync.
+"""
+
 
 class AsyncMiddleWare:
     """Fully asynchronous middleware, assuming async callables"""
@@ -33,6 +40,14 @@ def sync_client():
     assert asynkit.coro_sync(middleware.get_processed_data()) == "hellohello"
 
 
-if __name__ == "__main__":
+def test_sync():
     sync_client()
+
+
+def test_async():
     asyncio.run(async_client())
+
+
+if __name__ == "__main__":
+    test_sync()
+    test_async()

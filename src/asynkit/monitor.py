@@ -200,6 +200,35 @@ class Monitor(Generic[T]):
         except OOBData:
             raise RuntimeError("Monitor coroutine ignored GeneratorExit")
 
+    async def start(self, coro: Coroutine[Any, Any, T]) -> Any:
+        """
+        Start the Monitor.  This is a convenience function to call `aawait()`
+        with no arguments, catching an expected OOBData exception and
+        returning its `data` member.
+        """
+        try:
+            await self.aawait(coro)
+        except OOBData as oob:
+            return oob.data
+        raise RuntimeError("Coroutine did not await Monitor.oob()")
+
+    async def try_await(
+        self,
+        coro: Coroutine[Any, Any, T],
+        data: Optional[Any] = None,
+        sentinel: Any = None,
+    ) -> Any:
+        """
+        A convenence function to call `aawait()`, returning a sentinel if
+        an OOBData exception was raised.
+        The `sentinel` value defaults to None.  The OOBData
+        exception is discarded.
+        """
+        try:
+            return await self.aawait(coro, data)
+        except OOBData:
+            return sentinel
+
 
 class BoundMonitor(Generic[T]):
     """
@@ -251,6 +280,12 @@ class BoundMonitor(Generic[T]):
 
     async def aclose(self) -> None:
         await self.monitor.aclose(self.coro)
+
+    async def start(self) -> Any:
+        return await self.monitor.start(self.coro)
+
+    async def try_await(self, data: Optional[Any] = None, sentinel: Any = None) -> Any:
+        return await self.monitor.try_await(self.coro, data, sentinel)
 
 
 class GeneratorObject(Generic[T, V]):

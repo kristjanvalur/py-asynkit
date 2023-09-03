@@ -346,6 +346,57 @@ class TestMonitor:
             await b.aclose()
         assert "ignored GeneratorExit" in str(err)
 
+    async def test_start(self):
+        """
+        Test starting a coroutine
+        """
+
+        started = False
+
+        async def helper(m):
+            nonlocal started
+            started = True
+            await m.oob("foo")
+            return 1
+
+        m = Monitor()
+        b = m(helper(m))
+        assert not started
+        assert await b.start() == "foo"
+        assert started
+        await b.aclose()
+
+    async def test_failed_start(self):
+        """
+        Test starting a coroutine which fails
+        """
+
+        async def helper(m):
+            return 1
+
+        m = Monitor()
+        b = m(helper(m))
+        with pytest.raises(RuntimeError) as err:
+            await b.start()
+            assert err.match("did not await")
+
+    async def test_try_await(self):
+        """
+        Test try_await
+        """
+
+        async def helper(m):
+            assert await m.oob() == 1
+            assert await m.oob() == 2
+            return 3
+
+        m = Monitor()
+        b = m(helper(m))
+        assert await b.try_await() is None
+        sentinel = object()
+        assert await b.try_await(1, sentinel) is sentinel
+        assert await b.try_await(2, "foo") == 3
+
 
 async def top(g):
     v = await bottom(g, 10)

@@ -17,9 +17,9 @@ include=["src/asynkit/py.typed"]
 [tool.poe.tasks]
 lint = "ruff ."
 black = "black ."
-test = "pytest"
+test = "pytest tests examples"
 cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
-typing = "mypy -p asynkit -p tests"
+typing = "mypy -p asynkit -p tests -p examples"
 
 [tool.poetry.dependencies]
 python = "^3.8"
@@ -41,6 +41,10 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 #addopts = "-ra -q"
+python_files = [
+    "test_*.py",
+    "example_*.py",
+]
 testpaths = [
     "tests",
 ]
@@ -65,7 +69,7 @@ module = "asynkit.*"
 strict = true
 
 [[tool.mypy.overrides]]
-module = "tests.*"
+module = ["tests.*", "examples.*"]
 check_untyped_defs = false
 allow_untyped_defs = true
 allow_untyped_calls = true
