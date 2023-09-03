@@ -25,7 +25,7 @@ __all__ = [
     "GeneratorObject",
     "GeneratorObjectIterator",
     "Monitor",
-    "MonitorAwaitable",
+    "BoundMonitor",
     "OOBData",
 ]
 
@@ -129,15 +129,15 @@ class Monitor(Generic[T]):
         """
         return await self._asend(coro, coro.send, (data,))
 
-    def awaitable(
+    def __call__(
         self,
         coro: Coroutine[Any, Any, T],
     ) -> Awaitable[T]:
         """
-        Return a `MontiorAwaitable` object which can be awaited instead
-        of explicitly awaiting `Montiro.aawait()`
+        Return a `BoundMonitor` object which can be used without always
+        specifying a `coro` argument, and can be awaited directly.`
         """
-        return MonitorAwaitable(self, coro)
+        return BoundMonitor(self, coro)
 
     @overload
     async def athrow(
@@ -186,8 +186,22 @@ class Monitor(Generic[T]):
         self.state = -1
         return (yield data)
 
+    async def aclose(
+        self,
+        coro: Coroutine[Any, Any, T],
+    ) -> None:
+        """Close the coroutine, by sending a GeneratorExit exception into it."""
+        if coro.cr_frame is None:
+            return  # already closed
+        try:
+            await self.athrow(coro, GeneratorExit)
+        except GeneratorExit:
+            pass
+        except OOBData:
+            raise RuntimeError("Monitor coroutine ignored GeneratorExit")
 
-class MonitorAwaitable(Generic[T]):
+
+class BoundMonitor(Generic[T]):
     """
     An awaitable helper class which can be awaited to invoke a
     `await Monitior.aawait(coroutine)`
@@ -199,6 +213,44 @@ class MonitorAwaitable(Generic[T]):
 
     def __await__(self) -> Generator[Any, Any, T]:
         return self.monitor._asend_iter(self.coro, self.coro.send, (None,))
+
+    async def aawait(self, data: Optional[Any] = None) -> T:
+        return await self.monitor.aawait(self.coro, data)
+
+    @overload
+    async def athrow(
+        self,
+        type: Type[BaseException],
+        value: Union[BaseException, object] = ...,
+        traceback: Optional[TracebackType] = ...,
+    ) -> T:
+        ...
+
+    @overload
+    async def athrow(
+        self,
+        type: BaseException,
+        value: None = ...,
+        traceback: Optional[TracebackType] = ...,
+    ) -> T:
+        ...
+
+    async def athrow(
+        self,
+        type: Union[BaseException, Type[BaseException]],
+        value: Union[BaseException, object] = None,
+        traceback: Optional[TracebackType] = None,
+    ) -> T:
+        """
+        Similar to `aawait()` but throws an exception into the coroutine at the
+        point where it is suspended.
+        """
+        return await self.monitor.athrow(
+            self.coro, type, value, traceback  # type: ignore [arg-type]
+        )
+
+    async def aclose(self) -> None:
+        await self.monitor.aclose(self.coro)
 
 
 class GeneratorObject(Generic[T, V]):

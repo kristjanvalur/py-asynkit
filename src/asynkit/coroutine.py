@@ -524,10 +524,7 @@ def coro_sync(coro: Coroutine[Any, Any, T]) -> T:
             "coroutine failed to complete synchronously (caught BaseException)"
         )
     finally:
-        try:
-            start.close()
-        except RuntimeError:
-            pass
+        start.close()
 
 
 def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:

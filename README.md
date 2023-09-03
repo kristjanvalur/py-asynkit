@@ -329,7 +329,31 @@ dolly
 done
 ```
 
-The caller can also pass in _data_ to the coroutine via the `Monitor.aawait(coro, data=None)` method and
+For convenience, the `Monitor` can be _bound_ so that the caller does not have
+to keep the coroutine around.  Calling the monitor with the coroutine returns a `BoundMonitor`:
+
+```python
+async def coro(m):
+    await m.oob("foo")
+    return "bar"
+
+m = Monitor()
+b = m(coro(m))
+try:
+    await b
+except OOBData as oob:
+    assert oob.data == "foo"
+assert await b == "bar"
+```
+
+Notice how the `BoundMonitor` can be _awaited_ directly, which is the same as awaiting
+`b.aawait(None)`.  A BoundMonitor can also be created directly:
+
+```python
+a = BoundMonitor(m, coro(m))
+```
+
+The caller can also pass in _data_ to the coroutine via the `aawait(data=None)` method and
 it will become the _return value_ of the `Monitor.oob()` call in the coroutine.
 `Monitor.athrow()` can be used to raise an exception inside the coroutine.
 Neither data nor an exception can be sent the first time the coroutine is awaited, 
@@ -340,19 +364,13 @@ the syntax:
 
 ```python
 m = Monitor()
-a = m.awaitable(coro(m))
+b = m(coro(m))
 while True:
     try:
-        await a
+        await b
         break
     except OOBData as oob:
         handle_oob(oob.data)
-```
-The returned awaitable is a `MonitorAwaitable` instance, and it can also be created
-directly:
-
-```python
-a = MonitorAwaitable(m, coro(m))
 ```
 
 A `Monitor` can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
@@ -373,7 +391,7 @@ async def readline(m, buffer):
 
 async def manager(buffer, io):
     m = Monitor()
-    a = m.awaitable(readline(m, buffer))
+    a = m(readline(m, buffer))
     while True:
         try:
             return await a
@@ -381,11 +399,23 @@ async def manager(buffer, io):
             try:
                 buffer.fill(await io.read())
             except Exception as exc:
-                await m.athrow(c, exc)
+                await a.athrow(exc)
 ```
 
-In this example, `readline()` is trivial, but if it were a complicated parser with hierarchical
+In this example, `readline()` is trivial, but if it were a stateful parser with hierarchical
 invocation structure, then this pattern allows the decoupling of IO and the parsing of buffered data, maintaining the state of the parser while _the caller_ fills up the buffer.
+
+Any IO exception is sent to the coroutine in this example.  This ensures that it cleans
+up properly.  Alternatively, `aclose()` could have been used:
+
+```python
+m = Monitor()
+with aclosing(m(readline(m, buffer))) as a:
+    # the aclosing context manager ensures that the coroutine is closed
+    # with `await a.aclose()`
+    # even if we don't finish running it.
+    ...
+```
 
 ## `GeneratorObject`
 

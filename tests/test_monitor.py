@@ -4,7 +4,7 @@ import sys
 import pytest
 from anyio import sleep
 
-from asynkit import GeneratorObject, Monitor, MonitorAwaitable, OOBData
+from asynkit import BoundMonitor, GeneratorObject, Monitor, OOBData
 
 pytestmark = pytest.mark.anyio
 # Most tests here are just testing coroutine behaviour.
@@ -38,9 +38,9 @@ class TestMonitor:
         back = await m.aawait(c, "how")
         assert back == "howfoo"
 
-    async def test_monitor_awaitable(self):
+    async def test_bound_monitor_await(self):
         """
-        Test basic monitor awaitable object
+        Test basic BoundMonitor object
         """
 
         async def helper(m):
@@ -51,26 +51,94 @@ class TestMonitor:
             return str(back) + "foo"
 
         m = Monitor()
-        a = m.awaitable(helper(m))
+        b = m(helper(m))
         with pytest.raises(OOBData) as data:
-            await a
+            await b
         assert data.value.data == "foo"
         with pytest.raises(OOBData) as data:
-            await a
+            await b
         assert data.value.data == "Nonefoo"
-        back = await a
+        back = await b
         assert back == "Nonefoo"
 
-        # create the awaitable directly
-        a = MonitorAwaitable(m, helper(m))
+        # create the BoundMonitor directly
+        b = BoundMonitor(m, helper(m))
         with pytest.raises(OOBData) as data:
-            await a
+            await b
         assert data.value.data == "foo"
         with pytest.raises(OOBData) as data:
-            await a
+            await b
         assert data.value.data == "Nonefoo"
-        back = await a
+        back = await b
         assert back == "Nonefoo"
+
+    async def test_bound_monitor_aawait(self):
+        """
+        Test basic BoundMonitor object
+        """
+
+        async def helper(m):
+            back = await m.oob("foo")
+            await sleep(0)
+            back = await m.oob(str(back) + "foo")
+            await sleep(0)
+            return str(back) + "foo"
+
+        m = Monitor()
+        b = m(helper(m))
+        with pytest.raises(OOBData) as data:
+            await b.aawait()
+        assert data.value.data == "foo"
+        with pytest.raises(OOBData) as data:
+            await b.aawait()
+        assert data.value.data == "Nonefoo"
+        back = await b.aawait("hello")
+        assert back == "hellofoo"
+
+    async def test_bound_monitor_athrow(self):
+        """
+        Test basic BoundMonitor object
+        """
+
+        async def helper(m):
+            back = await m.oob("foo")
+            await sleep(0)
+            back = await m.oob(str(back) + "foo")
+            await sleep(0)
+            return str(back) + "foo"
+
+        m = Monitor()
+        b = m(helper(m))
+        with pytest.raises(OOBData) as data:
+            await b.aawait()
+        assert data.value.data == "foo"
+        with pytest.raises(OOBData) as data:
+            await b.aawait()
+        assert data.value.data == "Nonefoo"
+        with pytest.raises(EOFError):
+            await b.athrow(EOFError())
+
+    async def test_bound_monitor_aclose(self):
+        """
+        Test closing a BoundMonitor object
+        """
+
+        finished = False
+
+        async def helper(m):
+            nonlocal finished
+            try:
+                await m.oob("foo")
+            finally:
+                finished = True
+
+        m = Monitor()
+        a = m(helper(m))
+        with pytest.raises(OOBData):
+            await a
+        assert not finished
+        await a.aclose()
+        assert finished
 
     async def test_throw(self):
         """
@@ -205,6 +273,75 @@ class TestMonitor:
             cc.throw(EOFError())
         assert err.value.value == 1
         cc.close()
+
+    async def test_monitor_aclose(self):
+        """
+        Test aclose of a coroutine suspended with oob()
+        """
+        finished = False
+
+        async def helper(m):
+            nonlocal finished
+            try:
+                await m.oob()
+            finally:
+                finished = True
+
+        m = Monitor()
+        c = helper(m)
+        try:
+            await m.aawait(c)
+        except OOBData:
+            pass
+        assert not finished
+        await m.aclose(c)
+        assert finished
+
+    async def test_monitor_aclose_finished(self):
+        """
+        Test aclose of a coroutine that has finished
+        """
+
+        async def helper(m):
+            pass
+
+        m = Monitor()
+        c = helper(m)
+        await m.aawait(c)
+        await m.aclose(c)
+
+    async def test_monitor_aclosed_new(self):
+        """
+        Test aclose of a coroutine that has not been started
+        """
+
+        async def helper(m):
+            pass
+
+        m = Monitor()
+        c = helper(m)
+        await m.aclose(c)
+
+    async def test_monitor_aclose_ignore(self):
+        """
+        test aclose of couritine which ignores
+        GeneratorExit and continues to send oob
+        """
+
+        async def helper(m):
+            try:
+                await m.oob()
+            except GeneratorExit:
+                await m.oob()
+
+        m = Monitor()
+        b = m(helper(m))
+        with pytest.raises(OOBData):
+            await b
+
+        with pytest.raises(RuntimeError) as err:
+            await b.aclose()
+        assert "ignored GeneratorExit" in str(err)
 
 
 async def top(g):
