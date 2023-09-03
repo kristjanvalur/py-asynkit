@@ -1,10 +1,13 @@
 import asyncio
+import gc
 import sys
 
 import pytest
 from anyio import sleep
 
 from asynkit import BoundMonitor, GeneratorObject, Monitor, OOBData
+
+PYPY = sys.implementation.name == "pypy"
 
 pytestmark = pytest.mark.anyio
 # Most tests here are just testing coroutine behaviour.
@@ -396,9 +399,12 @@ async def assert_exhausted(g):
         r = await g.asend(None)
     with pytest.raises(StopAsyncIteration):
         r = await g.__anext__()
-    # but throw just works (weird)
-    r = await g.athrow(EOFError)
-    assert r is None
+    # but throw just works for cpython
+    if not PYPY:
+        # pypy athrow raises the thrown error on
+        # exhausted generators
+        r = await g.athrow(EOFError)
+        assert r is None
 
 
 @pytest.fixture(params=["std", "oob"], ids=["async gen", "Generator"])
@@ -727,6 +733,10 @@ class TestGenerator:
         # simultanous use of generator by different coroutines is not
         # allowed.
         # https://github.com/python/cpython/issues/74956
+
+        if PYPY:
+            pytest.skip("pypy does not have this fix")
+
         if gentype == "std":
 
             async def consumer():
@@ -811,6 +821,7 @@ class TestGenerator:
         assert i == 0
         assert not closed
         g = None
+        gc.collect()  # needed, e.g. for PyPy
         await sleep(0.01)
         assert closed
 
