@@ -1,4 +1,4 @@
-# asynkit: a toolkit for coroutines
+# asynkit: A toolkit for Python coroutines
 
 [![CI](https://github.com/kristjanvalur/py-asynkit/actions/workflows/ci.yml/badge.svg)](https://github.com/kristjanvalur/py-asynkit/actions/workflows/ci.yml)
 
