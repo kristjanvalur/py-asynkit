@@ -7,7 +7,7 @@ way Python's `asyncio` module does things.
 
 - Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
 - Utility classes such as `GeneratorObject`
-- Coroutine helpers such as `coro_sync()`, `coro_iter()` and the `awaitmethod()` decorator
+- Coroutine helpers such as `await_sync()`, `coro_iter()` and the `awaitmethod()` decorator
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
@@ -109,7 +109,7 @@ just as would happen if it were directly turned into a `Task`.
 
 `func_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
-## `coro_sync()` - Running coroutines synchronously
+## `await_sync()` - Running coroutines synchronously
 
 If you are writing code which should work both synchronously and asynchronously,
 you can now write the code fully _async_ and then run it _synchronously_ in the absence
@@ -124,7 +124,7 @@ async def async_get_processed_data(datagetter):
 
 # raises SynchronousError if datagetter blocks
 def sync_get_processed_data(datagetter):
-    return asynkit.coro_sync(async_get_processed_data(datagetter))
+    return asynkit.await_sync(async_get_processed_data(datagetter))
 ```
 
 This sort of code might previously have been written thus:
@@ -160,14 +160,14 @@ is common in library code which needs to work both in synchronous and asynchrono
 context.  Needless to say, it is very convoluted, hard to debug and contains a lot
 of code duplication where the same logic is repeated inside async helper closures.
 
-Using `coro_sync()` it is possible to write the entire logic as `async` methods and
+Using `await_sync()` it is possible to write the entire logic as `async` methods and
 then simply fail if the code tries to invoke any truly async operations.
 If the invoked coroutine blocks, a `SynchronousError` is raised _from_ a `SynchronousAbort` exception which
 contains a traceback.  This makes it easy to pinpoint the location in the code where the
 async code blocked.  If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.  
 
 The `syncfunction()` decorator can be used to automatically wrap an async function
-so that it is executed using `coro_sync()`:
+so that it is executed using `await_sync()`:
 
 ```pycon
 >>> @asynkit.syncfunction
@@ -182,7 +182,7 @@ so that it is executed using `coro_sync()`:
 ```
 
 the `asyncfunction()` utility can be used when passing synchronous callbacks to async
-code, to make them async.  This, along with `syncfunction()` and `coro_sync()`,
+code, to make them async.  This, along with `syncfunction()` and `await_sync()`,
 can be used to integrate synchronous code with async middleware:
 
 ```python
@@ -197,7 +197,7 @@ for synchronous code, while avoiding the hybrid function _antipattern._
 
 ## `CoroStart`
 
-This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` and `coro_sync()` functions. 
+This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` and `await_sync()` functions. 
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
 an exception.  It can subsequently be _awaited_ to retreive the result.
 
@@ -440,7 +440,7 @@ while True:
 ```
 
 This pattern can even be employed in non-async applications, by using
-the `coro_sync()` method instead of the `await` keyword to drive the `Monitor`.
+the `await_sync()` method instead of the `await` keyword to drive the `Monitor`.
 
 For a more complete example, have a look at `examples/test_resp.py`
 
