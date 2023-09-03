@@ -212,7 +212,7 @@ class Monitor(Generic[T]):
             return oob.data
         raise RuntimeError("Coroutine did not await Monitor.oob()")
 
-    async def aawait_value(
+    async def try_await(
         self,
         coro: Coroutine[Any, Any, T],
         data: Optional[Any] = None,
@@ -280,6 +280,12 @@ class BoundMonitor(Generic[T]):
 
     async def aclose(self) -> None:
         await self.monitor.aclose(self.coro)
+
+    async def start(self) -> Any:
+        return await self.monitor.start(self.coro)
+
+    async def try_await(self, data: Optional[Any] = None, sentinel: Any = None) -> Any:
+        return await self.monitor.try_await(self.coro, data, sentinel)
 
 
 class GeneratorObject(Generic[T, V]):
