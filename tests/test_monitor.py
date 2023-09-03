@@ -356,13 +356,13 @@ class TestMonitor:
         async def helper(m):
             nonlocal started
             started = True
-            await m.oob()
+            await m.oob("foo")
             return 1
 
         m = Monitor()
         b = m(helper(m))
         assert not started
-        await b.start()
+        assert await b.start() == "foo"
         assert started
         await b.aclose()
 

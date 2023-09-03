@@ -1,3 +1,4 @@
+* Add Monitor start() and try_await() methods
 * Add support for PyPy
 * Drop support for EOL Python 3.7
 * Rename MonitorAwaitable to BoundMonitor, add convenience
