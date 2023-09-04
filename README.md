@@ -347,35 +347,19 @@ assert await b == "bar"
 ```
 
 Notice how the `BoundMonitor` can be _awaited_ directly, which is the same as awaiting
-`b.aawait(None)`.  A BoundMonitor can also be created directly:
+`b.aawait(None)`.
 
-```python
-a = BoundMonitor(m, coro(m))
-```
-
-The caller can also pass in _data_ to the coroutine via the `aawait(data=None)` method and
+The caller can pass in _data_ to the coroutine via the `aawait(data=None)` method and
 it will become the _return value_ of the `Monitor.oob()` call in the coroutine.
-`Monitor.athrow()` can be used to raise an exception inside the coroutine.
+`Monitor.athrow()` can similarly be used to raise an exception out of the `Montitor.oob()` call.
 Neither data nor an exception can be sent the first time the coroutine is awaited, 
 only as a response to a previous `OOBData` exception.
 
-If no data is to be sent (the common case), an _awaitable_ object can be generated to simplify
-the syntax:
-
-```python
-m = Monitor()
-b = m(coro(m))
-while True:
-    try:
-        await b
-        break
-    except OOBData as oob:
-        handle_oob(oob.data)
-```
-
 A `Monitor` can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
 condition, without resorting to the relatively heavy mechanism of creating, managing and synchronizing
-`Task` objects.  This can be useful if the coroutine needs to maintain state.
+`Task` objects.  This can be useful if the coroutine needs to maintain state.  Additionally,
+this kind of messaging does not require an _event loop_ to be present and can can be driven
+using `await_sync()` (see below.)
 
 Consider the following scenario. A _parser_ wants to read a line from a buffer, but fails, signalling
 this to the monitor:
@@ -442,7 +426,7 @@ while True:
 This pattern can even be employed in non-async applications, by using
 the `await_sync()` method instead of the `await` keyword to drive the `Monitor`.
 
-For a more complete example, have a look at `examples/test_resp.py`
+For a more complete example, have a look at [example_resp.py](examples/example_resp.py)
 
 ## `GeneratorObject`
 
