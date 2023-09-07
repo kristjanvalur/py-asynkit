@@ -7,6 +7,7 @@ from types import FrameType
 from typing import (
     Any,
     AsyncGenerator,
+    AsyncIterable,
     Awaitable,
     Callable,
     Coroutine,
@@ -37,6 +38,7 @@ __all__ = [
     "coro_is_suspended",
     "coro_is_finished",
     "coro_iter",
+    "aiter_sync",
     "await_sync",
     "SynchronousError",
     "SynchronousAbort",
@@ -541,3 +543,18 @@ def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
         return func(*args, **kwargs)
 
     return helper
+
+
+def aiter_sync(async_iterable: AsyncIterable[T]) -> Generator[T, None, None]:
+    """Iterate synchronously over an async itarable"""
+    ai = async_iterable.__aiter__()
+
+    # a helper ensures that we have a coroutine, not just an Awaitable
+    async def helper() -> T:
+        return await ai.__anext__()
+
+    try:
+        while True:
+            yield await_sync(helper())
+    except StopAsyncIteration:
+        pass

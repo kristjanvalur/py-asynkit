@@ -585,6 +585,15 @@ class TestCoroRun:
         assert err.match("failed to complete synchronously")
 
 
+def test_aiter_sync():
+    async def agen():
+        for i in range(5):
+            yield i
+
+    gen = asynkit.aiter_sync(agen())
+    assert list(gen) == list(range(5))
+
+
 class TestCoroAwait:
     """
     These tests test the behaviour of a coroutine wrapped in `coro_await`
