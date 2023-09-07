@@ -7,7 +7,7 @@ way Python's `asyncio` module does things.
 
 - Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
 - Utility classes such as `GeneratorObject`
-- Coroutine helpers such as `await_sync()`, `coro_iter()` and the `awaitmethod()` decorator
+- Coroutine helpers such as `await_sync()`, `aiter_sync()`, `coro_iter()` and the `awaitmethod()` decorator
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
@@ -109,7 +109,7 @@ just as would happen if it were directly turned into a `Task`.
 
 `func_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
-## `await_sync()` - Running coroutines synchronously
+## `await_sync(), aiter_sync()` - Running coroutines synchronously
 
 If you are writing code which should work both synchronously and asynchronously,
 you can now write the code fully _async_ and then run it _synchronously_ in the absence
@@ -194,6 +194,22 @@ async def sync_client(sync_callback):
 
 Using this pattern, one can write the middleware completely async, make it also work
 for synchronous code, while avoiding the hybrid function _antipattern._
+
+### `aiter_sync()`
+
+A helper function is provided, which turns an `AsyncIterable` into
+a generator, leveraging the `await_sync()` method:
+
+```python
+async def agen():
+    for v in range(3):
+        yield v
+
+assert list(aiter_sync(agen())) == [1, 2, 3]
+```
+
+This is useful if using patterns such as `GeneratorObject` in a synchronous
+application.
 
 ## `CoroStart`
 
@@ -461,14 +477,13 @@ the same way as an `AsyncGenerator` object.  It can be iterated over and support
 
 A `GeneratorObject` is a flexible way to asynchronously generate results without
 resorting to `Task` and `Queue` objects.  What is more, it allows this sort
-of generating pattern to be used in non-async programs, via `await_sync()`:
+of generating pattern to be used in non-async programs, via `aiter_sync()`:
 
 ```python
 def sync_runner():
     gen_obj = GeneratorObject()
-    async def helper():
-        return [val async for val in gen_obj(generator(gen_obj))]
-    assert async_await(helper()) == [1, 2]
+    values = [val for val in aiter_sync(gen_obj(generator(gen_obj)))]
+    assert values == [1, 2]
 ```
 
 
