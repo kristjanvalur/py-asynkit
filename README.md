@@ -460,7 +460,16 @@ the same way as an `AsyncGenerator` object.  It can be iterated over and support
 `asend()`, `athrow()` and `aclose()` methods.
 
 A `GeneratorObject` is a flexible way to asynchronously generate results without
-resorting to `Task` and `Queue` objects.
+resorting to `Task` and `Queue` objects.  What is more, it allows this sort
+of generating pattern to be used in non-async programs, via `await_sync()`:
+
+```python
+def sync_runner():
+    gen_obj = GeneratorObject()
+    async def helper():
+        return [val async for val in gen_obj(generator(gen_obj))]
+    assert async_await(helper()) == [1, 2]
+```
 
 
 # Scheduling tools
