@@ -7,7 +7,8 @@ way Python's `asyncio` module does things.
 
 - Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
 - Utility classes such as `GeneratorObject`
-- Coroutine helpers such as `await_sync()`, `aiter_sync()`, `coro_iter()` and the `awaitmethod()` decorator
+- Coroutine helpers such `coro_iter()` and the `awaitmethod()` decorator
+- Helpers to run _async_ code from _non-async_ code, such as `await_sync()` and `aiter_sync()` 
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
