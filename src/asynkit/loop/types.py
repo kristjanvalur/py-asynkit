@@ -2,7 +2,6 @@ from asyncio import AbstractEventLoop, Future, Handle, Task
 from typing import TYPE_CHECKING, Any, Deque
 
 if TYPE_CHECKING:
-
     TaskAny = Task[Any]
     FutureAny = Future[Any]
 else:
