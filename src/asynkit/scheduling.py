@@ -18,6 +18,7 @@ __all__ = [
     "blocked_tasks",
     "create_task_descend",
     "create_task_start",
+    "get_scheduling_loop",
     "runnable_tasks",
     "sleep_insert",
     "task_reinsert",
