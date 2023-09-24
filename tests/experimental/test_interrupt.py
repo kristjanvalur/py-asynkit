@@ -3,7 +3,7 @@ from decimal import DivisionByZero
 
 import pytest
 
-from asynkit.experimental.interrupt import create_pytask, task_interrupt
+from asynkit.experimental.interrupt import create_pytask, task_interrupt, task_timeout
 from asynkit.scheduling import task_is_blocked, task_is_runnable
 
 pytestmark = pytest.mark.anyio
@@ -263,3 +263,55 @@ async def test_interrupt_new():
     await task_interrupt(task, DivisionByZero())
     with pytest.raises(DivisionByZero):
         await task
+
+
+async def test_timeout_sleep():
+    async def task():
+        with pytest.raises(asyncio.TimeoutError):
+            async with task_timeout(0.05):
+                await asyncio.sleep(0.1)
+
+    task = create_pytask(task())
+    await task
+
+
+async def test_timeout_await_task():
+    async def task1():
+        await asyncio.sleep(0.1)
+        return "ok"
+
+    async def task2():
+        t = asyncio.create_task(task1())
+        with pytest.raises(asyncio.TimeoutError):
+            async with task_timeout(0.05):
+                await t
+        assert task_is_blocked(t)
+        assert await t == "ok"
+
+    task = create_pytask(task2())
+    await task
+
+
+async def test_nested_timeouts():
+    """Test that nested timeouts work as expected."""
+
+    async def inner():
+        # The inner timout should not trigger, as the
+        # outer timeout should trigger first.
+        try:
+            async with task_timeout(0.1):
+                await asyncio.sleep(0.2)
+        except BaseException as err:
+            assert not isinstance(err, asyncio.TimeoutError)
+            raise
+        assert False, "should not get here"
+
+    async def outer():
+        # The outer timeout should trigger first
+
+        with pytest.raises(asyncio.TimeoutError):
+            async with task_timeout(0.01):
+                await inner()
+
+    task = create_pytask(outer())
+    await task

@@ -1,6 +1,7 @@
 import asyncio
 import asyncio.tasks
-from typing import Any, Coroutine, Optional, TypeVar
+import contextlib
+from typing import Any, AsyncGenerator, Coroutine, Optional, TypeVar
 
 from asynkit.loop.types import TaskAny
 from asynkit.scheduling import get_scheduling_loop
@@ -115,3 +116,38 @@ async def task_interrupt(task: TaskAny, exception: BaseException) -> None:
 
     task_throw(task, exception, immediate=True)
     await asyncio.sleep(0)
+
+
+class TimeoutInterrupt(BaseException):
+    """A BaseException used to interrupt a task when a timeout occurs."""
+
+
+@contextlib.asynccontextmanager
+async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
+    """Context manager to interrupt a task after a timeout."""
+    task = asyncio.current_task()
+    assert task is not None
+    loop = task.get_loop()
+    if not isinstance(task, PyTask):
+        raise RuntimeError("cannot interrupt task which is not a python task")
+
+    # create an interrupt instance, which we check for
+    my_interrupt = TimeoutInterrupt()
+
+    def trigger_timeout() -> None:
+        if is_active:
+            assert task is not None
+            task_throw(task, my_interrupt, immediate=True)
+
+    timeout_handle = loop.call_later(timeout, trigger_timeout)
+    is_active = True
+    try:
+        yield
+    except TimeoutInterrupt as err:
+        if err is not my_interrupt:
+            # This is some other timeout triggering
+            raise
+        raise asyncio.TimeoutError() from err
+    finally:
+        is_active = False
+        timeout_handle.cancel()
