@@ -58,6 +58,13 @@ class AbstractSchedulingLoop(ABC):
         ...
 
     @abstractmethod
+    def ready_remove(self, task: TaskAny) -> Optional[Handle]:
+        """Find a Task in the ready queue.  Remove and return its handle
+        if present or return None.
+        """
+        ...
+
+    @abstractmethod
     def ready_rotate(self, n: int) -> None:
         """Rotate the ready queue.
 

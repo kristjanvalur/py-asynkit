@@ -52,6 +52,12 @@ class SchedulingHelper(AbstractSchedulingLoop):
     def ready_pop(self, pos: int = -1) -> Handle:
         return deque_pop(self._queue, pos)
 
+    def ready_remove(self, task: TaskAny) -> Optional[Handle]:
+        idx = ready_find_impl(self._queue, task)
+        if idx >= 0:
+            return deque_pop(self._queue, idx)
+        return None
+
     def ready_rotate(self, n: int) -> None:
         self._queue.rotate(n)
 
@@ -90,10 +96,21 @@ def ready_index_impl(
     queue: Deque[Handle],
     task: TaskAny,
 ) -> int:
+    idx = ready_find_impl(queue, task)
+    if idx >= 0:
+        return idx
+    raise ValueError("task not in ready queue")
+
+
+def ready_find_impl(
+    queue: Deque[Handle],
+    task: TaskAny,
+) -> int:
     for i, handle in enumerate(reversed(queue)):
         found = get_task_from_handle_impl(handle)
         if found is task:
             return len(queue) - i - 1
+    return -1
     raise ValueError("task not in ready queue")
 
 
