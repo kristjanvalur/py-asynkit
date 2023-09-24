@@ -6,6 +6,15 @@ from typing import Any, AsyncGenerator, Coroutine, Optional, TypeVar
 from asynkit.loop.types import TaskAny
 from asynkit.scheduling import get_scheduling_loop
 
+__all__ = [
+    "create_pytask",
+    "task_interrupt",
+    "task_throw",
+    "task_timeout",
+    "TimeoutInterrupt",
+    "PyTask",
+]
+
 # Crate a python Task.  We need access to the __step method and this is hidden
 # in the C implementation from _asyncio module
 if hasattr(asyncio.tasks, "_PyTask"):

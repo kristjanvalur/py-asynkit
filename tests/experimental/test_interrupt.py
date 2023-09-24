@@ -3,7 +3,7 @@ from decimal import DivisionByZero
 
 import pytest
 
-from asynkit.experimental.interrupt import (
+from asynkit.experimental import (
     create_pytask,
     task_interrupt,
     task_throw,
