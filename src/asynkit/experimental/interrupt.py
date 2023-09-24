@@ -34,24 +34,15 @@ def create_pytask(
     return task
 
 
-# interrupt a task.  We use much of the same mechanism used when cancelling a task,
-# except that we don't actually cancel the task, we just raise an exception in it.
-# Additionally, we need it to execute immediately, so we we switch to it.
-async def task_interrupt(task: TaskAny, exception: BaseException) -> None:
-    # We don't have a reliable way to detect if a task has been cancelled.
-    # it may have been cancelled by cancelling its future, in which case
-    # it just looks like a normal, runnable, task.
-    # if task._must_cancel:
-    #    raise RuntimeError("cannot interrupt task with pending cancellation")
+def task_throw(
+    task: TaskAny, exception: BaseException, *, immediate: bool = False
+) -> None:
+    """Cause an exception to be raised on a task.  When the function returns, the
+    task will be scheduled to run with the given exception."""
 
     # cannot interrupt a task which is finished
     if task.done():
         raise RuntimeError("cannot interrupt task which is done")
-
-    task_loop = task.get_loop()
-    if task_loop != asyncio.get_running_loop():
-        # we cannot interrupt a task from a different loop
-        raise RuntimeError("cannot interrupt task from different loop")
 
     # this only works on python tasks, which have the exposed __step method
     # because we need to insert it directly into the ready queue
@@ -63,45 +54,64 @@ async def task_interrupt(task: TaskAny, exception: BaseException) -> None:
             "cannot interrupt task which is not a python task"
         ) from error
 
-    # secondly, the task is either waiting for a future, or it is
-    # the queue alreay.
+    # get our scheduling loop, to perform the actual scheduling
+    task_loop = task.get_loop()
+    scheduling_loop = get_scheduling_loop(task_loop)
 
-    # is the task in the running queue?
-    loop = get_scheduling_loop()
-    try:
-        index = loop.ready_index(task)
-    except ValueError:
-        # it is either blocked on a future, or it is ourselves!
-        # verify that we are not trying to cancel ourselves
-        if task._fut_waiter is None:  # type: ignore[attr-defined]
-            assert task is asyncio.current_task()
-            raise RuntimeError("cannot interrupt self") from None
+    # is the task blocked? If so, it is waiting for a future and
+    # has the _fut_waiter attribute set.
+    # note! the following comment from asyncio.tasks.py is wrong:
+    ## - Either _fut_waiter is None, and _step() is scheduled;
+    ## - or _fut_waiter is some Future, and _step() is *not* scheduled.
+    # when a future is done, it schedules its done callbacks,
+    # i.e. task.__wakeup will be "called soon".  but the task's
+    # _fut_waiter is still set, albeit pointing to a 'done' future.
 
-        # ok, it must be waiting on a future
+    fut_waiter = task._fut_waiter  # type: ignore[attr-defined]
+    if fut_waiter and not fut_waiter.done():
         # we remove ourselves from the future's callback list.
         # this way, we can stop waiting for it, without cancelling it,
         # which would would have side effects.
         wakeup_method = task._Task__wakeup  # type: ignore[attr-defined]
-        task._fut_waiter.remove_done_callback(wakeup_method)
-        task._fut_waiter = None  # type: ignore[attr-defined]
+        fut_waiter.remove_done_callback(wakeup_method)
     else:
-        # it was alread scheduled to run, just pop it.
-        loop.ready_pop(index)
+        # it is in the ready queue (has __step / __wakeup shceduled)
+        # or it is the running task..
+        handle = scheduling_loop.ready_remove(task)
+
+        if handle is None:
+            # it is the running task
+            assert task is asyncio.current_task()
+            raise RuntimeError("cannot interrupt self")
 
     # now, we have to insert it
+    task._fut_waiter = None  # type: ignore[attr-defined]
     task_loop.call_soon(
         step_method,
         exception,
         context=task._context,  # type: ignore[attr-defined]
     )
-    # and make sure it runs next.  This guarantees that the task doesn't
-    # exist in a half-interrupted state for other tasks to see and perhaps
-    # try to interrupt it again.
 
-    # Move target task to the head of the queue
-    pos = loop.ready_index(task)
-    if pos != 0:
-        loop.ready_insert(0, loop.ready_pop(pos))
+    if immediate:
+        # Make sure it runs next.  This guarantees that the task doesn't
+        # exist in a half-interrupted state for other tasks to see and perhaps
+        # try to interrupt it again, which makes it easier to reason
+        # about task behaviour.
+        # Move target task to the head of the queue
+        handle = scheduling_loop.ready_remove(task)
+        assert handle is not None
+        scheduling_loop.ready_insert(0, handle)
 
-    # now sleep
+
+# interrupt a task.  We use much of the same mechanism used when cancelling a task,
+# except that we don't actually cancel the task, we just raise an exception in it.
+# Additionally, we need it to execute immediately, so we we switch to it.
+async def task_interrupt(task: TaskAny, exception: BaseException) -> None:
+    # We don't have a reliable way to detect if a task has been cancelled.
+    # it may have been cancelled by cancelling its future, in which case
+    # it just looks like a normal, runnable, task.
+    # if task._must_cancel:
+    #    raise RuntimeError("cannot interrupt task with pending cancellation")
+
+    task_throw(task, exception, immediate=True)
     await asyncio.sleep(0)
