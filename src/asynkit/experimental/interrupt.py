@@ -22,6 +22,7 @@ if hasattr(asyncio.tasks, "_PyTask"):
 else:
     PyTask = asyncio.tasks.Task
 
+
 def task_factory(loop, coro):  # type: ignore[no-untyped-def]
     task = PyTask(coro, loop=loop)
     return task
