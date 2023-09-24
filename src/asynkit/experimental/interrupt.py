@@ -1,6 +1,7 @@
 import asyncio
 import asyncio.tasks
 import contextlib
+import sys
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
 from asynkit.loop.types import TaskAny
@@ -94,11 +95,17 @@ def task_throw(
 
     # now, we have to insert it
     task._fut_waiter = None  # type: ignore[attr-defined]
-    task_loop.call_soon(
-        step_method,
-        exception,
-        context=task._context,  # type: ignore[attr-defined]
-    )
+    if sys.version_info > (3, 8):
+        task_loop.call_soon(
+            step_method,
+            exception,
+            context=task._context,  # type: ignore[attr-defined]
+        )
+    else:
+        task_loop.call_soon(
+            step_method,
+            exception,
+        )
 
     if immediate:
         # Make sure it runs next.  This guarantees that the task doesn't
