@@ -16,6 +16,7 @@ def anyio_backend():
 
 @pytest.mark.parametrize("interrupt", [True, False])
 async def test_interrupt(interrupt):
+    """Test that we can interrupt a task which is waiting on event."""
     # create a task, have it wait on event
     e = asyncio.Event()
     w = asyncio.Event()
@@ -44,6 +45,7 @@ async def test_interrupt(interrupt):
         state = "interrupting"
         await task_interrupt(task, DivisionByZero())
         assert state == "interrupted"
+        e.set()
     else:
         state = "waking"
         e.set()
@@ -51,6 +53,33 @@ async def test_interrupt(interrupt):
         await task
         assert state == "waited"
     assert task.done()
+    await task
+
+
+async def test_interrupt_sleep():
+    """Test that we can interrupt a task which is sleeping."""
+    # create a task, have it wait on sleep
+    w = asyncio.Event()
+    state = "starting"
+
+    async def task():
+        nonlocal state
+        assert state == "starting"
+        state = "waiting"
+        w.set()
+        with pytest.raises(DivisionByZero):
+            await asyncio.sleep(0.01)
+        assert state == "interrupting"
+        state = "interrupted"
+
+    task = create_pytask(task())
+    await w.wait()
+    assert state == "waiting"
+    state = "interrupting"
+    await task_interrupt(task, DivisionByZero())
+    assert state == "interrupted"
+    # wait a bit too, to see if the sleep has an side effects
+    await asyncio.sleep(0.02)
     await task
 
 
@@ -101,6 +130,7 @@ async def test_interrupt_immediate(interrupt):
         state = "interrupting"
         await task_interrupt(task, DivisionByZero())
         assert state == "task2"
+        e.set()
     else:
         state = "waking"
         e.set()
@@ -114,6 +144,7 @@ async def test_interrupt_immediate(interrupt):
 
 
 async def test_interrupt_runnable():
+    """Test that we can interrupt a task which is already runnable."""
     # create a task, have it wait on event
     e = asyncio.Event()
     w = asyncio.Event()
@@ -154,7 +185,32 @@ async def test_interrupt_runnable():
     await task2
 
 
+async def test_interrupt_await_task():
+    """Test that we can interrupt a task which is waiting on another task."""
+    w = asyncio.Event()
+
+    async def task1():
+        await asyncio.sleep(0.1)
+        return "ok"
+
+    async def task2(wait_for):
+        w.set()
+        with pytest.raises(DivisionByZero):
+            await wait_for
+
+    task1 = asyncio.create_task(task1())
+    task2 = create_pytask(task2(task1))
+    await w.wait()
+    assert task_is_blocked(task2)
+    await task_interrupt(task2, DivisionByZero())
+    assert task2.done()
+    assert task_is_blocked(task1)
+    task1.cancel()
+
+
 async def test_interrupt_self():
+    """Test that we cannot interrupt self."""
+
     async def task():
         with pytest.raises(RuntimeError) as err:
             await task_interrupt(asyncio.current_task(), DivisionByZero())
@@ -165,6 +221,8 @@ async def test_interrupt_self():
 
 
 async def test_interrupt_cancelled():
+    """Test that we can interrupt a cancelled task
+    which hasn't finished its cancellation."""
     e = asyncio.Event()
 
     async def task():
@@ -181,6 +239,8 @@ async def test_interrupt_cancelled():
 
 
 async def test_interrupt_done():
+    """Test that we cannot interrupt a task which is done."""
+
     async def task():
         pass
 
@@ -193,6 +253,8 @@ async def test_interrupt_done():
 
 
 async def test_interrupt_new():
+    """Teest that we can interrupt a task which hasn't started yet."""
+
     async def task():
         pass
 

@@ -71,13 +71,21 @@ async def task_interrupt(task: TaskAny, exception: BaseException) -> None:
     try:
         index = loop.ready_index(task)
     except ValueError:
-        # ok, it must be waiting on a future
-        # we don't cancel the future, that might cancel tasks and other things.
-        # this isn't cancellation
+        # it is either blocked on a future, or it is ourselves!
         # verify that we are not trying to cancel ourselves
-        if task is asyncio.current_task():
+        if task._fut_waiter is None:  # type: ignore[attr-defined]
+            assert task is asyncio.current_task()
             raise RuntimeError("cannot interrupt self") from None
+
+        # ok, it must be waiting on a future
+        # we remove ourselves from the future's callback list.
+        # this way, we can stop waiting for it, without cancelling it,
+        # which would would have side effects.
+        wakeup_method = task._Task__wakeup  # type: ignore[attr-defined]
+        task._fut_waiter.remove_done_callback(wakeup_method)
+        task._fut_waiter = None  # type: ignore[attr-defined]
     else:
+        # it was alread scheduled to run, just pop it.
         loop.ready_pop(index)
 
     # now, we have to insert it
