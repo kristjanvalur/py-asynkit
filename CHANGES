@@ -1,3 +1,5 @@
+* Release 0.10.2
+* Add the experimental task_throw and task_interrupt methods
 * Release 0.10.1
 * Add the `aiter_sync()` function
 * Release 0.10.0
