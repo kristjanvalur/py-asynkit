@@ -15,8 +15,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ["ubuntu-latest", "windows-latest"]
-        python-version: ["3.8"]
+        os: ["ubuntu-latest"]
+        python-version: ["3.8", "3.12.0-beta.2"]
+        include:
+          - os: windows-latest
+            python-version: '3.8'
     name: Run linting on Python ${{ matrix.python-version }} on ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3

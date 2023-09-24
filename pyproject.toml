@@ -76,8 +76,9 @@ allow_untyped_calls = true
 
 [[tool.mypy.overrides]]
 module = [
-    "asynkit.loop.eventloop",
     "asynkit.compat",
+    "asynkit.experimental.interrupt",
+    "asynkit.loop.eventloop",
     "asynkit.tools",
     "tests.test_coro",
 ]
