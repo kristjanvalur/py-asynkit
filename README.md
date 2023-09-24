@@ -5,14 +5,14 @@
 This module provides some handy tools for those wishing to have better control over the
 way Python's `asyncio` module does things.
 
-- Helper tools for controlling coroutine execution, such as [`CoroStart`](##`CoroStart`) and [`Monitor`](##`Monitor`)
-- Utility classes such as [`GeneratorObject`](##`GeneratorObject`)
-- Coroutine helpers such `coro_iter()` and the `awaitmethod()` decorator
+- Helper tools for controlling coroutine execution, such as [`CoroStart`](#corostart) and [`Monitor`](#monitor)
+- Utility classes such as [`GeneratorObject`](#generatorbject)
+- Coroutine helpers such [`coro_iter()`](#coro_iter) and the [`awaitmethod()`](#awaitmethod) decorator
 - Helpers to run _async_ code from _non-async_ code, such as `await_sync()` and `aiter_sync()` 
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
-- Experimental features such as [`task_interrupt()`](###`task_interrupt()`)
+- Experimental features such as [`task_interrupt()`](#task_interrupt)
 
 # Installation
 
@@ -277,9 +277,14 @@ async def main():
 ```
 
 This is similar to `contextvars.Context.run()` but works for async functions.  This function is
-implemented using `CoroStart`
+implemented using [`CoroStart`](#corostart)
 
-## `awaitmethod` - decorator for `__await__` methods
+## `coro_iter()`
+
+This helper function turns a coroutine function into an iterator.  It is primarly
+intended to be used by the [`awaitmethod()`](#awaitmethod) function decorator.
+
+## `awaitmethod()`
 
 This decorator turns the decorated method into a `Generator` as required for
 `__await__` methods, which must only return `Iterator` objects.
