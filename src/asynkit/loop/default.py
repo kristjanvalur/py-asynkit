@@ -1,12 +1,22 @@
 import asyncio
+import asyncio.tasks
 from asyncio import AbstractEventLoop, Handle, Task
 from contextvars import Context
-from typing import Any, Callable, Deque, Optional, Set
+from typing import Any, Callable, Deque, Optional, Set, Tuple, cast
 
 from ..compat import call_soon
 from ..tools import deque_pop
 from .schedulingloop import AbstractSchedulingLoop
 from .types import QueueType, TaskAny
+
+# asyncio by default uses a C implemented task from _asyncio module
+TaskTypes: Tuple[Any, ...]
+if hasattr(asyncio.tasks, "_PyTask"):
+    PyTask = asyncio.tasks._PyTask
+    TaskTypes = (Task, PyTask)
+else:
+    PyTask = asyncio.tasks.Task
+    TaskTypes = (Task,)
 
 """
 Helper methods which work with the default event loop from
@@ -41,6 +51,12 @@ class SchedulingHelper(AbstractSchedulingLoop):
 
     def ready_pop(self, pos: int = -1) -> Handle:
         return deque_pop(self._queue, pos)
+
+    def ready_remove(self, task: TaskAny) -> Optional[Handle]:
+        idx = ready_find_impl(self._queue, task)
+        if idx >= 0:
+            return deque_pop(self._queue, idx)
+        return None
 
     def ready_rotate(self, n: int) -> None:
         self._queue.rotate(n)
@@ -80,10 +96,21 @@ def ready_index_impl(
     queue: Deque[Handle],
     task: TaskAny,
 ) -> int:
+    idx = ready_find_impl(queue, task)
+    if idx >= 0:
+        return idx
+    raise ValueError("task not in ready queue")
+
+
+def ready_find_impl(
+    queue: Deque[Handle],
+    task: TaskAny,
+) -> int:
     for i, handle in enumerate(reversed(queue)):
         found = get_task_from_handle_impl(handle)
         if found is task:
             return len(queue) - i - 1
+    return -1
     raise ValueError("task not in ready queue")
 
 
@@ -129,6 +156,6 @@ def get_task_from_handle_impl(
         task = handle._callback.__self__  # type: ignore
     except AttributeError:
         return None
-    if isinstance(task, Task):
-        return task
+    if isinstance(task, TaskTypes):
+        return cast(TaskAny, task)
     return None

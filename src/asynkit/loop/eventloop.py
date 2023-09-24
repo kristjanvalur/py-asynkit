@@ -115,6 +115,15 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
         """
         return default.ready_index_impl(self._ready, task)
 
+    def ready_remove(self, task: TaskAny) -> Optional[Handle]:
+        """Find a Task in the ready queue.  Remove and return its handle
+        if present or return None.
+        """
+        idx = default.ready_find_impl(self._ready, task)
+        if idx >= 0:
+            return deque_pop(self._ready, idx)
+        return None
+
     def ready_tasks(self) -> Set[TaskAny]:
         """
         Return a set of all all runnable tasks in the ready queue.

@@ -5,13 +5,14 @@
 This module provides some handy tools for those wishing to have better control over the
 way Python's `asyncio` module does things.
 
-- Helper tools for controlling coroutine execution, such as `CoroStart` and `Monitor`
-- Utility classes such as `GeneratorObject`
-- Coroutine helpers such `coro_iter()` and the `awaitmethod()` decorator
+- Helper tools for controlling coroutine execution, such as [`CoroStart`](#corostart) and [`Monitor`](#monitor)
+- Utility classes such as [`GeneratorObject`](#generatorbject)
+- Coroutine helpers such [`coro_iter()`](#coro_iter) and the [`awaitmethod()`](#awaitmethod) decorator
 - Helpers to run _async_ code from _non-async_ code, such as `await_sync()` and `aiter_sync()` 
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
 - Limited support for `anyio` and `trio`.
+- Experimental features such as [`task_interrupt()`](#task_interrupt)
 
 # Installation
 
@@ -276,9 +277,14 @@ async def main():
 ```
 
 This is similar to `contextvars.Context.run()` but works for async functions.  This function is
-implemented using `CoroStart`
+implemented using [`CoroStart`](#corostart)
 
-## `awaitmethod` - decorator for `__await__` methods
+## `coro_iter()`
+
+This helper function turns a coroutine function into an iterator.  It is primarly
+intended to be used by the [`awaitmethod()`](#awaitmethod) function decorator.
+
+## `awaitmethod()`
 
 This decorator turns the decorated method into a `Generator` as required for
 `__await__` methods, which must only return `Iterator` objects.
@@ -487,7 +493,6 @@ def sync_runner():
     assert values == [1, 2]
 ```
 
-
 # Scheduling tools
 
 A set of functions are provided to perform advanced scheduling of `Task` objects
@@ -684,3 +689,82 @@ the event loop to perform the task scheduling.  If any part of the task scheduli
 before this, and the _continuation_ happens on a different `Task` then things may break
 in various ways.   For `asyncio`, the event loop never sees the `Future` object until
 `as_coroutine()` has been called and awaited, and so if this happens in a new task, all is good.
+
+# Experimental features
+
+Some features are currently availible experimentally.  They may work only on some platforms or be experimetal in nature, not stable or mature enough to be officially part of the library
+
+## Task Interruption
+
+Methods are provided to raise exceptions on a `Task`.  This is somewhat similar to
+`task.cancel()` but different:
+
+- The caller specifies the exception instance to be raised on the task
+- The target task can be made to run immediately
+- The exception does not propagate into awaited objects.  In particular, if the task
+  is _awaiting_ another task, the wait is interrupted, but that other task is not otherwise
+  affected.
+  
+A task which is blocked, waiting for a future, is immediatelly freed and scheduled to run.
+If the task is already scheduled to run, i.e. it is _new_, or the future has triggered but
+the task hasn't become active yet, it is still awoken with an exception.
+
+- __Note:__ These functions currently are only supported on `Task` object implemented in python.
+  Modern implementation often have a native "C" implementation of `Task` objects and they contain inaccessible code which cannot be used by the library.  In particular, the
+  `Task.__step` mehtod cannot be explicitly scheduled to the event loop.  For that reason,
+  a special `create_pytask()` helper is provided to create a suitable `Task` instance.
+
+### `task_throw()``
+
+```python
+def task_throw(task: Task, exc: BaseException, immediate: bool=False):
+    pass
+```
+
+This method will make the target `Task` immediately runnable with the given exception
+pending.  if `immediate` is `True`, it is placed at the head of the runnable queue
+to be next in line for execution.
+
+### `task_interrupt()`
+
+```python
+async def task_interrupt(task: Task, exc: BaseException):
+    pass
+```
+An `async` version of `task_throw()`.  When awaited, `task_interrupt()` is invoked with
+`immediate=True`.  Subsequently the calling `Task` is suspended and the target task is
+run.  When `await` returs, the exception _has been raised_ on the target task.
+
+By ensuring that the target task runs immediately, it is possible to reason about task
+execution without having to rely on external syncronization primitives and the cooperation
+of the target task.
+
+```python
+async def test():
+    async def task():
+        await asyncio.sleep(1)
+    create_pytask(task)
+    await asyncio.sleep(0)
+    assert task_is_blocked(task)
+    await task_interrupt(task, ZeroDivisionError())
+    assert task.done()  # the error has already been raised.
+    try:
+        await task
+    except ZeroDivisionError:
+        pass
+    else:
+        assert False, "never happens"
+
+```
+
+### `create_pytask()`
+
+Similar to `asyncio.create_task()` but will create a task which can be used as the target
+of `task_throw() and task_interrupt()`
+
+## `task_timeout()`
+
+This is a context manager providing a timeout functionality, similar to `asyncio.timeout()`.
+By leveraging `task_throw()` and a custom `BaseException` subclass, `TimeoutInterrupt`, 
+the logic is very simple and there is no unintended interaction with regular
+task cancellation()

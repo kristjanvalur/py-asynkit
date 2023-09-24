@@ -61,6 +61,13 @@ def ready_pop(
     return get_scheduling_loop(loop).ready_pop(position)
 
 
+def ready_remove(
+    task: TaskAny,
+    loop: Optional[AbstractEventLoop] = None,
+) -> Optional[Handle]:
+    return get_scheduling_loop(loop).ready_remove(task)
+
+
 def ready_index(
     task: TaskAny,
     loop: Optional[AbstractEventLoop] = None,

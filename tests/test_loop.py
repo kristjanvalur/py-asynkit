@@ -15,6 +15,7 @@ from asynkit.loop.extensions import (
     ready_insert,
     ready_len,
     ready_pop,
+    ready_remove,
     ready_rotate,
     ready_tasks,
 )
@@ -363,6 +364,23 @@ class TestTasks:
         item = ready_pop(-1)
         with pytest.raises(ValueError):
             ready_index(task)
+        ready_append(item)
+
+    async def test_remove_task(self):
+        await asyncio.sleep(0)
+        n = ready_len()
+        tasks = self.tasks()
+        for i, t in enumerate(tasks):
+            assert ready_index(t) == i + n
+
+        async def foo():
+            pass
+
+        task = asyncio.create_task(foo())
+        item = ready_remove(task)
+        assert item is not None
+        item2 = ready_remove(task)
+        assert item2 is None
         ready_append(item)
 
     async def test_get_task(self):
