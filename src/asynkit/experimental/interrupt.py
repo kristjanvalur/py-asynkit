@@ -1,7 +1,7 @@
 import asyncio
 import asyncio.tasks
 import contextlib
-from typing import Any, AsyncGenerator, Coroutine, Optional, TypeVar
+from typing import Any, AsyncGenerator, Coroutine, Optional
 
 from asynkit.loop.types import TaskAny
 from asynkit.scheduling import get_scheduling_loop
@@ -22,17 +22,14 @@ if hasattr(asyncio.tasks, "_PyTask"):
 else:
     PyTask = asyncio.tasks.Task
 
-T = TypeVar("T")
-
-
 def task_factory(loop, coro):  # type: ignore[no-untyped-def]
     task = PyTask(coro, loop=loop)
     return task
 
 
 def create_pytask(
-    coro: Coroutine[Any, Any, T], *, name: Optional[str] = None
-) -> asyncio.Task[T]:
+    coro: Coroutine[Any, Any, Any], *, name: Optional[str] = None
+) -> TaskAny:
     """Create a Python-implemented task for the given coroutine."""
     loop = asyncio.get_running_loop()
     old_factory = loop.get_task_factory()
