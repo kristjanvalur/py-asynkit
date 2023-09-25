@@ -294,23 +294,6 @@ class TestInterrupt:
         task = create_pytask(task())
         await task
 
-    async def test_cancelled(self):
-        """Test that we can interrupt a cancelled task
-        which hasn't finished its cancellation."""
-        e = asyncio.Event()
-
-        async def task():
-            await e.wait()
-
-        task = create_pytask(task())
-        await asyncio.sleep(0)
-        assert task_is_blocked(task)
-        task.cancel()
-        assert task_is_runnable(task)
-        await task_interrupt(task, ZeroDivisionError())
-        with pytest.raises(ZeroDivisionError):
-            await task
-
     async def test_done(self):
         """Test that we cannot interrupt a task which is done."""
 
@@ -359,6 +342,45 @@ class TestInterrupt:
         await task_interrupt(t, ZeroDivisionError())
         # after handling the interrupt, the task tries again
         assert await t == 1
+
+    async def test_cancelled_task(self):
+        """Test that we cannot interrupt a task which has been cancelled."""
+        e = asyncio.Event()
+
+        async def task():
+            await e.wait()
+
+        task = create_pytask(task())
+        await asyncio.sleep(0)
+        assert task_is_blocked(task)
+        task.cancel()
+        assert task_is_runnable(task)
+        with pytest.raises(RuntimeError) as err:
+            await task_interrupt(task, ZeroDivisionError())
+        assert err.match("cannot interrupt a cancelled task")
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    async def test_cancelled_runnable(self):
+        """Test that we cannot interrupt a task which was cancelled
+        while in a runnable state after sleep(0), i.e. it paused not
+        due to waiting on a real future
+        """
+
+        async def task():
+            # this just places it in the ready queue again
+            await asyncio.sleep(0)
+
+        task = create_pytask(task())
+        await asyncio.sleep(0)
+        assert task_is_runnable(task)
+        task.cancel()
+        assert task_is_runnable(task)
+        with pytest.raises(RuntimeError) as err:
+            await task_interrupt(task, ZeroDivisionError())
+        assert err.match("cannot interrupt a cancelled task")
+        with pytest.raises(asyncio.CancelledError):
+            await task
 
 
 class TestTimeout:

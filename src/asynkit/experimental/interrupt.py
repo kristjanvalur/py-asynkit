@@ -70,26 +70,41 @@ def task_throw(
     scheduling_loop = get_scheduling_loop(task_loop)
 
     # is the task blocked? If so, it is waiting for a future and
-    # has the _fut_waiter attribute set.
+    # has the _fut_waiter attribute set, and _fut_waiter.done() is False.
     # note! the following comment from asyncio.tasks.py is wrong:
-    ## - Either _fut_waiter is None, and _step() is scheduled;
-    ## - or _fut_waiter is some Future, and _step() is *not* scheduled.
+    # # - Either _fut_waiter is None, and _step() is scheduled;
+    # # - or _fut_waiter is some Future, and _step() is *not* scheduled.
     # when a future is done, it schedules its done callbacks,
     # i.e. task.__wakeup will be "called soon".  but the task's
-    # _fut_waiter is still set, albeit pointing to a 'done' future.
+    # _fut_waiter is not None and _fut_waiter.done() is True.
+
+    # Cancellation: We need to detect if the task is cancelled.
+    # because we don't want to deliver a second exception to a task.
+    # Cancellation is asynchronous, a task may be in a cancelled state,
+    # yet, not yet have the exception delivered to it.
+    # when a task is cancelled, it is done by cancelling its future.
+    # A `cancelled()` future is also `done()`.
+    # if there is no future (the task was in the ready queue),
+    # the _must_cancel flag is set on the task instead.
 
     fut_waiter = task._fut_waiter  # type: ignore[attr-defined]
     if fut_waiter and not fut_waiter.done():
+        # it is blocked on a future.
         # we remove ourselves from the future's callback list.
         # this way, we can stop waiting for it, without cancelling it,
         # which would would have side effects.
         wakeup_method = task._Task__wakeup  # type: ignore[attr-defined]
         fut_waiter.remove_done_callback(wakeup_method)
     else:
+        # it is not blocked but it could be cancelled
+        if task._must_cancel or (  # type: ignore[attr-defined]
+            fut_waiter and fut_waiter.cancelled()
+        ):
+            raise RuntimeError("cannot interrupt a cancelled task")
+
         # it is in the ready queue (has __step / __wakeup shceduled)
         # or it is the running task..
         handle = scheduling_loop.ready_remove(task)
-
         if handle is None:
             # it is the running task
             assert task is asyncio.current_task()

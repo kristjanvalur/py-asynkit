@@ -699,8 +699,8 @@ Some features are currently availible experimentally.  They may work only on som
 Methods are provided to raise exceptions on a `Task`.  This is somewhat similar to
 `task.cancel()` but different:
 
-- The caller specifies the exception instance to be raised on the task
-- The target task can be made to run immediately
+- The caller specifies the exception instance to be raised on the task.
+- The target task made to run immediately, precluding interference with other operations.
 - The exception does not propagate into awaited objects.  In particular, if the task
   is _awaiting_ another task, the wait is interrupted, but that other task is not otherwise
   affected.
@@ -725,6 +725,15 @@ This method will make the target `Task` immediately runnable with the given exce
 pending.  if `immediate` is `True`, it is placed at the head of the runnable queue
 to be next in line for execution.
 
+- This method should probably not be used directly.  Throwing exceptions into tasks should
+  be _synchronous_, i.e. we should deliver them immediatelly, because there is no way to
+  queue pending exceptions and they do not add up in any meaningful way.
+  Prefer to use `task_interrupt()` below.
+
+- This method will **fail** if the target task has a pending _cancellation_, that is,
+  it is in the process of waking up with a pending `CancelledError`.  Cancellation is
+  currently asynchronous, while throwing tasks is intended to be synchronous.
+
 ### `task_interrupt()`
 
 ```python
@@ -733,7 +742,7 @@ async def task_interrupt(task: Task, exc: BaseException):
 ```
 An `async` version of `task_throw()`.  When awaited, `task_interrupt()` is invoked with
 `immediate=True`.  Subsequently the calling `Task` is suspended and the target task is
-run.  When `await` returs, the exception _has been raised_ on the target task.
+run.  Once awaited, the exception **has been raised** on the target task.
 
 By ensuring that the target task runs immediately, it is possible to reason about task
 execution without having to rely on external syncronization primitives and the cooperation
