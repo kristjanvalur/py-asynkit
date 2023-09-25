@@ -47,7 +47,9 @@ def task_throw(
     task: TaskAny, exception: BaseException, *, immediate: bool = False
 ) -> None:
     """Cause an exception to be raised on a task.  When the function returns, the
-    task will be scheduled to run with the given exception."""
+    task will be scheduled to run with the given exception.  Note that
+    this function can override a previously thrown error, which has not
+    got the chance to be delivered yet. Use with caution."""
 
     # cannot interrupt a task which is finished
     if task.done():
@@ -149,9 +151,17 @@ async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
     my_interrupt = TimeoutInterrupt()
 
     def trigger_timeout() -> None:
-        if is_active:
-            assert task is not None
-            task_throw(task, my_interrupt, immediate=True)
+        # we want to interrupt the task, but not from a
+        # loop callback (using task_throw()), because hypothetically many
+        # such calbacks could run, and they could then
+        # pre-empt each other.  Instead, we interrupt from
+        # a task, so that only one interrupt can be active.
+        async def interruptor() -> None:
+            if is_active:
+                assert task is not None  # typing
+                await task_interrupt(task, my_interrupt)
+
+        loop.create_task(interruptor())
 
     timeout_handle = loop.call_later(timeout, trigger_timeout)
     is_active = True
