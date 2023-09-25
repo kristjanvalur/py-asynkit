@@ -1,5 +1,4 @@
 import asyncio
-from decimal import DivisionByZero
 
 import pytest
 
@@ -34,7 +33,7 @@ class TestThrow:
             assert self.state == "starting"
             self.state = "waiting"
             w.set()
-            with pytest.raises(DivisionByZero):
+            with pytest.raises(ZeroDivisionError):
                 await e.wait()
             assert self.state == "interrupting"
             self.state = "interrupted"
@@ -42,7 +41,7 @@ class TestThrow:
         task = create_pytask(task())
         await w.wait()
         assert self.state == "waiting"
-        task_throw(task, DivisionByZero(), immediate=immediate)
+        task_throw(task, ZeroDivisionError(), immediate=immediate)
         assert task_is_runnable(task)
         self.state = "interrupting"
         await task
@@ -61,7 +60,7 @@ class TestThrow:
             assert self.state == "starting"
             self.state = "waiting"
             w.set()
-            with pytest.raises(DivisionByZero):
+            with pytest.raises(ZeroDivisionError):
                 await e.wait()
             if immediate:
                 assert self.state == "interrupting"
@@ -83,7 +82,7 @@ class TestThrow:
             self.state = "task2"
 
         task2 = asyncio.create_task(task2())
-        task_throw(task, DivisionByZero(), immediate=immediate)
+        task_throw(task, ZeroDivisionError(), immediate=immediate)
         assert task_is_runnable(task)
         self.state = "interrupting"
         await task
@@ -109,7 +108,7 @@ class TestInterrupt:
             state = "waiting"
             w.set()
             if interrupt:
-                with pytest.raises(DivisionByZero):
+                with pytest.raises(ZeroDivisionError):
                     await e.wait()
                 assert state == "interrupting"
                 state = "interrupted"
@@ -124,7 +123,7 @@ class TestInterrupt:
         assert not task_is_runnable(task)
         if interrupt:
             state = "interrupting"
-            await task_interrupt(task, DivisionByZero())
+            await task_interrupt(task, ZeroDivisionError())
             assert state == "interrupted"
             e.set()
         else:
@@ -147,7 +146,7 @@ class TestInterrupt:
             assert state == "starting"
             state = "waiting"
             w.set()
-            with pytest.raises(DivisionByZero):
+            with pytest.raises(ZeroDivisionError):
                 await asyncio.sleep(0.01)
             assert state == "interrupting"
             state = "interrupted"
@@ -156,7 +155,7 @@ class TestInterrupt:
         await w.wait()
         assert state == "waiting"
         state = "interrupting"
-        await task_interrupt(task, DivisionByZero())
+        await task_interrupt(task, ZeroDivisionError())
         assert state == "interrupted"
         # wait a bit too, to see if the sleep has an side effects
         await asyncio.sleep(0.02)
@@ -176,7 +175,7 @@ class TestInterrupt:
             state = "waiting"
             w.set()
             if interrupt:
-                with pytest.raises(DivisionByZero):
+                with pytest.raises(ZeroDivisionError):
                     await e.wait()
                 assert state == "interrupting"
                 state = "interrupted"
@@ -207,7 +206,7 @@ class TestInterrupt:
         assert task_is_runnable(task2)
         if interrupt:
             state = "interrupting"
-            await task_interrupt(task, DivisionByZero())
+            await task_interrupt(task, ZeroDivisionError())
             assert state == "task2"
             e.set()
         else:
@@ -233,7 +232,7 @@ class TestInterrupt:
             assert state == "starting"
             state = "waiting"
             w.set()
-            with pytest.raises(DivisionByZero):
+            with pytest.raises(ZeroDivisionError):
                 await e.wait()
             assert state == "interrupting"
             state = "interrupted"
@@ -255,7 +254,7 @@ class TestInterrupt:
         assert task_is_runnable(task)
         assert task_is_runnable(task2)
         state = "interrupting"
-        await task_interrupt(task, DivisionByZero())
+        await task_interrupt(task, ZeroDivisionError())
         assert state == "done"
         assert task.done()
         assert task2.done()
@@ -272,14 +271,14 @@ class TestInterrupt:
 
         async def task2(wait_for):
             w.set()
-            with pytest.raises(DivisionByZero):
+            with pytest.raises(ZeroDivisionError):
                 await wait_for
 
         task1 = asyncio.create_task(task1())
         task2 = create_pytask(task2(task1))
         await w.wait()
         assert task_is_blocked(task2)
-        await task_interrupt(task2, DivisionByZero())
+        await task_interrupt(task2, ZeroDivisionError())
         assert task2.done()
         assert task_is_blocked(task1)
         task1.cancel()
@@ -289,7 +288,7 @@ class TestInterrupt:
 
         async def task():
             with pytest.raises(RuntimeError) as err:
-                await task_interrupt(asyncio.current_task(), DivisionByZero())
+                await task_interrupt(asyncio.current_task(), ZeroDivisionError())
             assert err.match("cannot interrupt self")
 
         task = create_pytask(task())
@@ -308,8 +307,8 @@ class TestInterrupt:
         assert task_is_blocked(task)
         task.cancel()
         assert task_is_runnable(task)
-        await task_interrupt(task, DivisionByZero())
-        with pytest.raises(DivisionByZero):
+        await task_interrupt(task, ZeroDivisionError())
+        with pytest.raises(ZeroDivisionError):
             await task
 
     async def test_done(self):
@@ -322,7 +321,7 @@ class TestInterrupt:
         await asyncio.sleep(0)
         assert task.done()
         with pytest.raises(RuntimeError) as err:
-            await task_interrupt(task, DivisionByZero())
+            await task_interrupt(task, ZeroDivisionError())
         assert err.match("cannot interrupt task which is done")
 
     async def test_new(self):
@@ -333,8 +332,8 @@ class TestInterrupt:
 
         task = create_pytask(task())
         assert not task.done()
-        await task_interrupt(task, DivisionByZero())
-        with pytest.raises(DivisionByZero):
+        await task_interrupt(task, ZeroDivisionError())
+        with pytest.raises(ZeroDivisionError):
             await task
 
 
