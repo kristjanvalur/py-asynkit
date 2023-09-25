@@ -336,6 +336,30 @@ class TestInterrupt:
         with pytest.raises(ZeroDivisionError):
             await task
 
+    async def test_queue(self):
+        """Test that a value can be retrieved of a queue
+        even when interrupted after becoming runnable
+        """
+        w = asyncio.Event()
+        q = asyncio.Queue()
+
+        async def task():
+            w.set()
+            with pytest.raises(ZeroDivisionError):
+                await q.get()
+            # retry
+            return await q.get()
+
+        t = create_pytask(task())
+        await w.wait()
+        assert task_is_blocked(t)
+        q.put_nowait(1)
+        assert task_is_runnable(t)
+        # task has been awoken, we interrupt it.
+        await task_interrupt(t, ZeroDivisionError())
+        # after handling the interrupt, the task tries again
+        assert await t == 1
+
 
 class TestTimeout:
     async def test_sleep(self):
