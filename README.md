@@ -714,7 +714,7 @@ the task hasn't become active yet, it is still awoken with an exception.
   `Task.__step` mehtod cannot be explicitly scheduled to the event loop.  For that reason,
   a special `create_pytask()` helper is provided to create a suitable `Task` instance.
 
-### `task_throw()``
+### `task_throw()`
 
 ```python
 def task_throw(task: Task, exc: BaseException, immediate: bool=False):
@@ -737,7 +737,8 @@ run.  When `await` returs, the exception _has been raised_ on the target task.
 
 By ensuring that the target task runs immediately, it is possible to reason about task
 execution without having to rely on external syncronization primitives and the cooperation
-of the target task.
+of the target task.  An interrupt is never _pending_ on the task (as a _cancellation_ can
+be) and therefore it cannot cause collisions with other interrupts.
 
 ```python
 async def test():
