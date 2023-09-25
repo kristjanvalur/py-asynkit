@@ -20,7 +20,7 @@ __all__ = [
 # in the C implementation from _asyncio module
 if hasattr(asyncio.tasks, "_PyTask"):
     PyTask = asyncio.tasks._PyTask
-else:
+else:  # pragma: no cover
     PyTask = asyncio.tasks.Task
 
 
@@ -61,9 +61,7 @@ def task_throw(
     try:
         step_method = task._Task__step  # type: ignore[attr-defined]
     except AttributeError as error:
-        raise RuntimeError(
-            "cannot interrupt task which is not a python task"
-        ) from error
+        raise TypeError("cannot interrupt task which is not a python task") from error
 
     # get our scheduling loop, to perform the actual scheduling
     task_loop = task.get_loop()
@@ -118,7 +116,7 @@ def task_throw(
             exception,
             context=task._context,  # type: ignore[attr-defined]
         )
-    else:
+    else:  # pragma: no cover
         task_loop.call_soon(
             step_method,
             exception,
@@ -160,7 +158,7 @@ async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
     assert task is not None
     loop = task.get_loop()
     if not isinstance(task, PyTask):
-        raise RuntimeError("cannot interrupt task which is not a python task")
+        raise TypeError("cannot interrupt task which is not a python task")
 
     # create an interrupt instance, which we check for
     my_interrupt = TimeoutInterrupt()
@@ -172,7 +170,7 @@ async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
         # pre-empt each other.  Instead, we interrupt from
         # a task, so that only one interrupt can be active.
         async def interruptor() -> None:
-            if is_active:
+            if is_active:  # pragma: no branch
                 assert task is not None  # typing
                 await task_interrupt(task, my_interrupt)
 

@@ -14,7 +14,7 @@ TaskTypes: Tuple[Any, ...]
 if hasattr(asyncio.tasks, "_PyTask"):
     PyTask = asyncio.tasks._PyTask
     TaskTypes = (Task, PyTask)
-else:
+else:  # pragma: no cover
     PyTask = asyncio.tasks.Task
     TaskTypes = (Task,)
 

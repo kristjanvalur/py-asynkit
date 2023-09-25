@@ -8,6 +8,7 @@ from asynkit.experimental import (
     task_throw,
     task_timeout,
 )
+from asynkit.loop.default import PyTask
 from asynkit.scheduling import task_is_blocked, task_is_runnable
 
 pytestmark = pytest.mark.anyio
@@ -91,6 +92,18 @@ class TestThrow:
         else:
             assert self.state == "interrupted"
         assert task.done()
+
+    async def test_ctask(self):
+        if PyTask is asyncio.Task:
+            pytest.skip("no CTask")
+
+        async def task():
+            pass
+
+        t = asyncio.create_task(task())
+        with pytest.raises(TypeError) as err:
+            task_throw(t, ZeroDivisionError())
+        assert err.match("python task")
 
 
 class TestInterrupt:
@@ -432,3 +445,12 @@ class TestTimeout:
 
         task = create_pytask(outer())
         await task
+
+    async def test_ctask(self):
+        if PyTask is asyncio.Task:
+            pytest.skip("no CTask")
+
+        with pytest.raises(TypeError) as err:
+            async with task_timeout(0.1):
+                await asyncio.sleep(0.2)
+        assert err.match("python task")
