@@ -105,6 +105,17 @@ class TestThrow:
             task_throw(t, ZeroDivisionError())
         assert err.match("python task")
 
+    async def test_non_exception(self):
+        """Test throwing a non-exception."""
+
+        async def task():
+            pass
+
+        task = create_pytask(task())
+        with pytest.raises(TypeError) as err:
+            task_throw(task, 1)
+        assert err.match("deriving from BaseException")
+
 
 class TestInterrupt:
     @pytest.mark.parametrize("interrupt", [True, False])

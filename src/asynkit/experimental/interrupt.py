@@ -51,6 +51,9 @@ def task_throw(
     this function can override a previously thrown error, which has not
     got the chance to be delivered yet. Use with caution."""
 
+    if not isinstance(exception, BaseException):
+        raise TypeError("exception must be an instance deriving from BaseException")
+
     # cannot interrupt a task which is finished
     if task.done():
         raise RuntimeError("cannot interrupt task which is done")
