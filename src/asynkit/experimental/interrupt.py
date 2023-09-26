@@ -70,14 +70,22 @@ def task_throw(
     task_loop = task.get_loop()
     scheduling_loop = get_scheduling_loop(task_loop)
 
+    # tasks.py mentions that the only way to transion from waiting
+    # for a future and being runnable is via the __wakeup() method.
+    # Well, we change that here.  task_throw() makes a task stop waiting
+    # for a future and transitions it to the runnable state directly.
+
     # is the task blocked? If so, it is waiting for a future and
     # has the _fut_waiter attribute set, and _fut_waiter.done() is False.
     # note! the following comment from asyncio.tasks.py is wrong:
     # # - Either _fut_waiter is None, and _step() is scheduled;
     # # - or _fut_waiter is some Future, and _step() is *not* scheduled.
-    # when a future is done, it schedules its done callbacks,
-    # i.e. task.__wakeup will be "called soon".  but the task's
-    # _fut_waiter is not None and _fut_waiter.done() is True.
+    # The key is that _fut_waiter _can_ be not None, with done() == True.
+    # in which case __step() (or __wakeup()) _is_ scheduled.
+    # When a future is done, it schedules its "done" callbacks to be called
+    # "soon".  __wakeup() is one such callback which calls __step().
+    # Until __wakeup()/__step() runs, _fut_waiter
+    # is left in place.
 
     # Cancellation: We need to detect if the task is cancelled.
     # because we don't want to deliver a second exception to a task.

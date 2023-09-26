@@ -95,9 +95,9 @@ def task_is_blocked(task: TaskAny) -> bool:
     # # - Either _fut_waiter is None, and _step() is scheduled;
     # # - or _fut_waiter is some Future, and _step() is *not* scheduled.
     # a task on the runnable queue (_step() scheduled) _can_ have a
-    # non-None future (_fut_waiter) which is _done_.
-    # This can happen when a task is cancelled, or when the future it was
-    # waiting for got done or cancelled.
+    # non-None future (_fut_waiter) which is _done_.  The _fut_waiter
+    # generally remains in place from the time the future becomes "done"
+    # and until Task.__step() runs as a result of that.
     # So we check the future directly for done-ness.
     future: Optional[FutureAny] = task._fut_waiter  # type: ignore
     return future is not None and not future.done()
