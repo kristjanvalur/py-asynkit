@@ -1,3 +1,5 @@
+* Release 0.10.3
+* Various minor fixes to task_interrupt and comments
 * Release 0.10.2
 * Add the experimental task_throw and task_interrupt methods
 * Release 0.10.1
