@@ -2,11 +2,11 @@ import asyncio
 import asyncio.tasks
 from asyncio import AbstractEventLoop, Handle, Task
 from contextvars import Context
-from typing import Any, Callable, Deque, Optional, Set, Tuple, cast
+from typing import Any, Callable, Deque, Iterable, Optional, Set, Tuple, cast
 
 from ..compat import call_soon
 from ..tools import deque_pop
-from .schedulingloop import AbstractSchedulingLoop
+from .schedulingloop import AbstractSchedulingLoop, AbstractSimpleSchedulingLoop
 from .types import QueueType, TaskAny
 
 # asyncio by default uses a C implemented task from _asyncio module
@@ -22,6 +22,71 @@ else:  # pragma: no cover
 Helper methods which work with the default event loop from
 Python's asyncio module.
 """
+
+
+class SimpleSchedulingHelper(AbstractSimpleSchedulingLoop):
+    """Helper class providing the simple scheduling methods
+    for the default event loop
+    """
+
+    def __init__(self, loop: Optional[AbstractEventLoop] = None) -> None:
+        self._loop = loop or asyncio.get_running_loop()
+        self._queue: QueueType = loop._ready  # type: ignore
+
+    def queue_len(self) -> int:
+        return len(self._queue)
+
+    def queue_enumerate(self) -> Iterable[Handle]:
+        """Enumerate the scheduled callbacks in the loop.
+        The elements are returned in the order they will be called."""
+        return self._queue
+
+    def queue_count(self, key: Callable[[Handle], bool]) -> int:
+        result = 0
+        for handle in self._queue:
+            if key(handle):
+                result += 1
+        return result
+
+    def queue_find(
+        self, key: Callable[[Handle], bool], remove: bool = False
+    ) -> Optional[Handle]:
+        # search from the end of the queue since this is commonly
+        # done for just-inserted callbacks
+        for i, handle in enumerate(reversed(self._queue)):
+            if key(handle):
+                if remove:
+                    popped = deque_pop(self._queue, len(self._queue) - i - 1)
+                    assert popped is handle
+                return handle
+        return None
+
+    def queue_insert(self, handle: Handle) -> None:
+        self._queue.append(handle)
+
+    def queue_insert_pos(self, handle: Handle, pos: int) -> None:
+        self._queue.insert(pos, handle)
+
+    def queue_remove(self, in_handle: Handle) -> None:
+        # search from the end
+        for i, handle in enumerate(reversed(self._queue)):
+            if in_handle is handle:
+                deque_pop(self._queue, len(self._queue) - i - 1)
+                break
+        else:
+            raise ValueError("handle not in queue")
+
+    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+        return get_task_from_handle_impl(handle)
+
+    def call_pos(
+        self,
+        pos: int,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Optional[Context] = None,
+    ) -> Handle:
+        return call_pos_impl(self._loop, pos, callback, *args, context=context)
 
 
 class SchedulingHelper(AbstractSchedulingLoop):
@@ -152,6 +217,8 @@ def get_task_from_handle_impl(
     """
     # It would be _great_ if a Handle object contained meta information,
     # like the Task it was created for. But it doesn't.
+    # it would be possible by replacing the callable with a custom class instance
+    # with extra information, but it requires cooperation from the Task
     try:
         task = handle._callback.__self__  # type: ignore
     except AttributeError:
@@ -159,3 +226,22 @@ def get_task_from_handle_impl(
     if isinstance(task, TaskTypes):
         return cast(TaskAny, task)
     return None
+
+
+def call_pos_impl(
+    loop: AbstractEventLoop,
+    pos: int,
+    callback: Callable[..., Any],
+    *args: Any,
+    context: Optional[Context] = None,
+) -> Handle:
+    """
+    Arrange for a callback to be inserted at the head of the queue to be
+    called later.
+    """
+    handle = call_soon(loop, callback, *args, context=context)
+    queue = loop._ready  # type: ignore
+    handle2 = queue.pop()
+    assert handle2 is handle
+    queue.insert(pos, handle)
+    return handle

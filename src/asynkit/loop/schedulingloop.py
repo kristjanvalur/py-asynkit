@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from asyncio import Handle
 from contextvars import Context
-from typing import Any, Callable, Optional, Set
+from typing import Any, Callable, Iterable, Optional, Set
 
 from .types import QueueType, TaskAny
 
@@ -9,6 +9,81 @@ from .types import QueueType, TaskAny
 Here we define a certain base class for event loops which
 implement extended scheduling primitives.
 """
+
+
+class AbstractSimpleSchedulingLoop(ABC):
+    """
+    This class represents the operations needed for a simple loop
+    with scheduled callbacks, to provide simple rescheduing features
+    without assuming too much about the implementation.  The implementation
+    might, for example, have priority scheduling.
+    """
+
+    @abstractmethod
+    def queue_len(self) -> int:
+        """Get the length of the queue"""
+        ...
+
+    @abstractmethod
+    def queue_enumerate(self) -> Iterable[Handle]:
+        """Enumerate the scheduled callbacks in the loop.
+        The elements are returned in the order they will be called."""
+        ...
+
+    @abstractmethod
+    def queue_count(self, key: Callable[[Handle], bool]) -> int:
+        """Count the number of callbacks in the queue which match the key."""
+        ...
+
+    @abstractmethod
+    def queue_find(
+        self, key: Callable[[Handle], bool], remove: bool = False
+    ) -> Optional[Handle]:
+        """Find a callback in the queue and return its handle.
+        Returns None if not found.  if `remove` is true, it is also
+        removed from the queue."""
+        ...
+
+    @abstractmethod
+    def queue_remove(self, handle: Handle) -> None:
+        """Remove a callback from the queue, identified by its handle.
+        raises ValueError if not found."""
+        ...
+
+    @abstractmethod
+    def queue_insert(self, handle: Handle) -> None:
+        """Insert a callback into the queue at the default position"""
+        ...
+
+    @abstractmethod
+    def queue_insert_pos(self, handle: Handle, pos: int) -> None:
+        """Insert a callback into the queue at position 'pos'.
+        'pos' is typically a low number, 0 or 1."""
+        ...
+
+    @abstractmethod
+    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+        """
+        Extract the runnable Task object
+        from its scheduled __step() callback.  Returns None if the
+        Handle does not represent a runnable Task.
+        Internal method, exposed for unittests.
+        May raise NotImplemented if not supported.
+        """
+        ...
+
+    @abstractmethod
+    def call_pos(
+        self,
+        position: int,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Optional[Context] = None
+    ) -> Handle:
+        """Arrange for a callback to be inserted at position 'pos' near the the head of
+        the queue to be called soon.
+        """
+        ...
 
 
 class AbstractSchedulingLoop(ABC):
@@ -39,6 +114,7 @@ class AbstractSchedulingLoop(ABC):
         ready queue at `pos`"""
         ...
 
+    # deprecated, we don't want to work with indices
     @abstractmethod
     def ready_index(self, task: TaskAny) -> int:
         """
@@ -47,14 +123,15 @@ class AbstractSchedulingLoop(ABC):
         """
         ...
 
-    @abstractmethod
-    def ready_len(self) -> int:
-        """Get the length of the runnable queue"""
-        ...
-
+    # deprecated, we don't want to work with indices
     @abstractmethod
     def ready_pop(self, pos: int = -1) -> Handle:
         """Pop an element off the ready list at the given position."""
+        ...
+
+    @abstractmethod
+    def ready_len(self) -> int:
+        """Get the length of the runnable queue"""
         ...
 
     @abstractmethod
@@ -64,6 +141,7 @@ class AbstractSchedulingLoop(ABC):
         """
         ...
 
+    # deprecated, frivolous
     @abstractmethod
     def ready_rotate(self, n: int) -> None:
         """Rotate the ready queue.

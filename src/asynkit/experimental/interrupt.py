@@ -5,7 +5,7 @@ import sys
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
 from asynkit.loop.types import TaskAny
-from asynkit.scheduling import get_scheduling_loop
+from asynkit.scheduling import get_scheduling_loop2
 
 __all__ = [
     "create_pytask",
@@ -68,7 +68,7 @@ def task_throw(
 
     # get our scheduling loop, to perform the actual scheduling
     task_loop = task.get_loop()
-    scheduling_loop = get_scheduling_loop(task_loop)
+    scheduling_loop = get_scheduling_loop2(task_loop)
 
     # tasks.py mentions that the only way to transion from waiting
     # for a future and being runnable is via the __wakeup() method.
@@ -113,7 +113,9 @@ def task_throw(
 
         # it is in the ready queue (has __step / __wakeup shceduled)
         # or it is the running task..
-        handle = scheduling_loop.ready_remove(task)
+        handle = scheduling_loop.queue_find(
+            key=lambda h: scheduling_loop.get_task_from_handle(h) is task, remove=True
+        )
         if handle is None:
             # it is the running task
             assert task is asyncio.current_task()
@@ -139,9 +141,11 @@ def task_throw(
         # try to interrupt it again, which makes it easier to reason
         # about task behaviour.
         # Move target task to the head of the queue
-        handle = scheduling_loop.ready_remove(task)
+        handle = scheduling_loop.queue_find(
+            key=lambda h: scheduling_loop.get_task_from_handle(h) is task, remove=True
+        )
         assert handle is not None
-        scheduling_loop.ready_insert(0, handle)
+        scheduling_loop.queue_insert_pos(handle, 0)
 
 
 # interrupt a task.  We use much of the same mechanism used when cancelling a task,
