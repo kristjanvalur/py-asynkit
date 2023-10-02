@@ -114,7 +114,7 @@ def task_throw(
         # it is in the ready queue (has __step / __wakeup shceduled)
         # or it is the running task..
         handle = scheduling_loop.queue_find(
-            key=lambda h: scheduling_loop.get_task_from_handle(h) is task, remove=True
+            key=scheduling_loop.task_key(task), remove=True
         )
         if handle is None:
             # it is the running task
@@ -142,10 +142,10 @@ def task_throw(
         # about task behaviour.
         # Move target task to the head of the queue
         handle = scheduling_loop.queue_find(
-            key=lambda h: scheduling_loop.get_task_from_handle(h) is task, remove=True
+            key=scheduling_loop.task_key(task), remove=True
         )
         assert handle is not None
-        scheduling_loop.queue_insert_pos(handle, 0)
+        scheduling_loop.queue_insert_at(handle, 0)
 
 
 # interrupt a task.  We use much of the same mechanism used when cancelling a task,

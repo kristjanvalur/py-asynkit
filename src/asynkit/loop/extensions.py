@@ -86,7 +86,7 @@ def ready_remove(
     loop: Optional[AbstractEventLoop] = None,
 ) -> Optional[Handle]:
     sl = get_scheduling_loop2(loop)
-    return sl.queue_find(key=lambda h: task is sl.get_task_from_handle(h), remove=True)
+    return sl.queue_find(key=lambda h: task is sl.task_from_handle(h), remove=True)
 
 
 def ready_find(
@@ -94,7 +94,7 @@ def ready_find(
     loop: Optional[AbstractEventLoop] = None,
 ) -> Optional[Handle]:
     sl = get_scheduling_loop2(loop)
-    return sl.queue_find(key=lambda h: task is sl.get_task_from_handle(h), remove=False)
+    return sl.queue_find(key=lambda h: task is sl.task_from_handle(h), remove=False)
 
 
 # deprecated
@@ -136,8 +136,8 @@ def ready_tasks(
     loop: Optional[AbstractEventLoop] = None,
 ) -> Iterable[TaskAny]:
     sl = get_scheduling_loop2(loop)
-    for handle in sl.queue_enumerate():
-        task = sl.get_task_from_handle(handle)
+    for handle in sl.queue_items():
+        task = sl.task_from_handle(handle)
         if task is not None:
             yield task
 
@@ -153,7 +153,7 @@ def get_ready_queue(
     return get_scheduling_loop(loop).get_ready_queue()
 
 
-def get_task_from_handle(
+def task_from_handle(
     handle: Handle,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Optional[TaskAny]:
@@ -161,4 +161,4 @@ def get_task_from_handle(
     Low level routine, mostly used for testing.  May
     raise NotImplementedError if not supported.
     """
-    return get_scheduling_loop2(loop).get_task_from_handle(handle)
+    return get_scheduling_loop2(loop).task_from_handle(handle)

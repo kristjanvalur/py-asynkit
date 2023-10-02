@@ -39,7 +39,7 @@ async def sleep_insert(pos: int) -> None:
 
 async def _sleep_insert(loop: AbstractSimpleSchedulingLoop, pos: int) -> None:
     # arrange for a call __immediately__ after the current task sleeps
-    loop.call_pos(0, task_reinsert, asyncio.current_task(), pos)
+    loop.call_at(0, task_reinsert, asyncio.current_task(), pos)
     await asyncio.sleep(0)
 
 
@@ -50,11 +50,11 @@ def task_reinsert(task: TaskAny, pos: int) -> None:
 
 def _task_reinsert(loop: AbstractSimpleSchedulingLoop, task: TaskAny, pos: int) -> None:
     handle = loop.queue_find(
-        key=lambda h: loop.get_task_from_handle(h) is task, remove=True
+        key=loop.task_key(task), remove=True
     )
     if not handle:
         raise ValueError("Task is not scheduled")
-    loop.queue_insert_pos(handle, pos)
+    loop.queue_insert_at(handle, pos)
 
 
 async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:

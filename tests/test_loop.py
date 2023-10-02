@@ -9,7 +9,7 @@ import asynkit
 from asynkit.loop.extensions import (
     call_insert,
     get_ready_queue,
-    get_task_from_handle,
+    task_from_handle,
     ready_append,
     ready_find,
     ready_insert,
@@ -447,7 +447,7 @@ class TestTasks:
         task = asyncio.create_task(foo())
         queue = get_ready_queue()
         for handle in queue:
-            if get_task_from_handle(handle) == task:
+            if task_from_handle(handle) == task:
                 break
         else:
             assert False, "task not found in ready queue"

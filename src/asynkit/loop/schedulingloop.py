@@ -17,6 +17,10 @@ class AbstractSimpleSchedulingLoop(ABC):
     with scheduled callbacks, to provide simple rescheduing features
     without assuming too much about the implementation.  The implementation
     might, for example, have priority scheduling.
+    The loop is not assumed to have a fixed order of excecution but it
+    must support scheduling _at_ a specific low position, 0 or 1, whereby
+    it recognises the _next_ callback, and the second callback, and so on,
+    and respects that if asked.
     """
 
     @abstractmethod
@@ -25,14 +29,9 @@ class AbstractSimpleSchedulingLoop(ABC):
         ...
 
     @abstractmethod
-    def queue_enumerate(self) -> Iterable[Handle]:
-        """Enumerate the scheduled callbacks in the loop.
+    def queue_items(self) -> Iterable[Handle]:
+        """Return the scheduled callbacks in the loop.
         The elements are returned in the order they will be called."""
-        ...
-
-    @abstractmethod
-    def queue_count(self, key: Callable[[Handle], bool]) -> int:
-        """Count the number of callbacks in the queue which match the key."""
         ...
 
     @abstractmethod
@@ -56,24 +55,13 @@ class AbstractSimpleSchedulingLoop(ABC):
         ...
 
     @abstractmethod
-    def queue_insert_pos(self, handle: Handle, pos: int) -> None:
+    def queue_insert_at(self, handle: Handle, pos: int) -> None:
         """Insert a callback into the queue at position 'pos'.
         'pos' is typically a low number, 0 or 1."""
         ...
 
     @abstractmethod
-    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
-        """
-        Extract the runnable Task object
-        from its scheduled __step() callback.  Returns None if the
-        Handle does not represent a runnable Task.
-        Internal method, exposed for unittests.
-        May raise NotImplemented if not supported.
-        """
-        ...
-
-    @abstractmethod
-    def call_pos(
+    def call_at(
         self,
         position: int,
         callback: Callable[..., Any],
@@ -81,9 +69,28 @@ class AbstractSimpleSchedulingLoop(ABC):
         context: Optional[Context] = None
     ) -> Handle:
         """Arrange for a callback to be inserted at position 'pos' near the the head of
-        the queue to be called soon.
+        the queue to be called soon.  'pos' is typically a low number, 0 or 1.
         """
         ...
+
+    # helpers to find tasks from handles and to find certain handles
+    # in the queue
+    @abstractmethod
+    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+        """
+        Extract the runnable Task object
+        from its scheduled __step() callback.  Returns None if the
+        Handle does not represent a runnable Task.
+        """
+        ...
+
+    @abstractmethod
+    def task_key(self, task: TaskAny) -> Callable[[Handle], bool]:
+        """
+        Return a key function which can be used to find a task in the queue.
+        """
+        ...
+
 
 
 class AbstractSchedulingLoop(ABC):
@@ -168,7 +175,7 @@ class AbstractSchedulingLoop(ABC):
         ...
 
     @abstractmethod
-    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
         """
         Extract the runnable Task object
         from its scheduled __step() callback.  Returns None if the

@@ -23,7 +23,6 @@ Helper methods which work with the default event loop from
 Python's asyncio module.
 """
 
-
 class SimpleSchedulingHelper(AbstractSimpleSchedulingLoop):
     """Helper class providing the simple scheduling methods
     for the default event loop
@@ -36,17 +35,10 @@ class SimpleSchedulingHelper(AbstractSimpleSchedulingLoop):
     def queue_len(self) -> int:
         return len(self._queue)
 
-    def queue_enumerate(self) -> Iterable[Handle]:
+    def queue_items(self) -> Iterable[Handle]:
         """Enumerate the scheduled callbacks in the loop.
         The elements are returned in the order they will be called."""
         return self._queue
-
-    def queue_count(self, key: Callable[[Handle], bool]) -> int:
-        result = 0
-        for handle in self._queue:
-            if key(handle):
-                result += 1
-        return result
 
     def queue_find(
         self, key: Callable[[Handle], bool], remove: bool = False
@@ -64,7 +56,7 @@ class SimpleSchedulingHelper(AbstractSimpleSchedulingLoop):
     def queue_insert(self, handle: Handle) -> None:
         self._queue.append(handle)
 
-    def queue_insert_pos(self, handle: Handle, pos: int) -> None:
+    def queue_insert_at(self, handle: Handle, pos: int) -> None:
         self._queue.insert(pos, handle)
 
     def queue_remove(self, in_handle: Handle) -> None:
@@ -76,17 +68,20 @@ class SimpleSchedulingHelper(AbstractSimpleSchedulingLoop):
         else:
             raise ValueError("handle not in queue")
 
-    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
-        return get_task_from_handle_impl(handle)
-
-    def call_pos(
+    def call_at(
         self,
         pos: int,
         callback: Callable[..., Any],
         *args: Any,
         context: Optional[Context] = None,
     ) -> Handle:
-        return call_pos_impl(self._loop, pos, callback, *args, context=context)
+        return call_at_impl(self._loop, pos, callback, *args, context=context)
+
+    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+        return task_from_handle(handle)
+    
+    def task_key(self, task: TaskAny) -> Callable[[Handle], bool]:
+        return lambda handle: task_from_handle(handle) is task
 
 
 class SchedulingHelper(AbstractSchedulingLoop):
@@ -135,8 +130,8 @@ class SchedulingHelper(AbstractSchedulingLoop):
     ) -> Handle:
         return call_insert_impl(self._loop, position, callback, *args, context=context)
 
-    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
-        return get_task_from_handle_impl(handle)
+    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+        return task_from_handle(handle)
 
     def ready_tasks(self) -> Set[TaskAny]:
         return ready_tasks_impl(self._queue)
@@ -172,7 +167,7 @@ def ready_find_impl(
     task: TaskAny,
 ) -> int:
     for i, handle in enumerate(reversed(queue)):
-        found = get_task_from_handle_impl(handle)
+        found = task_from_handle(handle)
         if found is task:
             return len(queue) - i - 1
     return -1
@@ -182,7 +177,7 @@ def ready_find_impl(
 def ready_tasks_impl(queue: QueueType) -> Set[TaskAny]:
     result = set()
     for handle in queue:
-        task = get_task_from_handle_impl(handle)
+        task = task_from_handle(handle)
         if task:
             result.add(task)
     return result
@@ -207,7 +202,7 @@ def call_insert_impl(
     return handle
 
 
-def get_task_from_handle_impl(
+def task_from_handle(
     handle: Handle,
 ) -> Optional[TaskAny]:
     """
@@ -227,8 +222,7 @@ def get_task_from_handle_impl(
         return cast(TaskAny, task)
     return None
 
-
-def call_pos_impl(
+def call_at_impl(
     loop: AbstractEventLoop,
     pos: int,
     callback: Callable[..., Any],

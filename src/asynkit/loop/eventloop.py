@@ -57,14 +57,14 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
         """
         return self._ready
 
-    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
         """
         Default implementation to extract the runnable Task object
         from its scheduled __step() callback.  Returns None if the
         Handle does not represent a runnable Task. Can be subclassed
         for other non-default Task implementations.
         """
-        return default.get_task_from_handle_impl(handle)
+        return default.task_from_handle_impl(handle)
 
     def ready_len(self) -> int:
         """Get the length of the runnable queue"""
