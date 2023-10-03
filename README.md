@@ -102,7 +102,7 @@ of invocation in each such case.
 
 1. It copies the current _context_
 1. It initializes a `CoroStart()` object for the coroutine, starting it in the copied context.
-2. If it subsequently is `done()` It returns `CoroStart.as_future()`, ortherwise
+2. If it subsequently is `done()` It returns `CoroStart.as_future()`, otherwise
    it creates and returns a `Task` (using `asyncio.create_task` by default.)
 
 The result is an _awaitable_ which can be either directly awaited or passed
@@ -171,7 +171,7 @@ async code blocked.  If the code tries to access the event loop, e.g. by creatin
 The `syncfunction()` decorator can be used to automatically wrap an async function
 so that it is executed using `await_sync()`:
 
-```pycon
+```python
 >>> @asynkit.syncfunction
 ... async def sync_function():
 ...     async def async_function():
@@ -217,7 +217,7 @@ application.
 
 This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` and `await_sync()` functions. 
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
-an exception.  It can subsequently be _awaited_ to retreive the result.
+an exception.  It can subsequently be _awaited_ to retrieve the result.
 
 Similarly to a `Future`, it has these methods:
 
@@ -225,7 +225,7 @@ Similarly to a `Future`, it has these methods:
 - `result()` - Returns the _return value_ of the coroutine or **raises** any _exception_ that it produced.
 - `exception()` - Returns any _exception_ raised, or `None` otherwise.
 
- But more importly it has these:
+ But more importantly it has these:
 
 - `__await__()` - A magic method making it directly _awaitable_. If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it awaits the original coroutine's continued execution
 - `as_coroutine()` - A helper which returns a proper _coroutine_ object to await the `CoroStart`
@@ -281,7 +281,7 @@ implemented using [`CoroStart`](#corostart)
 
 ## `coro_iter()`
 
-This helper function turns a coroutine function into an iterator.  It is primarly
+This helper function turns a coroutine function into an iterator.  It is primarily
 intended to be used by the [`awaitmethod()`](#awaitmethod) function decorator.
 
 ## `awaitmethod()`
@@ -378,7 +378,7 @@ it will become the _return value_ of the `Monitor.oob()` call in the coroutine.
 Neither data nor an exception can be sent the first time the coroutine is awaited, 
 only as a response to a previous `OOBData` exception.
 
-A `Monitor` can be used when a coroutine wants to suspend itself, maybe waiting for some extenal
+A `Monitor` can be used when a coroutine wants to suspend itself, maybe waiting for some external
 condition, without resorting to the relatively heavy mechanism of creating, managing and synchronizing
 `Task` objects.  This can be useful if the coroutine needs to maintain state.  Additionally,
 this kind of messaging does not require an _event loop_ to be present and can can be driven
@@ -455,7 +455,7 @@ For a more complete example, have a look at [example_resp.py](examples/example_r
 
 A `GeneratorObject` builds on top of the `Monitor` to create an `AsyncGenerator`.  It is in many ways
 similar to an _asynchronous generator_ constructed using the _generator function_ syntax.
-But wheras those return values using the `yield` _keyword_,
+But whereas those return values using the `yield` _keyword_,
 a GeneratorObject has an `ayield()` _method_, which means that data can be sent to the generator
 by anyone, and not just by using `yield`, which makes composing such generators much simpler.
 
@@ -678,7 +678,7 @@ returning.
 
 - `CoroStart` when used with `Task` objects, such as by using `EagerTaskGroup`,
   does not work reliably with `trio`.
-  This is because the syncronization primitives
+  This is because the synchronization primitives
   are not based on `Future` objects but rather perform `Task`-based actions both before going to sleep
   and upon waking up.  If a `CoroStart` initially blocks on a primitive such as `Event.wait()` or
   `sleep(x)` it will be surprised and throw an error when it wakes up on in a different
@@ -692,7 +692,7 @@ in various ways.   For `asyncio`, the event loop never sees the `Future` object 
 
 # Experimental features
 
-Some features are currently availible experimentally.  They may work only on some platforms or be experimetal in nature, not stable or mature enough to be officially part of the library
+Some features are currently available experimentally.  They may work only on some platforms or be experimental in nature, not stable or mature enough to be officially part of the library
 
 ## Task Interruption
 
@@ -705,14 +705,25 @@ Methods are provided to raise exceptions on a `Task`.  This is somewhat similar 
   is _awaiting_ another task, the wait is interrupted, but that other task is not otherwise
   affected.
   
-A task which is blocked, waiting for a future, is immediatelly freed and scheduled to run.
+A task which is blocked, waiting for a future, is immediately freed and scheduled to run.
 If the task is already scheduled to run, i.e. it is _new_, or the future has triggered but
 the task hasn't become active yet, it is still awoken with an exception.
 
-- __Note:__ These functions currently are only supported on `Task` object implemented in python.
+- __Note:__ These functions currently are only work **reliably** with `Task` object implemented in Python.
   Modern implementation often have a native "C" implementation of `Task` objects and they contain inaccessible code which cannot be used by the library.  In particular, the
-  `Task.__step` mehtod cannot be explicitly scheduled to the event loop.  For that reason,
-  a special `create_pytask()` helper is provided to create a suitable `Task` instance.
+  `Task.__step` method cannot be explicitly scheduled to the event loop.  For that reason,
+  a special `create_pytask()` helper is provided to create a suitable python `Task` instance.
+- __However:__ This library does go through extra hoops to make it usable with C Tasks.
+  It almost works, but with two caveats:
+
+  - CTasks which have plain `TaskStepMethWrapper` callbacks scheduled cannot be interrupted.
+    These are typically tasks executing `await asyncio.sleep(0)` or freshly created
+    tasks that haven't started executing.
+  - The CTask's `_fut_waiting` member _cannot_ be cleared from our code, so there exists a time
+    where it can point to a valid, not-done, Future, even though the Task is about
+    to wake up.  This will make methods such as `task_is_blocked()` return incorrect
+    values.  It __will__ get cleared when the interrupted task starts executing, however. All the more reason to use `task_interrupt()` over `task_throw()` since
+    the former allows no space for code to see the task in such an intermediate state.
 
 ### `task_throw()`
 
@@ -726,7 +737,7 @@ pending.  if `immediate` is `True`, it is placed at the head of the runnable que
 to be next in line for execution.
 
 - This method should probably not be used directly.  Throwing exceptions into tasks should
-  be _synchronous_, i.e. we should deliver them immediatelly, because there is no way to
+  be _synchronous_, i.e. we should deliver them immediately, because there is no way to
   queue pending exceptions and they do not add up in any meaningful way.
   Prefer to use `task_interrupt()` below.
 
@@ -745,7 +756,7 @@ An `async` version of `task_throw()`.  When awaited, `task_interrupt()` is invok
 run.  Once awaited, the exception **has been raised** on the target task.
 
 By ensuring that the target task runs immediately, it is possible to reason about task
-execution without having to rely on external syncronization primitives and the cooperation
+execution without having to rely on external synchronization primitives and the cooperation
 of the target task.  An interrupt is never _pending_ on the task (as a _cancellation_ can
 be) and therefore it cannot cause collisions with other interrupts.
 
