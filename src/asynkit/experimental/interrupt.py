@@ -211,7 +211,7 @@ def c_task_reschedule(
     # We check for both)
     arg: Any
     cbname = str(callback)
-    if "TaskStep" in cbname or "__step" in cbname:
+    if "TaskStep" in cbname or "__step" in cbname:  # pragma: no cover
         # we can re-use this directly
         arg = exception
 
@@ -246,7 +246,7 @@ def future_find_task_callback(fut_waiter: Future[Any], task: TaskAny) -> Any:
             for (f, ctx) in fut_waiter._callbacks  # type: ignore[attr-defined]
             if getattr(f, "__self__", None) is task
         ]
-    else:
+    else:  # pragma: no cover
         found = [
             f
             for f in fut_waiter._callbacks  # type: ignore[attr-defined]
@@ -256,7 +256,7 @@ def future_find_task_callback(fut_waiter: Future[Any], task: TaskAny) -> Any:
     cb = found[0]
     if _have_context:
         callback, ctx = cb
-    else:
+    else:  # pragma: no cover
         callback, ctx = cb, None  # type: ignore[assignment]
     return callback, ctx
 
