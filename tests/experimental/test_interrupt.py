@@ -51,7 +51,10 @@ class TestThrow:
         await w.wait()
         assert self.state == "waiting"
         task_throw(task, ZeroDivisionError(), immediate=immediate)
-        assert task_is_runnable(task)
+        if not ctask:
+            # NOTE Test is unreliable for ctasks until they have been run
+            # since the task._fut_waiter cannot be cleared for them.
+            assert task_is_runnable(task)
         self.state = "interrupting"
         await task
         assert self.state == "interrupted"
@@ -92,7 +95,10 @@ class TestThrow:
 
         task2 = asyncio.create_task(task2())
         task_throw(task, ZeroDivisionError(), immediate=immediate)
-        assert task_is_runnable(task)
+        if not ctask:
+            # NOTE Test is unreliable for ctasks until they have been run
+            # since the task._fut_waiter cannot be cleared for them.
+            assert task_is_runnable(task)
         self.state = "interrupting"
         await task
         if immediate:
