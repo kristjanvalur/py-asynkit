@@ -1,10 +1,10 @@
-from collections import deque
 import asyncio
+from collections import deque
 
 import pytest
-from asynkit.loop.extensions import get_scheduling_loop
 
 import asynkit.tools
+from asynkit.loop.extensions import get_scheduling_loop
 
 from .conftest import SchedulingEventLoopPolicy
 
@@ -45,8 +45,6 @@ async def test_get_wakeup():
     # then, get the wakeup callback from the task
     # and store it
 
-
-
     loop = get_scheduling_loop()
     event = asyncio.Event()
 
@@ -58,7 +56,6 @@ async def test_get_wakeup():
             break
     else:
         assert False, "task not found in ready queue"
-    fresh = h
 
     # create a just awoken task
     task = asyncio.create_task(event.wait())
@@ -71,12 +68,8 @@ async def test_get_wakeup():
             break
     else:
         assert False, "task not found in ready queue"
-    awoken = h
-
-
 
     # now, we have the handle, we can get the wakeup callback
-    
 
     event.set()
     await task

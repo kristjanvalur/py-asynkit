@@ -78,7 +78,7 @@ class TestThrow:
                 assert self.state == "task2"
             self.state = "interrupted"
 
-        task = (ctask, task())
+        task = create_task(ctask, task())
         await w.wait()
         assert self.state == "waiting"
 
@@ -150,8 +150,7 @@ class TestInterrupt:
                 assert state == "waking"
                 state = "waited"
 
-        task = create_task(ctask, task()
-                           )
+        task = create_task(ctask, task())
         await w.wait()
         assert state == "waiting"
         assert not task_is_runnable(task)
@@ -349,9 +348,15 @@ class TestInterrupt:
 
         task = create_task(ctask, task())
         assert not task.done()
-        await task_interrupt(task, ZeroDivisionError())
-        #with pytest.raises(ZeroDivisionError):
-        #    await task
+        if ctask:
+            # NOTE we cannot do this for just created C tasks
+            with pytest.raises(RuntimeError) as err:
+                await task_interrupt(task, ZeroDivisionError())
+            assert err.match("cannot interrupt")
+        else:
+            await task_interrupt(task, ZeroDivisionError())
+            with pytest.raises(ZeroDivisionError):
+                await task
 
     async def test_queue(self, ctask):
         """Test that a value can be retrieved of a queue

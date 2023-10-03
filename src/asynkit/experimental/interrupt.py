@@ -1,12 +1,13 @@
 import asyncio
 import asyncio.tasks
 import contextlib
+import inspect
 import sys
+from asyncio import AbstractEventLoop, Future
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
-from asyncio import AbstractEventLoop, Future
+from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
 from asynkit.loop.types import TaskAny
-from asynkit.scheduling import get_scheduling_loop, AbstractSchedulingLoop
 
 __all__ = [
     "create_pytask",
@@ -67,7 +68,7 @@ def task_throw(
     # more complex and hacky code to re-use already scheduled callbacks
     # in this case.
     step_method = getattr(task, "_Task__step", None)
-        
+
     # get our scheduling loop, to perform the actual scheduling
     task_loop = task.get_loop()
     scheduling_loop = get_scheduling_loop(task_loop)
@@ -102,7 +103,9 @@ def task_throw(
 
     if step_method is None:
         # special super hack for C tasks
-        callback, arg, ctx = c_task_reschedule(task_loop, scheduling_loop, task, fut_waiter, exception)
+        callback, arg, ctx = c_task_reschedule(
+            task_loop, scheduling_loop, task, fut_waiter, exception
+        )
     else:
         # regular code for Python tasks.  We can use the __step method directly.
 
@@ -129,17 +132,18 @@ def task_throw(
                 raise RuntimeError("cannot interrupt self")
 
         callback, arg = step_method, exception
-        ctx = task._context if _have_context else None # type: ignore[attr-defined]
+        ctx = task._context if _have_context else None  # type: ignore[attr-defined]
 
-    # now, we have to insert it
-    try:
-        task._fut_waiter = None  # type: ignore[attr-defined]
-    except AttributeError:
+    # clear the future waiter, and re-insert it.  fut_waiter is not necessarily
+    # done.
+    if step_method:
+        # only possible for Py-Tasks!
         # for C tasks, we cannot clear it.  but it is fine, it will be cleared
         # later by the task's __step method, and we are no longer in its callback list
         # howevever, in the mean time, the invariant that _fut_waiter is None or done()
-        # while the task is blocked, no longer holds!  so we should really run immediately.
-        pass
+        # while the task is blocked, no longer holds!  so we should really run
+        # immediately.
+        task._fut_waiter = None  # type: ignore[attr-defined]
     if _have_context:
         task_loop.call_soon(
             callback,
@@ -162,12 +166,20 @@ def task_throw(
         assert handle is not None
         scheduling_loop.ready_insert(0, handle)
 
-def c_task_reschedule(task_loop: AbstractEventLoop, scheduling_loop: AbstractSchedulingLoop, task: TaskAny, fut_waiter: Future, exception:BaseException) -> None:
+
+def c_task_reschedule(
+    task_loop: AbstractEventLoop,
+    scheduling_loop: AbstractSchedulingLoop,
+    task: TaskAny,
+    fut_waiter: Future[Any],
+    exception: BaseException,
+) -> Any:
     # because we don't have access to the __step method or __wakeup methods
     # in c tasks, we need to fish out the already existing callbacks
     # in the system and _reuse_ those.
 
-    # first, find the callback on the future, if any.  Similar to Future.remove_done_callback()
+    # first, find the callback on the future, if any.  Similar to
+    # Future.remove_done_callback()
     # but filters for the task, and returns the single callback found.
     if fut_waiter and not fut_waiter.done():
         callback, ctx = future_find_task_callback(fut_waiter, task)
@@ -181,6 +193,14 @@ def c_task_reschedule(task_loop: AbstractEventLoop, scheduling_loop: AbstractSch
         ):
             raise RuntimeError("cannot interrupt a cancelled task")
 
+        # it could be a just created coroutine.  For some reason, delivering
+        # an arbitrary exception to a just created coroutine causes for a C
+        # task does not result in the task being cancelled, so we have
+        # to give up.
+        state = inspect.getcoroutinestate(task._coro)  # type: ignore[attr-defined]
+        if state == "CORO_CREATED":
+            raise RuntimeError("cannot interrupt a just created c-task")
+
         # it is in the ready queue (has __step / __wakeup shceduled)
         # or it is the running task..
         handle = scheduling_loop.ready_remove(task)
@@ -189,12 +209,16 @@ def c_task_reschedule(task_loop: AbstractEventLoop, scheduling_loop: AbstractSch
             assert task is asyncio.current_task()
             raise RuntimeError("cannot interrupt self")
         callback = handle._callback  # type: ignore[attr-defined]
-        ctx = handle._context if _have_context else None # type: ignore[attr-defined]
-    
-    # we now have a callback, a bound method.
+        ctx = handle._context if _have_context else None  # type: ignore[attr-defined]
+
+    # we now have a callback, a bound method.  We must re-use this method
+    # because we have no way to create a new bound method for the internal
+    # __step and __wakeup methods of C tasks.  Find out which we have.
     # for C tasks, this can either be the
     # "TaskStepMethWrapper" for __step, or the "task_wakeup" for __wakeup.
-    # (for Py tasks, it is just a Task.__step or Task.__wakeup bound method.  We check for both)
+    # (for Py tasks, it is just a Task.__step or Task.__wakeup bound method.
+    # We check for both)
+    arg: Any
     cbname = str(callback)
     if "TaskStep" in cbname or "__step" in cbname:
         # we can re-use this directly
@@ -202,27 +226,36 @@ def c_task_reschedule(task_loop: AbstractEventLoop, scheduling_loop: AbstractSch
     else:
         assert "wakeup" in cbname
         # we need to create a cancelled future and pass that as arg to this one.
-        f = asyncio.Future()
+        f: Future[Any] = task._loop.create_future()  # type: ignore[attr-defined]
         f.set_exception(exception)
         arg = f
 
     return callback, arg, ctx
 
-def future_find_task_callback(fut_waiter:Future, task : TaskAny) -> Any:
+
+def future_find_task_callback(fut_waiter: Future[Any], task: TaskAny) -> Any:
     """
     Look for the correct callback on the future to remove, by finding the
     one associated with a task.
     """
     if _have_context:
-        found = [(f, ctx) for (f, ctx) in fut_waiter._callbacks if getattr(f, "__self__", None) is task]  # type: ignore[attr-defined]
+        found = [
+            (f, ctx)
+            for (f, ctx) in fut_waiter._callbacks  # type: ignore[attr-defined]
+            if getattr(f, "__self__", None) is task
+        ]
     else:
-        found = [f for f in fut_waiter._callbacks if getattr(f, "__self__", None) is task]  # type: ignore[attr-defined]
+        found = [
+            f
+            for f in fut_waiter._callbacks  # type: ignore[attr-defined]
+            if getattr(f, "__self__", None) is task
+        ]
     assert len(found) == 1
     cb = found[0]
     if _have_context:
         callback, ctx = cb
     else:
-        callback, ctx = cb, None
+        callback, ctx = cb, None  # type: ignore[assignment]
     return callback, ctx
 
 
