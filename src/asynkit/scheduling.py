@@ -99,6 +99,10 @@ def task_is_blocked(task: TaskAny) -> bool:
     # generally remains in place from the time the future becomes "done"
     # and until Task.__step() runs as a result of that.
     # So we check the future directly for done-ness.
+
+    # no, must check the runnable things directly, see below
+    return task in blocked_tasks()
+
     future: Optional[FutureAny] = task._fut_waiter  # type: ignore
     return future is not None and not future.done()
 
@@ -107,6 +111,10 @@ def task_is_runnable(task: TaskAny) -> bool:
     """
     Returns True if the task is ready.
     """
+    # note! because the experimental task_interrupt() method for asyncio
+    # cannot clear the Task._fut_waiter, we cannot rely on that to check
+    # if things are blocked.  Instead we must rely on the runnable queue.
+    return task in runnable_tasks()
     # we don't actually check for the task's presence in the ready queue,
     # it must be either, blocked, runnable or done.
     return not (task_is_blocked(task) or task.done())
@@ -145,7 +153,7 @@ def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[Task
         result = loop.ready_tasks()
     else:
         result = ready_tasks(loop=loop)
-    assert all(not task_is_blocked(task) for task in result)
+    #assert all(not task_is_blocked(task) for task in result)
     return result
 
 
@@ -157,5 +165,5 @@ def blocked_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[TaskA
     current = asyncio.current_task()
     if current:
         result.discard(current)
-    assert all(task_is_blocked(task) for task in result)
+    #assert all(task_is_blocked(task) for task in result)
     return result
