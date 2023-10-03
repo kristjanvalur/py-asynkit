@@ -200,6 +200,33 @@ class TestInterrupt:
         await asyncio.sleep(0.02)
         await task
 
+    async def test_sleep0(self, ctask):
+        """Test that we can interrupt a task which is sleeping 0 seconds"""
+        # create a task, have it run one step
+        state = "starting"
+
+        if ctask:
+            pytest.xfail("CTask plain __step is not interruptable")
+
+        async def task():
+            nonlocal state
+            assert state == "starting"
+            state = "waiting"
+            with pytest.raises(ZeroDivisionError):
+                await asyncio.sleep(0)
+            assert state == "interrupting"
+            state = "interrupted"
+
+        task = create_task(ctask, task())
+        await asyncio.sleep(0)
+        assert state == "waiting"
+        state = "interrupting"
+        await task_interrupt(task, ZeroDivisionError())
+        assert state == "interrupted"
+        # wait a bit too, to see if the sleep has an side effects
+        await asyncio.sleep(0.02)
+        await task
+
     @pytest.mark.parametrize("interrupt", [True, False])
     async def test_execution_order(self, ctask, interrupt):
         """Test that the interrupted task is run before any other task."""
@@ -349,20 +376,17 @@ class TestInterrupt:
     async def test_new(self, ctask):
         """Test that we can interrupt a task which hasn't started yet."""
 
+        if ctask:
+            pytest.xfail("CTask plain __step is not interruptable")
+
         async def task():
             pass
 
         task = create_task(ctask, task())
         assert not task.done()
-        if ctask:
-            # NOTE we cannot do this for just created C tasks
-            with pytest.raises(RuntimeError) as err:
-                await task_interrupt(task, ZeroDivisionError())
-            assert err.match("cannot interrupt")
-        else:
-            await task_interrupt(task, ZeroDivisionError())
-            with pytest.raises(ZeroDivisionError):
-                await task
+        await task_interrupt(task, ZeroDivisionError())
+        with pytest.raises(ZeroDivisionError):
+            await task
 
     async def test_queue(self, ctask):
         """Test that a value can be retrieved of a queue

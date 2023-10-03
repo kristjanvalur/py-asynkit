@@ -1,7 +1,6 @@
 import asyncio
 import asyncio.tasks
 import contextlib
-import inspect
 import sys
 from asyncio import AbstractEventLoop, Future
 from typing import Any, AsyncGenerator, Coroutine, Optional
@@ -193,14 +192,6 @@ def c_task_reschedule(
         ):
             raise RuntimeError("cannot interrupt a cancelled task")
 
-        # it could be a just created coroutine.  For some reason, delivering
-        # an arbitrary exception to a just created coroutine causes for a C
-        # task does not result in the task being cancelled, so we have
-        # to give up.
-        state = inspect.getcoroutinestate(task._coro)  # type: ignore[attr-defined]
-        if state == "CORO_CREATED":
-            raise RuntimeError("cannot interrupt a just created c-task")
-
         # it is in the ready queue (has __step / __wakeup shceduled)
         # or it is the running task..
         handle = scheduling_loop.ready_remove(task)
@@ -223,6 +214,17 @@ def c_task_reschedule(
     if "TaskStep" in cbname or "__step" in cbname:
         # we can re-use this directly
         arg = exception
+
+        # BUT! TaskStepMethWrapper cannot take arguments when called.  And we cannot
+        # cannot create one.  So, CTasks which have a plain __step scheduled
+        # cannot be interrupted.  So, we have to give up here.  There is no way for us
+        # into the pesky C implementation, we cannot modify the wrapped args, nothing.
+        # bummer.
+        if "TaskStepMethWrapper" in cbname:
+            scheduling_loop.ready_insert(-1, handle)  # re-insert it somewhere
+            raise RuntimeError(
+                "cannot interrupt a c-task with a plain __step scheduled"
+            )
     else:
         assert "wakeup" in cbname
         # we need to create a cancelled future and pass that as arg to this one.
