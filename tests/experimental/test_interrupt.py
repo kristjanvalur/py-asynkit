@@ -452,17 +452,18 @@ class TestInterrupt:
             await task
 
 
+@pytest.mark.parametrize("ctask", [True, False], ids=["ctask", "pytask"])
 class TestTimeout:
-    async def test_sleep(self):
+    async def test_sleep(self, ctask):
         async def task():
             with pytest.raises(asyncio.TimeoutError):
                 async with task_timeout(0.05):
                     await asyncio.sleep(0.1)
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await task
 
-    async def test_await_task(self):
+    async def test_await_task(self, ctask):
         async def task1():
             await asyncio.sleep(0.1)
             return "ok"
@@ -475,10 +476,10 @@ class TestTimeout:
             assert task_is_blocked(t)
             assert await t == "ok"
 
-        task = create_pytask(task2(), name="task2")
+        task = create_task(ctask, task2(), name="task2")
         await task
 
-    async def test_nested(self):
+    async def test_nested(self, ctask):
         """Test that nested timeouts work as expected."""
 
         async def inner():
@@ -499,14 +500,5 @@ class TestTimeout:
                 async with task_timeout(0.01):
                     await inner()
 
-        task = create_pytask(outer())
+        task = create_task(ctask, outer())
         await task
-
-    async def test_ctask(self):
-        if PyTask is asyncio.Task:
-            pytest.skip("no CTask")
-
-        with pytest.raises(TypeError) as err:
-            async with task_timeout(0.1):
-                await asyncio.sleep(0.2)
-        assert err.match("python task")

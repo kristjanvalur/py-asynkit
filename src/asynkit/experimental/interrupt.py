@@ -285,8 +285,6 @@ async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
     task = asyncio.current_task()
     assert task is not None
     loop = task.get_loop()
-    if not isinstance(task, PyTask):
-        raise TypeError("cannot interrupt task which is not a python task")
 
     # create an interrupt instance, which we check for
     my_interrupt = TimeoutInterrupt()
