@@ -72,7 +72,7 @@ def task_throw(
     task_loop = task.get_loop()
     scheduling_loop = get_scheduling_loop(task_loop)
 
-    # tasks.py mentions that the only way to transion from waiting
+    # tasks.py mentions that the only way to transition from waiting
     # for a future and being runnable is via the __wakeup() method.
     # Well, we change that here.  task_throw() makes a task stop waiting
     # for a future and transitions it to the runnable state directly.
@@ -122,7 +122,7 @@ def task_throw(
             ):
                 raise RuntimeError("cannot interrupt a cancelled task")
 
-            # it is in the ready queue (has __step / __wakeup shceduled)
+            # it is in the ready queue (has __step / __wakeup scheduled)
             # or it is the running task..
             handle = scheduling_loop.ready_remove(task)
             if handle is None:
@@ -139,12 +139,12 @@ def task_throw(
         # only possible for Py-Tasks!
         # for C tasks, we cannot clear it.  but it is fine, it will be cleared
         # later by the task's __step method, and we are no longer in its callback list
-        # howevever, in the mean time, the invariant that _fut_waiter is None or done()
-        # while the task is blocked, no longer holds!  so we should really run
-        # immediately.
+        # however in the mean time, the invariant that _fut_waiter is None or done()
+        # while the task is blocked, no longer holds!  so we should really make
+        # sure this task is switched to immediately!
         task._fut_waiter = None  # type: ignore[attr-defined]
     if _have_context:
-        task_loop.call_soon(
+        task_loop.call_soon(  # type: ignore[call-arg]
             callback,
             arg,
             context=ctx,
@@ -192,7 +192,7 @@ def c_task_reschedule(
         ):
             raise RuntimeError("cannot interrupt a cancelled task")
 
-        # it is in the ready queue (has __step / __wakeup shceduled)
+        # it is in the ready queue (has __step / __wakeup scheduled)
         # or it is the running task..
         handle = scheduling_loop.ready_remove(task)
         if handle is None:
@@ -295,8 +295,8 @@ async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
     def trigger_timeout() -> None:
         # we want to interrupt the task, but not from a
         # loop callback (using task_throw()), because hypothetically many
-        # such calbacks could run, and they could then
-        # pre-empt each other.  Instead, we interrupt from
+        # such callbacks could run, and they could then
+        # preempt each other.  Instead, we interrupt from
         # a task, so that only one interrupt can be active.
         async def interruptor() -> None:
             if is_active:  # pragma: no branch
