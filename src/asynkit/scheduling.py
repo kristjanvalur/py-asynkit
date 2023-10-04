@@ -145,7 +145,7 @@ def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[Task
         result = loop.ready_tasks()
     else:
         result = ready_tasks(loop=loop)
-    # assert all(not task_is_blocked(task) for task in result)
+    assert all(not task_is_blocked(task) for task in result)
     return result
 
 
@@ -157,5 +157,5 @@ def blocked_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[TaskA
     current = asyncio.current_task()
     if current:
         result.discard(current)
-    # assert all(task_is_blocked(task) for task in result)
+    assert all(task_is_blocked(task) for task in result)
     return result
