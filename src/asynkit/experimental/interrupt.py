@@ -2,11 +2,11 @@ import asyncio
 import asyncio.tasks
 import contextlib
 import sys
-from asyncio import AbstractEventLoop, Future
+from asyncio import AbstractEventLoop
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
 from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
-from asynkit.loop.types import TaskAny
+from asynkit.loop.types import FutureAny, TaskAny
 
 __all__ = [
     "create_pytask",
@@ -170,7 +170,7 @@ def c_task_reschedule(
     task_loop: AbstractEventLoop,
     scheduling_loop: AbstractSchedulingLoop,
     task: TaskAny,
-    fut_waiter: Future[Any],
+    fut_waiter: FutureAny,
     exception: BaseException,
 ) -> Any:
     # because we don't have access to the __step method or __wakeup methods
@@ -221,6 +221,7 @@ def c_task_reschedule(
         # into the pesky C implementation, we cannot modify the wrapped args, nothing.
         # bummer.
         if "TaskStepMethWrapper" in cbname:
+            assert handle is not None
             scheduling_loop.ready_insert(-1, handle)  # re-insert it somewhere
             raise RuntimeError(
                 "cannot interrupt a c-task with a plain __step scheduled"
@@ -228,14 +229,14 @@ def c_task_reschedule(
     else:
         assert "wakeup" in cbname
         # we need to create a cancelled future and pass that as arg to this one.
-        f: Future[Any] = task._loop.create_future()  # type: ignore[attr-defined]
+        f: FutureAny = task._loop.create_future()  # type: ignore[attr-defined]
         f.set_exception(exception)
         arg = f
 
     return callback, arg, ctx
 
 
-def future_find_task_callback(fut_waiter: Future[Any], task: TaskAny) -> Any:
+def future_find_task_callback(fut_waiter: FutureAny, task: TaskAny) -> Any:
     """
     Look for the correct callback on the future to remove, by finding the
     one associated with a task.
