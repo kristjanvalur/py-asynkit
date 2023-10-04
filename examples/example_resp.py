@@ -66,7 +66,7 @@ def test_generator() -> None:
     """
     Test our generator based parser for Redis RESP strings.
     """
-    # construct a resp string constisting of an array of arrays of ints
+    # construct a resp string consisting of an array of arrays of ints
     resp = b"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n:4\r\n:5\r\n"
     # split it up into chunks of two bytes
     chunks = [resp[i : i + 2] for i in range(0, len(resp), 2)]
@@ -115,7 +115,7 @@ async def parse_resp_mon(
 
 async def test_monitor() -> None:
     """Test our monitor based parser for Redis RESP strings."""
-    # construct a resp string constisting of an array of arrays of ints
+    # construct a resp string consisting of an array of arrays of ints
     resp = b"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n:4\r\n:5\r\n"
     # split it up into chunks of two bytes
     chunks = [resp[i : i + 2] for i in range(0, len(resp), 2)]
@@ -137,7 +137,7 @@ def test_monitor_sync() -> None:
     """Test our monitor based parser for Redis RESP strings.
     from synchronous code.
     """
-    # construct a resp string constisting of an array of arrays of ints
+    # construct a resp string consisting of an array of arrays of ints
     resp = b"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n:4\r\n:5\r\n"
     # split it up into chunks of two bytes
     chunks = [resp[i : i + 2] for i in range(0, len(resp), 2)]
