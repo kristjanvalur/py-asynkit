@@ -23,7 +23,7 @@ class Interrupt(Exception):
 
 async def test_stop_doing_that():
     """
-    This example shows how we can use task_interrup()
+    This example shows how we can use task_interrupt()
     to immediately send an exception to a task in a certain
     state, and know how it has got the interrupt delivered by
     the time we have awaited.

@@ -184,11 +184,11 @@ class CoroStart(Awaitable[T_co]):
 
     def __await__(self) -> Generator[Any, Any, T_co]:
         """
-        Resume the excecution of the started coroutine.  CoroStart is an
+        Resume the execution of the started coroutine.  CoroStart is an
         _awaitable_.
         """
         if self.start_result is None:
-            # exhausted coroutine, triger the "cannot reuse" error
+            # exhausted coroutine, trigger the "cannot reuse" error
             self.coro.send(None)
             assert False, "unreachable"
 
@@ -280,7 +280,7 @@ class CoroStart(Awaitable[T_co]):
 
     def close(self) -> None:
         """
-        Close the coroutine.  It must immediatly exit.
+        Close the coroutine.  It must immediately exit.
         """
         self.start_result = None
         self.coro.close()
@@ -500,7 +500,7 @@ def awaitmethod(
 
 
 def await_sync(coro: Coroutine[Any, Any, T]) -> T:
-    """Runs a corouting synchronlously.  If the coroutine blocks, a
+    """Runs a coroutine synchronously.  If the coroutine blocks, a
     SynchronousError is raised.
     """
     start = CoroStart[T](coro)
@@ -546,7 +546,7 @@ def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
 
 
 def aiter_sync(async_iterable: AsyncIterable[T]) -> Generator[T, None, None]:
-    """Iterate synchronously over an async itarable"""
+    """Iterate synchronously over an async iterable"""
     ai = async_iterable.__aiter__()
 
     # a helper ensures that we have a coroutine, not just an Awaitable

@@ -219,7 +219,7 @@ class Monitor(Generic[T]):
         sentinel: Any = None,
     ) -> Any:
         """
-        A convenence function to call `aawait()`, returning a sentinel if
+        A convenience function to call `aawait()`, returning a sentinel if
         an OOBData exception was raised.
         The `sentinel` value defaults to None.  The OOBData
         exception is discarded.
@@ -233,7 +233,7 @@ class Monitor(Generic[T]):
 class BoundMonitor(Generic[T]):
     """
     An awaitable helper class which can be awaited to invoke a
-    `await Monitior.aawait(coroutine)`
+    `await Monitor.aawait(coroutine)`
     """
 
     def __init__(self, monitor: Monitor[T], coro: Coroutine[Any, Any, T]) -> None:
