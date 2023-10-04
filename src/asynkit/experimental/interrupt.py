@@ -211,6 +211,7 @@ def c_task_reschedule(
     # We check for both)
     arg: Any
     cbname = str(callback)
+    # CTasks have a TaskStepMethWrapper
     if "TaskStep" in cbname or "__step" in cbname:  # pragma: no cover
         # we can re-use this directly
         arg = exception
@@ -227,7 +228,8 @@ def c_task_reschedule(
                 "cannot interrupt a c-task with a plain __step scheduled"
             )
     else:
-        assert "wakeup" in cbname
+        # this is a TaskWakeupMethWrapper in 3.9 and earlier, 'task_wakeup()' after.
+        assert "wakeup" in cbname or "TaskWakeup" in cbname
         # we need to create a cancelled future and pass that as arg to this one.
         f: FutureAny = task._loop.create_future()  # type: ignore[attr-defined]
         f.set_exception(exception)
