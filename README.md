@@ -743,7 +743,7 @@ to be next in line for execution.
 
 - This method will **fail** if the target task has a pending _cancellation_, that is,
   it is in the process of waking up with a pending `CancelledError`.  Cancellation is
-  currently asynchronous, while throwing tasks is intended to be synchronous.
+  currently asynchronous, while throwing exceptions is intended to be synchronous.
 
 ### `task_interrupt()`
 
