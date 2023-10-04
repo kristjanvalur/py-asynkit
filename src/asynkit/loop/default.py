@@ -23,6 +23,7 @@ Helper methods which work with the default event loop from
 Python's asyncio module.
 """
 
+
 class SimpleSchedulingHelper(AbstractSimpleSchedulingLoop):
     """Helper class providing the simple scheduling methods
     for the default event loop
@@ -79,7 +80,7 @@ class SimpleSchedulingHelper(AbstractSimpleSchedulingLoop):
 
     def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
         return task_from_handle(handle)
-    
+
     def task_key(self, task: TaskAny) -> Callable[[Handle], bool]:
         return lambda handle: task_from_handle(handle) is task
 
@@ -221,6 +222,7 @@ def task_from_handle(
     if isinstance(task, TaskTypes):
         return cast(TaskAny, task)
     return None
+
 
 def call_at_impl(
     loop: AbstractEventLoop,

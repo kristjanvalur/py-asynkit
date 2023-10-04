@@ -49,9 +49,7 @@ def task_reinsert(task: TaskAny, pos: int) -> None:
 
 
 def _task_reinsert(loop: AbstractSimpleSchedulingLoop, task: TaskAny, pos: int) -> None:
-    handle = loop.queue_find(
-        key=loop.task_key(task), remove=True
-    )
+    handle = loop.queue_find(key=loop.task_key(task), remove=True)
     if not handle:
         raise ValueError("Task is not scheduled")
     loop.queue_insert_at(handle, pos)

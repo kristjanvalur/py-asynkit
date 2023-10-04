@@ -9,7 +9,6 @@ import asynkit
 from asynkit.loop.extensions import (
     call_insert,
     get_ready_queue,
-    task_from_handle,
     ready_append,
     ready_find,
     ready_insert,
@@ -18,6 +17,7 @@ from asynkit.loop.extensions import (
     ready_remove,
     ready_rotate,
     ready_tasks,
+    task_from_handle,
 )
 
 from .conftest import SchedulingEventLoopPolicy

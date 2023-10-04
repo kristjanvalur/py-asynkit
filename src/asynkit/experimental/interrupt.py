@@ -5,10 +5,9 @@ import sys
 from asyncio import AbstractEventLoop
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
-from asynkit.loop.types import TaskAny
-from asynkit.scheduling import get_scheduling_loop2
-from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
+from asynkit.loop.extensions import AbstractSimpleSchedulingLoop
 from asynkit.loop.types import FutureAny, TaskAny
+from asynkit.scheduling import get_scheduling_loop2
 
 __all__ = [
     "create_pytask",
@@ -126,7 +125,10 @@ def task_throw(
 
             # it is in the ready queue (has __step / __wakeup scheduled)
             # or it is the running task..
-            handle = scheduling_loop.ready_remove(task)
+            handle = scheduling_loop.queue_find(
+                scheduling_loop.task_key(task),
+                remove=True,
+            )
             if handle is None:
                 # it is the running task
                 assert task is asyncio.current_task()
@@ -172,7 +174,7 @@ def task_throw(
 
 def c_task_reschedule(
     task_loop: AbstractEventLoop,
-    scheduling_loop: AbstractSchedulingLoop,
+    scheduling_loop: AbstractSimpleSchedulingLoop,
     task: TaskAny,
     fut_waiter: FutureAny,
     exception: BaseException,
@@ -198,7 +200,10 @@ def c_task_reschedule(
 
         # it is in the ready queue (has __step / __wakeup scheduled)
         # or it is the running task..
-        handle = scheduling_loop.ready_remove(task)
+        handle = scheduling_loop.queue_find(
+            scheduling_loop.task_key(task),
+            remove=True,
+        )
         if handle is None:
             # it is the running task
             assert task is asyncio.current_task()
@@ -227,7 +232,7 @@ def c_task_reschedule(
         # bummer.
         if "TaskStepMethWrapper" in cbname:
             assert handle is not None
-            scheduling_loop.ready_insert(-1, handle)  # re-insert it somewhere
+            scheduling_loop.queue_insert(handle)  # re-insert it somewhere
             raise RuntimeError(
                 "cannot interrupt a c-task with a plain __step scheduled"
             )

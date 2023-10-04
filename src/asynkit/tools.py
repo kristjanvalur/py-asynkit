@@ -5,7 +5,6 @@ from typing import (
     Any,
     Coroutine,
     Deque,
-    List,
     Optional,
     TypeVar,
 )

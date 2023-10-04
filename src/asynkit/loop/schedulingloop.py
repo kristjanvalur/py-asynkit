@@ -92,7 +92,6 @@ class AbstractSimpleSchedulingLoop(ABC):
         ...
 
 
-
 class AbstractSchedulingLoop(ABC):
     """
     This class represents the low level scheduling operations possible for
