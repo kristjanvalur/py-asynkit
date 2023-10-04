@@ -4,7 +4,7 @@ from contextvars import Context
 from typing import Any, Callable, Deque, Optional, Set, cast
 
 from . import default
-from .schedulingloop import AbstractSchedulingLoop
+from .schedulingloop import AbstractSchedulingLoop as AbstractSchedulingLoop
 from .types import TaskAny
 
 """
