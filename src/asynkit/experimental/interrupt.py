@@ -2,10 +2,11 @@ import asyncio
 import asyncio.tasks
 import contextlib
 import sys
+from asyncio import AbstractEventLoop
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
-from asynkit.loop.types import TaskAny
-from asynkit.scheduling import get_scheduling_loop
+from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
+from asynkit.loop.types import FutureAny, TaskAny
 
 __all__ = [
     "create_pytask",
@@ -15,6 +16,8 @@ __all__ = [
     "TimeoutInterrupt",
     "PyTask",
 ]
+
+_have_context = sys.version_info > (3, 8)
 
 # Crate a python Task.  We need access to the __step method and this is hidden
 # in the C implementation from _asyncio module
@@ -58,19 +61,18 @@ def task_throw(
     if task.done():
         raise RuntimeError("cannot interrupt task which is done")
 
-    # this only works on python tasks, which have the exposed __step method
-    # because we need to insert it directly into the ready queue
-    # have to defeat the name mangling:
-    try:
-        step_method = task._Task__step  # type: ignore[attr-defined]
-    except AttributeError as error:
-        raise TypeError("cannot interrupt task which is not a python task") from error
+    # For Python tasks, we can access the __step method to send an
+    # exception.  For C implemented tasks, it becomes more complicated,
+    # since the actual __step and __wakeup methods are hidden.  We need
+    # more complex and hacky code to re-use already scheduled callbacks
+    # in this case.
+    step_method = getattr(task, "_Task__step", None)
 
     # get our scheduling loop, to perform the actual scheduling
     task_loop = task.get_loop()
     scheduling_loop = get_scheduling_loop(task_loop)
 
-    # tasks.py mentions that the only way to transion from waiting
+    # tasks.py mentions that the only way to transition from waiting
     # for a future and being runnable is via the __wakeup() method.
     # Well, we change that here.  task_throw() makes a task stop waiting
     # for a future and transitions it to the runnable state directly.
@@ -97,40 +99,60 @@ def task_throw(
     # the _must_cancel flag is set on the task instead.
 
     fut_waiter = task._fut_waiter  # type: ignore[attr-defined]
-    if fut_waiter and not fut_waiter.done():
-        # it is blocked on a future.
-        # we remove ourselves from the future's callback list.
-        # this way, we can stop waiting for it, without cancelling it,
-        # which would would have side effects.
-        wakeup_method = task._Task__wakeup  # type: ignore[attr-defined]
-        fut_waiter.remove_done_callback(wakeup_method)
+
+    if step_method is None:
+        # special super hack for C tasks
+        callback, arg, ctx = c_task_reschedule(
+            task_loop, scheduling_loop, task, fut_waiter, exception
+        )
     else:
-        # it is not blocked but it could be cancelled
-        if task._must_cancel or (  # type: ignore[attr-defined]
-            fut_waiter and fut_waiter.cancelled()
-        ):
-            raise RuntimeError("cannot interrupt a cancelled task")
+        # regular code for Python tasks.  We can use the __step method directly.
 
-        # it is in the ready queue (has __step / __wakeup shceduled)
-        # or it is the running task..
-        handle = scheduling_loop.ready_remove(task)
-        if handle is None:
-            # it is the running task
-            assert task is asyncio.current_task()
-            raise RuntimeError("cannot interrupt self")
+        if fut_waiter and not fut_waiter.done():
+            # it is blocked on a future.
+            # we remove ourselves from the future's callback list.
+            # this way, we can stop waiting for it, without cancelling it,
+            # which would would have side effects.
+            wakeup_method = task._Task__wakeup  # type: ignore[attr-defined]
+            fut_waiter.remove_done_callback(wakeup_method)
+        else:
+            # it is not blocked but it could be cancelled
+            if task._must_cancel or (  # type: ignore[attr-defined]
+                fut_waiter and fut_waiter.cancelled()
+            ):
+                raise RuntimeError("cannot interrupt a cancelled task")
 
-    # now, we have to insert it
-    task._fut_waiter = None  # type: ignore[attr-defined]
-    if sys.version_info > (3, 8):
-        task_loop.call_soon(
-            step_method,
-            exception,
-            context=task._context,  # type: ignore[attr-defined]
+            # it is in the ready queue (has __step / __wakeup scheduled)
+            # or it is the running task..
+            handle = scheduling_loop.ready_remove(task)
+            if handle is None:
+                # it is the running task
+                assert task is asyncio.current_task()
+                raise RuntimeError("cannot interrupt self")
+
+        callback, arg = step_method, exception
+        ctx = task._context if _have_context else None  # type: ignore[attr-defined]
+
+    # clear the future waiter, and re-insert it.  fut_waiter is not necessarily
+    # done.
+    if step_method:
+        # only possible for Py-Tasks!
+        # for C tasks, we cannot clear it.  but it is fine, it will be cleared
+        # later by the task's __step method, and we are no longer in its callback list
+        # however in the mean time, the invariant that _fut_waiter is None or done()
+        # while the task is blocked, no longer holds!  so we should really make
+        # sure this task is switched to immediately!
+        task._fut_waiter = None  # type: ignore[attr-defined]
+    if _have_context:
+        task_loop.call_soon(  # type: ignore[call-arg]
+            callback,
+            arg,
+            context=ctx,
         )
     else:  # pragma: no cover
         task_loop.call_soon(
-            step_method,
-            exception,
+            callback,
+            arg,
         )
 
     if immediate:
@@ -142,6 +164,104 @@ def task_throw(
         handle = scheduling_loop.ready_remove(task)
         assert handle is not None
         scheduling_loop.ready_insert(0, handle)
+
+
+def c_task_reschedule(
+    task_loop: AbstractEventLoop,
+    scheduling_loop: AbstractSchedulingLoop,
+    task: TaskAny,
+    fut_waiter: FutureAny,
+    exception: BaseException,
+) -> Any:
+    # because we don't have access to the __step method or __wakeup methods
+    # in c tasks, we need to fish out the already existing callbacks
+    # in the system and _reuse_ those.
+
+    # first, find the callback on the future, if any.  Similar to
+    # Future.remove_done_callback()
+    # but filters for the task, and returns the single callback found.
+    if fut_waiter and not fut_waiter.done():
+        callback, ctx = future_find_task_callback(fut_waiter, task)
+        fut_waiter.remove_done_callback(callback)
+        handle = None
+
+    else:
+        # it is not blocked but it could be cancelled
+        if task._must_cancel or (  # type: ignore[attr-defined]
+            fut_waiter and fut_waiter.cancelled()
+        ):
+            raise RuntimeError("cannot interrupt a cancelled task")
+
+        # it is in the ready queue (has __step / __wakeup scheduled)
+        # or it is the running task..
+        handle = scheduling_loop.ready_remove(task)
+        if handle is None:
+            # it is the running task
+            assert task is asyncio.current_task()
+            raise RuntimeError("cannot interrupt self")
+        callback = handle._callback  # type: ignore[attr-defined]
+        ctx = handle._context if _have_context else None  # type: ignore[attr-defined]
+
+    # we now have a callback, a bound method.  We must re-use this method
+    # because we have no way to create a new bound method for the internal
+    # __step and __wakeup methods of C tasks.  Find out which we have.
+    # for C tasks, this can either be the
+    # "TaskStepMethWrapper" for __step, or the "task_wakeup" for __wakeup.
+    # (for Py tasks, it is just a Task.__step or Task.__wakeup bound method.
+    # We check for both)
+    arg: Any
+    cbname = str(callback)
+    # CTasks have a TaskStepMethWrapper
+    if "TaskStep" in cbname or "__step" in cbname:  # pragma: no cover
+        # we can re-use this directly
+        arg = exception
+
+        # BUT! TaskStepMethWrapper cannot take arguments when called.  And we cannot
+        # cannot create one.  So, CTasks which have a plain __step scheduled
+        # cannot be interrupted.  So, we have to give up here.  There is no way for us
+        # into the pesky C implementation, we cannot modify the wrapped args, nothing.
+        # bummer.
+        if "TaskStepMethWrapper" in cbname:
+            assert handle is not None
+            scheduling_loop.ready_insert(-1, handle)  # re-insert it somewhere
+            raise RuntimeError(
+                "cannot interrupt a c-task with a plain __step scheduled"
+            )
+    else:
+        # this is a TaskWakeupMethWrapper in 3.9 and earlier, 'task_wakeup()' after.
+        assert "wakeup" in cbname or "TaskWakeup" in cbname
+        # we need to create a cancelled future and pass that as arg to this one.
+        f: FutureAny = task._loop.create_future()  # type: ignore[attr-defined]
+        f.set_exception(exception)
+        arg = f
+
+    return callback, arg, ctx
+
+
+def future_find_task_callback(fut_waiter: FutureAny, task: TaskAny) -> Any:
+    """
+    Look for the correct callback on the future to remove, by finding the
+    one associated with a task.
+    """
+    if _have_context:
+        found = [
+            (f, ctx)
+            for (f, ctx) in fut_waiter._callbacks  # type: ignore[attr-defined]
+            if getattr(f, "__self__", None) is task
+        ]
+    else:  # pragma: no cover
+        found = [
+            f
+            for f in fut_waiter._callbacks  # type: ignore[attr-defined]
+            if getattr(f, "__self__", None) is task
+        ]
+    assert len(found) == 1
+    cb = found[0]
+    if _have_context:
+        callback, ctx = cb
+    else:  # pragma: no cover
+        callback, ctx = cb, None  # type: ignore[assignment]
+    return callback, ctx
 
 
 # interrupt a task.  We use much of the same mechanism used when cancelling a task,
@@ -168,8 +288,6 @@ async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
     task = asyncio.current_task()
     assert task is not None
     loop = task.get_loop()
-    if not isinstance(task, PyTask):
-        raise TypeError("cannot interrupt task which is not a python task")
 
     # create an interrupt instance, which we check for
     my_interrupt = TimeoutInterrupt()
@@ -177,8 +295,8 @@ async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
     def trigger_timeout() -> None:
         # we want to interrupt the task, but not from a
         # loop callback (using task_throw()), because hypothetically many
-        # such calbacks could run, and they could then
-        # pre-empt each other.  Instead, we interrupt from
+        # such callbacks could run, and they could then
+        # preempt each other.  Instead, we interrupt from
         # a task, so that only one interrupt can be active.
         async def interruptor() -> None:
             if is_active:  # pragma: no branch

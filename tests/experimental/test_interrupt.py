@@ -19,11 +19,19 @@ def anyio_backend():
     return "asyncio"
 
 
+def create_task(ctask, coro, name=None):
+    if ctask:
+        return asyncio.create_task(coro)
+    else:
+        return create_pytask(coro)
+
+
+@pytest.mark.parametrize("ctask", [True, False], ids=["ctask", "pytask"])
 class TestThrow:
     """Test the task_throw() experimental function."""
 
     @pytest.mark.parametrize("immediate", [True, False])
-    async def test_event(self, immediate):
+    async def test_event(self, ctask, immediate):
         """Test that we can throw an exception into a task."""
         # create a task, have it wait on event
         e = asyncio.Event()
@@ -39,18 +47,21 @@ class TestThrow:
             assert self.state == "interrupting"
             self.state = "interrupted"
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await w.wait()
         assert self.state == "waiting"
         task_throw(task, ZeroDivisionError(), immediate=immediate)
-        assert task_is_runnable(task)
+        if not ctask:
+            # NOTE Test is unreliable for ctasks until they have been run
+            # since the task._fut_waiter cannot be cleared for them.
+            assert task_is_runnable(task)
         self.state = "interrupting"
         await task
         assert self.state == "interrupted"
         assert task.done()
 
     @pytest.mark.parametrize("immediate", [True, False])
-    async def test_execution_order(self, immediate):
+    async def test_execution_order(self, ctask, immediate):
         """Test that we can throw an exception into a task."""
         # create a task, have it wait on event
         e = asyncio.Event()
@@ -70,7 +81,7 @@ class TestThrow:
                 assert self.state == "task2"
             self.state = "interrupted"
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await w.wait()
         assert self.state == "waiting"
 
@@ -84,7 +95,10 @@ class TestThrow:
 
         task2 = asyncio.create_task(task2())
         task_throw(task, ZeroDivisionError(), immediate=immediate)
-        assert task_is_runnable(task)
+        if not ctask:
+            # NOTE Test is unreliable for ctasks until they have been run
+            # since the task._fut_waiter cannot be cleared for them.
+            assert task_is_runnable(task)
         self.state = "interrupting"
         await task
         if immediate:
@@ -93,7 +107,7 @@ class TestThrow:
             assert self.state == "interrupted"
         assert task.done()
 
-    async def test_ctask(self):
+    async def _test_ctask(self, ctask):
         if PyTask is asyncio.Task:
             pytest.skip("no CTask")
 
@@ -105,21 +119,22 @@ class TestThrow:
             task_throw(t, ZeroDivisionError())
         assert err.match("python task")
 
-    async def test_non_exception(self):
+    async def test_non_exception(self, ctask):
         """Test throwing a non-exception."""
 
         async def task():
             pass
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         with pytest.raises(TypeError) as err:
             task_throw(task, 1)
         assert err.match("deriving from BaseException")
 
 
+@pytest.mark.parametrize("ctask", [True, False], ids=["ctask", "pytask"])
 class TestInterrupt:
     @pytest.mark.parametrize("interrupt", [True, False])
-    async def test_event(self, interrupt):
+    async def test_event(self, ctask, interrupt):
         """Test that we can interrupt a task which is waiting on event."""
         # create a task, have it wait on event
         e = asyncio.Event()
@@ -141,7 +156,7 @@ class TestInterrupt:
                 assert state == "waking"
                 state = "waited"
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await w.wait()
         assert state == "waiting"
         assert not task_is_runnable(task)
@@ -159,7 +174,7 @@ class TestInterrupt:
         assert task.done()
         await task
 
-    async def test_sleep(self):
+    async def test_sleep(self, ctask):
         """Test that we can interrupt a task which is sleeping."""
         # create a task, have it wait on sleep
         w = asyncio.Event()
@@ -175,7 +190,7 @@ class TestInterrupt:
             assert state == "interrupting"
             state = "interrupted"
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await w.wait()
         assert state == "waiting"
         state = "interrupting"
@@ -185,8 +200,35 @@ class TestInterrupt:
         await asyncio.sleep(0.02)
         await task
 
+    async def test_sleep0(self, ctask):
+        """Test that we can interrupt a task which is sleeping 0 seconds"""
+        # create a task, have it run one step
+        state = "starting"
+
+        if ctask:
+            pytest.xfail("CTask plain __step is not interruptable")
+
+        async def task():
+            nonlocal state
+            assert state == "starting"
+            state = "waiting"
+            with pytest.raises(ZeroDivisionError):
+                await asyncio.sleep(0)
+            assert state == "interrupting"
+            state = "interrupted"
+
+        task = create_task(ctask, task())
+        await asyncio.sleep(0)
+        assert state == "waiting"
+        state = "interrupting"
+        await task_interrupt(task, ZeroDivisionError())
+        assert state == "interrupted"
+        # wait a bit too, to see if the sleep has an side effects
+        await asyncio.sleep(0.02)
+        await task
+
     @pytest.mark.parametrize("interrupt", [True, False])
-    async def test_execution_order(self, interrupt):
+    async def test_execution_order(self, ctask, interrupt):
         """Test that the interrupted task is run before any other task."""
         # create a task, have it wait on event
         e = asyncio.Event()
@@ -208,7 +250,7 @@ class TestInterrupt:
                 assert state == "task2"
                 state = "waited"
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await w.wait()
 
         # create another task, make it runnable.
@@ -244,7 +286,7 @@ class TestInterrupt:
         await task
         await task2
 
-    async def test_runnable(self):
+    async def test_runnable(self, ctask):
         """Test that we can interrupt a task which is already runnable."""
         # create a task, have it wait on event
         e = asyncio.Event()
@@ -261,7 +303,7 @@ class TestInterrupt:
             assert state == "interrupting"
             state = "interrupted"
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await w.wait()
         assert state == "waiting"
 
@@ -285,7 +327,7 @@ class TestInterrupt:
         await task
         await task2
 
-    async def test_interrupt_await_task(self):
+    async def test_interrupt_await_task(self, ctask):
         """Test that we can interrupt a task which is waiting on another task."""
         w = asyncio.Event()
 
@@ -299,7 +341,7 @@ class TestInterrupt:
                 await wait_for
 
         task1 = asyncio.create_task(task1())
-        task2 = create_pytask(task2(task1))
+        task2 = create_task(ctask, task2(task1))
         await w.wait()
         assert task_is_blocked(task2)
         await task_interrupt(task2, ZeroDivisionError())
@@ -307,7 +349,7 @@ class TestInterrupt:
         assert task_is_blocked(task1)
         task1.cancel()
 
-    async def test_self(self):
+    async def test_self(self, ctask):
         """Test that we cannot interrupt self."""
 
         async def task():
@@ -315,35 +357,38 @@ class TestInterrupt:
                 await task_interrupt(asyncio.current_task(), ZeroDivisionError())
             assert err.match("cannot interrupt self")
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await task
 
-    async def test_done(self):
+    async def test_done(self, ctask):
         """Test that we cannot interrupt a task which is done."""
 
         async def task():
             pass
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await asyncio.sleep(0)
         assert task.done()
         with pytest.raises(RuntimeError) as err:
             await task_interrupt(task, ZeroDivisionError())
         assert err.match("cannot interrupt task which is done")
 
-    async def test_new(self):
-        """Teest that we can interrupt a task which hasn't started yet."""
+    async def test_new(self, ctask):
+        """Test that we can interrupt a task which hasn't started yet."""
+
+        if ctask:
+            pytest.xfail("CTask plain __step is not interruptable")
 
         async def task():
             pass
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         assert not task.done()
         await task_interrupt(task, ZeroDivisionError())
         with pytest.raises(ZeroDivisionError):
             await task
 
-    async def test_queue(self):
+    async def test_queue(self, ctask):
         """Test that a value can be retrieved of a queue
         even when interrupted after becoming runnable
         """
@@ -357,7 +402,7 @@ class TestInterrupt:
             # retry
             return await q.get()
 
-        t = create_pytask(task())
+        t = create_task(ctask, task())
         await w.wait()
         assert task_is_blocked(t)
         q.put_nowait(1)
@@ -367,14 +412,14 @@ class TestInterrupt:
         # after handling the interrupt, the task tries again
         assert await t == 1
 
-    async def test_cancelled_task(self):
+    async def test_cancelled_task(self, ctask):
         """Test that we cannot interrupt a task which has been cancelled."""
         e = asyncio.Event()
 
         async def task():
             await e.wait()
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await asyncio.sleep(0)
         assert task_is_blocked(task)
         task.cancel()
@@ -385,7 +430,7 @@ class TestInterrupt:
         with pytest.raises(asyncio.CancelledError):
             await task
 
-    async def test_cancelled_runnable(self):
+    async def test_cancelled_runnable(self, ctask):
         """Test that we cannot interrupt a task which was cancelled
         while in a runnable state after sleep(0), i.e. it paused not
         due to waiting on a real future
@@ -395,7 +440,7 @@ class TestInterrupt:
             # this just places it in the ready queue again
             await asyncio.sleep(0)
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await asyncio.sleep(0)
         assert task_is_runnable(task)
         task.cancel()
@@ -407,33 +452,34 @@ class TestInterrupt:
             await task
 
 
+@pytest.mark.parametrize("ctask", [True, False], ids=["ctask", "pytask"])
 class TestTimeout:
-    async def test_sleep(self):
+    async def test_sleep(self, ctask):
         async def task():
             with pytest.raises(asyncio.TimeoutError):
                 async with task_timeout(0.05):
                     await asyncio.sleep(0.1)
 
-        task = create_pytask(task())
+        task = create_task(ctask, task())
         await task
 
-    async def test_await_task(self):
+    async def test_await_task(self, ctask):
         async def task1():
             await asyncio.sleep(0.1)
             return "ok"
 
         async def task2():
-            t = asyncio.create_task(task1())
+            t = asyncio.create_task(task1(), name="task1")
             with pytest.raises(asyncio.TimeoutError):
                 async with task_timeout(0.05):
                     await t
             assert task_is_blocked(t)
             assert await t == "ok"
 
-        task = create_pytask(task2())
+        task = create_task(ctask, task2(), name="task2")
         await task
 
-    async def test_nested(self):
+    async def test_nested(self, ctask):
         """Test that nested timeouts work as expected."""
 
         async def inner():
@@ -454,14 +500,5 @@ class TestTimeout:
                 async with task_timeout(0.01):
                     await inner()
 
-        task = create_pytask(outer())
+        task = create_task(ctask, outer())
         await task
-
-    async def test_ctask(self):
-        if PyTask is asyncio.Task:
-            pytest.skip("no CTask")
-
-        with pytest.raises(TypeError) as err:
-            async with task_timeout(0.1):
-                await asyncio.sleep(0.2)
-        assert err.match("python task")
