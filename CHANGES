@@ -1,3 +1,5 @@
+* Release 0.10.4
+* Allow C Tasks to be interrupted in most cases
 * Release 0.10.3
 * Various minor fixes to task_interrupt and comments
 * Release 0.10.2
