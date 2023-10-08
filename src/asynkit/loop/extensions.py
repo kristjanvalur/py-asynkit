@@ -4,7 +4,7 @@ from contextvars import Context
 from typing import Any, Callable, Iterable, Optional, cast
 
 from . import default
-from .schedulingloop import AbstractSimpleSchedulingLoop
+from .schedulingloop import AbstractSchedulingLoop as AbstractSchedulingLoop
 from .types import TaskAny
 
 """
@@ -12,7 +12,7 @@ This module contains extensions to the asyncio loop API.
 These are primarily aimed at doing better scheduling, and
 achieving specific scheduling goals.
 
-If the current loop is an AbstractSimpleSchedulingLoop, then the
+If the current loop is an AbstractSchedulingLoop, then the
 extensions are implemented directly on the loop.
 Otherwise, we call special extensions that work for the
 default loop implementation.
@@ -21,47 +21,31 @@ default loop implementation.
 
 def get_scheduling_loop(
     loop: Optional[AbstractEventLoop] = None,
-) -> AbstractSimpleSchedulingLoop:
+) -> AbstractSchedulingLoop:
     """
-    get the AbstractSimpleSchedulingLoop for the given loop
+    get the AbstractSchedulingLoop for the given loop
     """
     loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, AbstractSimpleSchedulingLoop):
+    if isinstance(loop, AbstractSchedulingLoop):
         return loop
     else:
         # in future, select other loop types here
         helpers = default
-        return cast(AbstractSimpleSchedulingLoop, helpers.SimpleSchedulingHelper(loop))
-
-
-def get_scheduling_loop2(
-    loop: Optional[AbstractEventLoop] = None,
-) -> AbstractSimpleSchedulingLoop:
-    """
-    get the AbstractSimpleSchedulingLoop for the given loop
-    """
-    loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, AbstractSimpleSchedulingLoop):
-        return loop
-    else:
-        # in future, select other loop types here
-        helpers = default
-        return cast(AbstractSimpleSchedulingLoop, helpers.SimpleSchedulingHelper(loop))
+        return cast(AbstractSchedulingLoop, helpers.SchedulingLoopHelper(loop))
 
 
 # loop extensions
 # functions which extend the loop API
 
 # deprecated
-def call_insert(
+def call_pos(
     position: int,
     callback: Callable[..., Any],
     *args: Any,
     context: Optional[Context] = None,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Handle:
-    raise NotImplementedError
-    return get_scheduling_loop(loop).call_insert(
+    return get_scheduling_loop(loop).call_pos(
         position, callback, *args, context=context
     )
 
@@ -69,7 +53,7 @@ def call_insert(
 def ready_len(
     loop: Optional[AbstractEventLoop] = None,
 ) -> int:
-    return get_scheduling_loop2(loop).queue_len()
+    return get_scheduling_loop(loop).queue_len()
 
 
 # deprecated
@@ -85,7 +69,7 @@ def ready_remove(
     task: TaskAny,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Optional[Handle]:
-    sl = get_scheduling_loop2(loop)
+    sl = get_scheduling_loop(loop)
     return sl.queue_find(key=lambda h: task is sl.task_from_handle(h), remove=True)
 
 
@@ -93,7 +77,7 @@ def ready_find(
     task: TaskAny,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Optional[Handle]:
-    sl = get_scheduling_loop2(loop)
+    sl = get_scheduling_loop(loop)
     return sl.queue_find(key=lambda h: task is sl.task_from_handle(h), remove=False)
 
 
@@ -110,7 +94,7 @@ def ready_append(
     item: Handle,
     loop: Optional[AbstractEventLoop] = None,
 ) -> None:
-    get_scheduling_loop2(loop).queue_insert(item)
+    get_scheduling_loop(loop).queue_insert(item)
 
 
 # deprecated
@@ -135,7 +119,7 @@ def ready_rotate(
 def ready_tasks(
     loop: Optional[AbstractEventLoop] = None,
 ) -> Iterable[TaskAny]:
-    sl = get_scheduling_loop2(loop)
+    sl = get_scheduling_loop(loop)
     for handle in sl.queue_items():
         task = sl.task_from_handle(handle)
         if task is not None:
@@ -161,4 +145,4 @@ def task_from_handle(
     Low level routine, mostly used for testing.  May
     raise NotImplementedError if not supported.
     """
-    return get_scheduling_loop2(loop).task_from_handle(handle)
+    return get_scheduling_loop(loop).task_from_handle(handle)

@@ -2,10 +2,10 @@ import asyncio
 from typing import Any, Coroutine, Optional, Set
 
 from .loop.extensions import (
-    get_scheduling_loop2,
+    get_scheduling_loop,
     ready_tasks,
 )
-from .loop.schedulingloop import AbstractSimpleSchedulingLoop
+from .loop.schedulingloop import AbstractSchedulingLoop
 from .loop.types import FutureAny, TaskAny
 from .tools import create_task
 
@@ -34,10 +34,10 @@ async def sleep_insert(pos: int) -> None:
     in the ready queue. This position may subsequently change due to other
     scheduling operations
     """
-    await _sleep_insert(get_scheduling_loop2(), pos)
+    await _sleep_insert(get_scheduling_loop(), pos)
 
 
-async def _sleep_insert(loop: AbstractSimpleSchedulingLoop, pos: int) -> None:
+async def _sleep_insert(loop: AbstractSchedulingLoop, pos: int) -> None:
     # arrange for a call __immediately__ after the current task sleeps
     loop.call_pos(0, task_reinsert, asyncio.current_task(), pos)
     await asyncio.sleep(0)
@@ -45,10 +45,10 @@ async def _sleep_insert(loop: AbstractSimpleSchedulingLoop, pos: int) -> None:
 
 def task_reinsert(task: TaskAny, pos: int) -> None:
     """Place a just-created task at position 'pos' in the runnable queue."""
-    _task_reinsert(get_scheduling_loop2(), task, pos)
+    _task_reinsert(get_scheduling_loop(), task, pos)
 
 
-def _task_reinsert(loop: AbstractSimpleSchedulingLoop, task: TaskAny, pos: int) -> None:
+def _task_reinsert(loop: AbstractSchedulingLoop, task: TaskAny, pos: int) -> None:
     handle = loop.queue_find(key=loop.task_key(task), remove=True)
     if not handle:
         raise ValueError("Task is not scheduled")
@@ -63,7 +63,7 @@ async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
     at position 1, right after the target task.
     """
     # reinsert target task at 0
-    loop = get_scheduling_loop2()
+    loop = get_scheduling_loop()
     _task_reinsert(loop, task, 0)
 
     # go to sleep so that target runs
@@ -136,7 +136,7 @@ async def create_task_start(
 def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[TaskAny]:
     """Return a set of the runnable tasks for the loop."""
     loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, AbstractSimpleSchedulingLoop):
+    if isinstance(loop, AbstractSchedulingLoop):
         result = set(loop.queue_tasks())
     else:
         result = set(ready_tasks(loop=loop))

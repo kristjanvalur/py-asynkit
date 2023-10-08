@@ -5,9 +5,9 @@ import sys
 from asyncio import AbstractEventLoop
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
-from asynkit.loop.extensions import AbstractSimpleSchedulingLoop
+from asynkit.loop.extensions import AbstractSchedulingLoop
 from asynkit.loop.types import FutureAny, TaskAny
-from asynkit.scheduling import get_scheduling_loop2
+from asynkit.scheduling import get_scheduling_loop
 
 __all__ = [
     "create_pytask",
@@ -71,7 +71,7 @@ def task_throw(
 
     # get our scheduling loop, to perform the actual scheduling
     task_loop = task.get_loop()
-    scheduling_loop = get_scheduling_loop2(task_loop)
+    scheduling_loop = get_scheduling_loop(task_loop)
 
     # tasks.py mentions that the only way to transition from waiting
     # for a future and being runnable is via the __wakeup() method.
@@ -174,7 +174,7 @@ def task_throw(
 
 def c_task_reschedule(
     task_loop: AbstractEventLoop,
-    scheduling_loop: AbstractSimpleSchedulingLoop,
+    scheduling_loop: AbstractSchedulingLoop,
     task: TaskAny,
     fut_waiter: FutureAny,
     exception: BaseException,

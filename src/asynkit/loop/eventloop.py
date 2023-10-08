@@ -16,7 +16,7 @@ from typing import (
 )
 
 from . import default
-from .schedulingloop import AbstractSimpleSchedulingLoop
+from .schedulingloop import AbstractSchedulingLoop
 
 """This module contains a mixin to extend event loops
 with scheduling features."""
@@ -44,7 +44,7 @@ else:
 T = TypeVar("T")
 
 
-class SchedulingMixin(AbstractSimpleSchedulingLoop, _Base):
+class SchedulingMixin(AbstractSchedulingLoop, _Base):
     """
     A mixin class adding features to the base event loop.
     """
@@ -56,7 +56,7 @@ class SchedulingMixin(AbstractSimpleSchedulingLoop, _Base):
         """
         return self._ready
 
-    # AbstractSimpleSchedulingLoop methods
+    # AbstractSchedulingLoop methods
 
     def queue_len(self) -> int:
         """Get the length of the runnable queue"""

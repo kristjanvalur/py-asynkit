@@ -6,7 +6,7 @@ from typing import Any, Callable, Deque, Iterable, Optional, Set, Tuple, cast
 
 from ..compat import call_soon
 from ..tools import deque_pop
-from .schedulingloop import AbstractSimpleSchedulingLoop
+from .schedulingloop import AbstractSchedulingLoop
 from .types import QueueType, TaskAny
 
 # asyncio by default uses a C implemented task from _asyncio module
@@ -24,8 +24,8 @@ Python's asyncio module.
 """
 
 
-class SimpleSchedulingHelper(AbstractSimpleSchedulingLoop):
-    """Helper class providing the simple scheduling methods
+class SchedulingLoopHelper(AbstractSchedulingLoop):
+    """Helper class providing the scheduling methods
     for the default event loop
     """
 

@@ -11,7 +11,7 @@ implement extended scheduling primitives.
 """
 
 
-class AbstractSimpleSchedulingLoop(ABC):
+class AbstractSchedulingLoop(ABC):
     """
     This class represents the operations needed for a simple loop
     with scheduled callbacks, to provide simple rescheduling features
