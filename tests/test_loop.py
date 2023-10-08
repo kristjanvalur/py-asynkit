@@ -15,6 +15,7 @@ from asynkit.loop.extensions import (
     ready_tasks,
     task_from_handle,
 )
+from asynkit.scheduling import task_is_runnable
 
 from .conftest import SchedulingEventLoopPolicy
 
@@ -235,7 +236,7 @@ async def test_task_switch_notfound():
         pass
 
     task = asyncio.create_task(foo())
-    item = ready_remove(task)
+    item = ready_find(task, remove=True)
     with pytest.raises(ValueError):
         await asynkit.task_switch(task)
     ready_insert(item)
@@ -251,28 +252,6 @@ async def test_task_switch_blocked():
     with pytest.raises(ValueError):
         await asynkit.task_switch(task)
     await task
-
-
-@pytest.mark.skip("we are deprecating ready_pop() and ready_insert()")
-class TestReadyPopInsert:
-    """
-    Test popping from and inserting into the ready queue
-    """
-
-    async def simple(self, arg):
-        self.log.append(arg)
-
-    async def tasks(self, n=3):
-        await asyncio.sleep(0)
-        assert ready_len() == 0
-
-        self.log = []
-        self.tasks = [asyncio.create_task(self.simple(k)) for k in range(n)]
-        return list(range(n))
-
-    async def gather(self):
-        await asyncio.gather(*self.tasks)
-        return self.log
 
 
 class TestTasks:
@@ -301,7 +280,7 @@ class TestTasks:
             pass
 
         task = asyncio.create_task(foo())
-        item = ready_remove(task)
+        item = ready_find(task, remove=True)
         assert ready_find(task) is None
         ready_insert(item)
 
@@ -315,9 +294,9 @@ class TestTasks:
             pass
 
         task = asyncio.create_task(foo())
-        item = ready_remove(task)
+        item = ready_find(task, remove=True)
         assert item is not None
-        item2 = ready_remove(task)
+        item2 = ready_find(task, remove=True)
         assert item2 is None
         ready_insert(item)
 
@@ -390,6 +369,22 @@ class TestTasks:
         else:
             assert False, "task not found in ready queue"
         await task
+
+    @pytest.mark.parametrize("count", [1, 2, 6])
+    async def test_handle_remove(self, count):
+        async def foo():
+            pass
+
+        tasks = [asyncio.create_task(foo() for _ in range(count))]
+        task = tasks[0]
+        handle = ready_find(task, remove=False)
+        assert handle is not None
+        assert task_is_runnable(task)
+        ready_remove(handle)
+        with pytest.raises(ValueError):
+            ready_remove(handle)
+        assert ready_find(task, remove=False) is None
+        ready_insert(handle)
 
 
 class TestTaskIsBlocked:
