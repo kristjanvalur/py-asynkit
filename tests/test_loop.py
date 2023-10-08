@@ -375,7 +375,7 @@ class TestTasks:
         async def foo():
             pass
 
-        tasks = [asyncio.create_task(foo() for _ in range(count))]
+        tasks = [asyncio.create_task(foo()) for _ in range(count)]
         task = tasks[0]
         handle = ready_find(task, remove=False)
         assert handle is not None
