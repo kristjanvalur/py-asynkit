@@ -1,21 +1,17 @@
 import asyncio
 from asyncio import DefaultEventLoopPolicy
-from collections import deque
 from unittest.mock import patch
 
 import pytest
 
 import asynkit
 from asynkit.loop.extensions import (
-    call_insert,
+    call_pos,
     get_ready_queue,
-    ready_append,
     ready_find,
     ready_insert,
     ready_len,
-    ready_pop,
     ready_remove,
-    ready_rotate,
     ready_tasks,
     task_from_handle,
 )
@@ -33,50 +29,6 @@ def anyio_backend(request):
         return ("asyncio", {"policy": DefaultEventLoopPolicy()})
 
 
-@pytest.mark.skip(reason="we are deprecating the ready_rotate() method")
-class TestReadyRotate:
-    """
-    Test that tasks, ready to execute, can be rotated in the ready queue
-    using the ready_rotate() loop method
-    """
-
-    async def simple(self, arg):
-        self.log.append(arg)
-
-    async def tasks(self, n=3):
-        await asyncio.sleep(0)
-        assert ready_len() == 0
-
-        self.log = []
-        self.tasks = [asyncio.create_task(self.simple(k)) for k in range(n)]
-        return list(range(n))
-
-    async def gather(self):
-        await asyncio.gather(*self.tasks)
-        return self.log
-
-    def rotate(self, seq, r):
-        d = deque(seq)
-        d.rotate(r)
-        return list(d)
-
-    async def test_three_normal(self):
-        log0 = await self.tasks()
-        assert await self.gather() == log0
-
-    async def test_two_shift_one(self):
-        log0 = await self.tasks()
-        ready_rotate(1)
-        assert await self.gather() == self.rotate(log0, 1)
-
-    @pytest.mark.parametrize("shift", [-3, -2, -1, 0, 1, 2, 3])
-    async def test_five_multi(self, shift):
-        log0 = await self.tasks(5)
-        ready_rotate(shift)
-        assert await self.gather() == self.rotate(log0, shift)
-
-
-@pytest.mark.skip(reason="we are deprecating the call_insert() method")
 class TestCallInsertReady:
     """
     Test that we can insert callbacks at given places in the runnable
@@ -88,7 +40,7 @@ class TestCallInsertReady:
         def callback():
             self.log.append(label)
 
-        call_insert(pos, callback)
+        call_pos(pos, callback)
 
     def prepare(self, n=3):
         self.log = []
@@ -286,7 +238,7 @@ async def test_task_switch_notfound():
     item = ready_remove(task)
     with pytest.raises(ValueError):
         await asynkit.task_switch(task)
-    ready_append(item)
+    ready_insert(item)
 
 
 async def test_task_switch_blocked():
@@ -322,20 +274,6 @@ class TestReadyPopInsert:
         await asyncio.gather(*self.tasks)
         return self.log
 
-    @pytest.mark.parametrize("source,destination", [(0, 4), (-1, 2), (3, 3), (-2, 2)])
-    async def test_pop_insert(self, source, destination):
-        log0 = await self.tasks(5)
-        asyncio.get_running_loop()
-        len = ready_len()
-        tmp = ready_pop(source)
-        assert ready_len() == len - 1
-        ready_insert(destination, tmp)
-        assert ready_len() == len
-
-        # manually manipulate our reference list
-        log0.insert(destination, log0.pop(source))
-        assert await self.gather() == log0
-
 
 class TestTasks:
     async def foo(self, sleeptime):
@@ -365,7 +303,7 @@ class TestTasks:
         task = asyncio.create_task(foo())
         item = ready_remove(task)
         assert ready_find(task) is None
-        ready_append(item)
+        ready_insert(item)
 
     async def test_remove_task(self):
         await asyncio.sleep(0)
@@ -381,7 +319,7 @@ class TestTasks:
         assert item is not None
         item2 = ready_remove(task)
         assert item2 is None
-        ready_append(item)
+        ready_insert(item)
 
     async def test_get_task(self):
         tasks = self.tasks()

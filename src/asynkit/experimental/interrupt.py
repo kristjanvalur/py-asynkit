@@ -5,9 +5,8 @@ import sys
 from asyncio import AbstractEventLoop
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
-from asynkit.loop.extensions import AbstractSchedulingLoop
+from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
 from asynkit.loop.types import FutureAny, TaskAny
-from asynkit.scheduling import get_scheduling_loop
 
 __all__ = [
     "create_pytask",

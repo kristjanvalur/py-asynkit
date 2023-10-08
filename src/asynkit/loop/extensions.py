@@ -35,9 +35,9 @@ def get_scheduling_loop(
 
 
 # loop extensions
-# functions which extend the loop API
+# functions which extend the loop API for extended Task scheduling
 
-# deprecated
+
 def call_pos(
     position: int,
     callback: Callable[..., Any],
@@ -56,15 +56,6 @@ def ready_len(
     return get_scheduling_loop(loop).queue_len()
 
 
-# deprecated
-def ready_pop(
-    position: int = -1,
-    loop: Optional[AbstractEventLoop] = None,
-) -> Any:
-    raise NotImplementedError
-    return get_scheduling_loop(loop).ready_pop(position)
-
-
 def ready_remove(
     task: TaskAny,
     loop: Optional[AbstractEventLoop] = None,
@@ -81,39 +72,11 @@ def ready_find(
     return sl.queue_find(key=lambda h: task is sl.task_from_handle(h), remove=False)
 
 
-# deprecated
-def ready_index(
-    task: TaskAny,
-    loop: Optional[AbstractEventLoop] = None,
-) -> int:
-    raise NotImplementedError
-    return get_scheduling_loop(loop).ready_index(task)
-
-
-def ready_append(
+def ready_insert(
     item: Handle,
     loop: Optional[AbstractEventLoop] = None,
 ) -> None:
     get_scheduling_loop(loop).queue_insert(item)
-
-
-# deprecated
-def ready_insert(
-    position: int,
-    item: Any,
-    loop: Optional[AbstractEventLoop] = None,
-) -> None:
-    raise NotImplementedError
-    get_scheduling_loop(loop).ready_insert(position, item)
-
-
-# deprecated
-def ready_rotate(
-    n: int = -1,
-    loop: Optional[AbstractEventLoop] = None,
-) -> None:
-    raise NotImplementedError
-    get_scheduling_loop(loop).ready_rotate(n)
 
 
 def ready_tasks(
@@ -126,7 +89,6 @@ def ready_tasks(
             yield task
 
 
-# deprecated
 def get_ready_queue(
     loop: Optional[AbstractEventLoop] = None,
 ) -> Iterable[Handle]:
