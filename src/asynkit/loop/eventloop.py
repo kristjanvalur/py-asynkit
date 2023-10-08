@@ -68,7 +68,7 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
     def queue_find(
         self, key: Callable[[Handle], bool], remove: bool = False
     ) -> Optional[Handle]:
-        return default.queue_find_impl(self.get_ready_queue(), key, remove)
+        return default.queue_find(self.get_ready_queue(), key, remove)
 
     def queue_insert(self, handle: Handle) -> None:
         self.get_ready_queue().append(handle)
@@ -77,7 +77,7 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
         self.get_ready_queue().insert(position, handle)
 
     def queue_remove(self, in_handle: Handle) -> None:
-        return default.queue_remove_impl(self.get_ready_queue(), in_handle)
+        return default.queue_remove(self.get_ready_queue(), in_handle)
 
     def call_pos(
         self,
@@ -86,7 +86,7 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
         *args: Any,
         context: Optional[Context] = None
     ) -> Handle:
-        return default.call_pos_impl(self, position, callback, *args, context=context)
+        return default.call_pos(self, position, callback, *args, context=context)
 
     def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
         return default.task_from_handle(handle)

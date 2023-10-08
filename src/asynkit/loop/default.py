@@ -2,7 +2,7 @@ import asyncio
 import asyncio.tasks
 from asyncio import AbstractEventLoop, Handle, Task
 from contextvars import Context
-from typing import Any, Callable, Deque, Iterable, Optional, Set, Tuple, cast
+from typing import Any, Callable, Deque, Iterable, Optional, Tuple, cast
 
 from ..compat import call_soon
 from ..tools import deque_pop
@@ -44,7 +44,7 @@ class SchedulingLoopHelper(AbstractSchedulingLoop):
     def queue_find(
         self, key: Callable[[Handle], bool], remove: bool = False
     ) -> Optional[Handle]:
-        return queue_find_impl(self._queue, key, remove)
+        return queue_find(self._queue, key, remove)
 
     def queue_insert(self, handle: Handle) -> None:
         self._queue.append(handle)
@@ -53,7 +53,7 @@ class SchedulingLoopHelper(AbstractSchedulingLoop):
         self._queue.insert(pos, handle)
 
     def queue_remove(self, in_handle: Handle) -> None:
-        return queue_remove_impl(self._queue, in_handle)
+        return queue_remove(self._queue, in_handle)
 
     def call_pos(
         self,
@@ -62,7 +62,7 @@ class SchedulingLoopHelper(AbstractSchedulingLoop):
         *args: Any,
         context: Optional[Context] = None,
     ) -> Handle:
-        return call_pos_impl(self._loop, pos, callback, *args, context=context)
+        return call_pos(self._loop, pos, callback, *args, context=context)
 
     def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
         return task_from_handle(handle)
@@ -81,56 +81,6 @@ class SchedulingLoopHelper(AbstractSchedulingLoop):
 # then discover the Task objects from the scheduled __step() callbacks.
 # This is doable via some hacky introspection.  It would be nicer if the
 # EventLoop considered Tasks separately from scheduled callbacks though.
-
-
-def ready_index_impl(
-    queue: Deque[Handle],
-    task: TaskAny,
-) -> int:
-    idx = ready_find_impl(queue, task)
-    if idx >= 0:
-        return idx
-    raise ValueError("task not in ready queue")
-
-
-def ready_find_impl(
-    queue: Deque[Handle],
-    task: TaskAny,
-) -> int:
-    for i, handle in enumerate(reversed(queue)):
-        found = task_from_handle(handle)
-        if found is task:
-            return len(queue) - i - 1
-    return -1
-    raise ValueError("task not in ready queue")
-
-
-def ready_tasks_impl(queue: QueueType) -> Set[TaskAny]:
-    result = set()
-    for handle in queue:
-        task = task_from_handle(handle)
-        if task:
-            result.add(task)
-    return result
-
-
-def call_insert_impl(
-    loop: AbstractEventLoop,
-    position: int,
-    callback: Callable[..., Any],
-    *args: Any,
-    context: Optional[Context] = None,
-) -> Handle:
-    """
-    Arrange for a callback to be inserted at `position` in the queue to be
-    called later.
-    """
-    handle = call_soon(loop, callback, *args, context=context)
-    queue = loop._ready  # type: ignore
-    handle2 = deque_pop(queue, -1)
-    assert handle2 is handle
-    queue.insert(position, handle)
-    return handle
 
 
 def task_from_handle(
@@ -154,7 +104,7 @@ def task_from_handle(
     return None
 
 
-def queue_find_impl(
+def queue_find(
     queue: Deque[Handle], key: Callable[[Handle], bool], remove: bool = False
 ) -> Optional[Handle]:
     # search from the end of the queue since this is commonly
@@ -168,7 +118,7 @@ def queue_find_impl(
     return None
 
 
-def queue_remove_impl(queue: Deque[Handle], in_handle: Handle) -> None:
+def queue_remove(queue: Deque[Handle], in_handle: Handle) -> None:
     # search from the end
     for i, handle in enumerate(reversed(queue)):
         if in_handle is handle:
@@ -178,7 +128,7 @@ def queue_remove_impl(queue: Deque[Handle], in_handle: Handle) -> None:
         raise ValueError("handle not in queue")
 
 
-def call_pos_impl(
+def call_pos(
     loop: AbstractEventLoop,
     pos: int,
     callback: Callable[..., Any],

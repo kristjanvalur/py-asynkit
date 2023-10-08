@@ -13,12 +13,12 @@ implement extended scheduling primitives.
 
 class AbstractSchedulingLoop(ABC):
     """
-    This class represents the operations needed for a simple loop
+    This class represents the operations needed for an eventloop
     with scheduled callbacks, to provide simple rescheduling features
     without assuming too much about the implementation.  The implementation
     might, for example, have priority scheduling.
     The loop is not assumed to have a fixed order of execution but it
-    must support scheduling _at_ a specific low position, 0 or 1, whereby
+    must support scheduling at a specific low _position_, 0 or 1, whereby
     it recognizes the _next_ callback, and the second callback, and so on,
     and respects that if asked.
     """
@@ -78,7 +78,7 @@ class AbstractSchedulingLoop(ABC):
         """
         ...
 
-    # helpers to find tasks from handles and to find certain handles
+    # helper to find tasks from handles and to find certain handles
     # in the queue
     @abstractmethod
     def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
@@ -89,7 +89,7 @@ class AbstractSchedulingLoop(ABC):
         """
         ...
 
-    # convenience funcions
+    # convenience functions, providing helpful default definitions
 
     def task_key(self, task: TaskAny) -> Callable[[Handle], bool]:
         """
