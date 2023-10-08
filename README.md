@@ -497,7 +497,7 @@ def sync_runner():
 
 A set of functions are provided to perform advanced scheduling of `Task` objects
 with `asyncio`.  They work with the built-in event loop, and also with any eventloop
-implementing the `AbstractSchedulingLoop` abstract base class, such as the `SchedulingMixin`
+implementing the `AbstractSimpleSchedulingLoop` abstract base class, such as the `SchedulingMixin`
 class which can be used to extend the built-in event loops.
 
 ## Scheduling functions

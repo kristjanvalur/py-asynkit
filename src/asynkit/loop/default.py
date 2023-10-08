@@ -6,7 +6,7 @@ from typing import Any, Callable, Deque, Iterable, Optional, Set, Tuple, cast
 
 from ..compat import call_soon
 from ..tools import deque_pop
-from .schedulingloop import AbstractSchedulingLoop, AbstractSimpleSchedulingLoop
+from .schedulingloop import AbstractSimpleSchedulingLoop
 from .types import QueueType, TaskAny
 
 # asyncio by default uses a C implemented task from _asyncio module
@@ -44,98 +44,28 @@ class SimpleSchedulingHelper(AbstractSimpleSchedulingLoop):
     def queue_find(
         self, key: Callable[[Handle], bool], remove: bool = False
     ) -> Optional[Handle]:
-        # search from the end of the queue since this is commonly
-        # done for just-inserted callbacks
-        for i, handle in enumerate(reversed(self._queue)):
-            if key(handle):
-                if remove:
-                    popped = deque_pop(self._queue, len(self._queue) - i - 1)
-                    assert popped is handle
-                return handle
-        return None
+        return queue_find_impl(self._queue, key, remove)
 
     def queue_insert(self, handle: Handle) -> None:
         self._queue.append(handle)
 
-    def queue_insert_at(self, handle: Handle, pos: int) -> None:
+    def queue_insert_pos(self, handle: Handle, pos: int) -> None:
         self._queue.insert(pos, handle)
 
     def queue_remove(self, in_handle: Handle) -> None:
-        # search from the end
-        for i, handle in enumerate(reversed(self._queue)):
-            if in_handle is handle:
-                deque_pop(self._queue, len(self._queue) - i - 1)
-                break
-        else:
-            raise ValueError("handle not in queue")
+        return queue_remove_impl(self._queue, in_handle)
 
-    def call_at(
+    def call_pos(
         self,
         pos: int,
         callback: Callable[..., Any],
         *args: Any,
         context: Optional[Context] = None,
     ) -> Handle:
-        return call_at_impl(self._loop, pos, callback, *args, context=context)
+        return call_pos_impl(self._loop, pos, callback, *args, context=context)
 
     def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
         return task_from_handle(handle)
-
-    def task_key(self, task: TaskAny) -> Callable[[Handle], bool]:
-        return lambda handle: task_from_handle(handle) is task
-
-
-class SchedulingHelper(AbstractSchedulingLoop):
-    """
-    Helper class providing scheduling methods for the default
-    event loop.
-    """
-
-    def __init__(self, loop: Optional[AbstractEventLoop] = None) -> None:
-        self._loop = loop or asyncio.get_running_loop()
-        self._queue: QueueType = loop._ready  # type: ignore
-
-    def get_ready_queue(self) -> QueueType:
-        return self._queue
-
-    def ready_append(self, element: Handle) -> None:
-        self._queue.append(element)
-
-    def ready_len(self) -> int:
-        return len(self._queue)
-
-    def ready_index(self, task: TaskAny) -> int:
-        return ready_index_impl(self._queue, task)
-
-    def ready_insert(self, pos: int, element: Handle) -> None:
-        self._queue.insert(pos, element)
-
-    def ready_pop(self, pos: int = -1) -> Handle:
-        return deque_pop(self._queue, pos)
-
-    def ready_remove(self, task: TaskAny) -> Optional[Handle]:
-        idx = ready_find_impl(self._queue, task)
-        if idx >= 0:
-            return deque_pop(self._queue, idx)
-        return None
-
-    def ready_rotate(self, n: int) -> None:
-        self._queue.rotate(n)
-
-    def call_insert(
-        self,
-        position: int,
-        callback: Callable[..., Any],
-        *args: Any,
-        context: Optional[Context] = None,
-    ) -> Handle:
-        return call_insert_impl(self._loop, position, callback, *args, context=context)
-
-    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
-        return task_from_handle(handle)
-
-    def ready_tasks(self) -> Set[TaskAny]:
-        return ready_tasks_impl(self._queue)
 
 
 # Asyncio does not directly have the concept of "runnable"
@@ -224,7 +154,31 @@ def task_from_handle(
     return None
 
 
-def call_at_impl(
+def queue_find_impl(
+    queue: Deque[Handle], key: Callable[[Handle], bool], remove: bool = False
+) -> Optional[Handle]:
+    # search from the end of the queue since this is commonly
+    # done for just-inserted callbacks
+    for i, handle in enumerate(reversed(queue)):
+        if key(handle):
+            if remove:
+                popped = deque_pop(queue, len(queue) - i - 1)
+                assert popped is handle
+            return handle
+    return None
+
+
+def queue_remove_impl(queue: Deque[Handle], in_handle: Handle) -> None:
+    # search from the end
+    for i, handle in enumerate(reversed(queue)):
+        if in_handle is handle:
+            deque_pop(queue, len(queue) - i - 1)
+            break
+    else:
+        raise ValueError("handle not in queue")
+
+
+def call_pos_impl(
     loop: AbstractEventLoop,
     pos: int,
     callback: Callable[..., Any],

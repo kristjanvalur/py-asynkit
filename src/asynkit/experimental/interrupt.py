@@ -169,7 +169,7 @@ def task_throw(
             key=scheduling_loop.task_key(task), remove=True
         )
         assert handle is not None
-        scheduling_loop.queue_insert_at(handle, 0)
+        scheduling_loop.queue_insert_pos(handle, 0)
 
 
 def c_task_reschedule(

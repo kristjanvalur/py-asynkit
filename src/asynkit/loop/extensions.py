@@ -1,10 +1,10 @@
 import asyncio
 from asyncio import AbstractEventLoop, Handle
 from contextvars import Context
-from typing import Any, Callable, Deque, Iterable, Optional, cast
+from typing import Any, Callable, Iterable, Optional, cast
 
 from . import default
-from .schedulingloop import AbstractSchedulingLoop, AbstractSimpleSchedulingLoop
+from .schedulingloop import AbstractSimpleSchedulingLoop
 from .types import TaskAny
 
 """
@@ -12,7 +12,7 @@ This module contains extensions to the asyncio loop API.
 These are primarily aimed at doing better scheduling, and
 achieving specific scheduling goals.
 
-If the current loop is an AbstractSchedulingLoop, then the
+If the current loop is an AbstractSimpleSchedulingLoop, then the
 extensions are implemented directly on the loop.
 Otherwise, we call special extensions that work for the
 default loop implementation.
@@ -21,24 +21,24 @@ default loop implementation.
 
 def get_scheduling_loop(
     loop: Optional[AbstractEventLoop] = None,
-) -> AbstractSchedulingLoop:
+) -> AbstractSimpleSchedulingLoop:
     """
-    get the AbstractSchedulingLoop for the given loop
+    get the AbstractSimpleSchedulingLoop for the given loop
     """
     loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, AbstractSchedulingLoop):
+    if isinstance(loop, AbstractSimpleSchedulingLoop):
         return loop
     else:
         # in future, select other loop types here
         helpers = default
-        return cast(AbstractSchedulingLoop, helpers.SchedulingHelper(loop))
+        return cast(AbstractSimpleSchedulingLoop, helpers.SimpleSchedulingHelper(loop))
 
 
 def get_scheduling_loop2(
     loop: Optional[AbstractEventLoop] = None,
 ) -> AbstractSimpleSchedulingLoop:
     """
-    get the AbstractBasicSchedulingLoop for the given loop
+    get the AbstractSimpleSchedulingLoop for the given loop
     """
     loop = loop or asyncio.get_running_loop()
     if isinstance(loop, AbstractSimpleSchedulingLoop):
@@ -145,12 +145,12 @@ def ready_tasks(
 # deprecated
 def get_ready_queue(
     loop: Optional[AbstractEventLoop] = None,
-) -> Deque[Handle]:
+) -> Iterable[Handle]:
     """
     Low level routine, mostly used for testing.  May
     raise NotImplementedError if not supported.
     """
-    return get_scheduling_loop(loop).get_ready_queue()
+    return get_scheduling_loop(loop).queue_items()
 
 
 def task_from_handle(

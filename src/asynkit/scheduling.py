@@ -5,7 +5,7 @@ from .loop.extensions import (
     get_scheduling_loop2,
     ready_tasks,
 )
-from .loop.schedulingloop import AbstractSchedulingLoop, AbstractSimpleSchedulingLoop
+from .loop.schedulingloop import AbstractSimpleSchedulingLoop
 from .loop.types import FutureAny, TaskAny
 from .tools import create_task
 
@@ -39,7 +39,7 @@ async def sleep_insert(pos: int) -> None:
 
 async def _sleep_insert(loop: AbstractSimpleSchedulingLoop, pos: int) -> None:
     # arrange for a call __immediately__ after the current task sleeps
-    loop.call_at(0, task_reinsert, asyncio.current_task(), pos)
+    loop.call_pos(0, task_reinsert, asyncio.current_task(), pos)
     await asyncio.sleep(0)
 
 
@@ -52,7 +52,7 @@ def _task_reinsert(loop: AbstractSimpleSchedulingLoop, task: TaskAny, pos: int) 
     handle = loop.queue_find(key=loop.task_key(task), remove=True)
     if not handle:
         raise ValueError("Task is not scheduled")
-    loop.queue_insert_at(handle, pos)
+    loop.queue_insert_pos(handle, pos)
 
 
 async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
@@ -136,8 +136,8 @@ async def create_task_start(
 def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[TaskAny]:
     """Return a set of the runnable tasks for the loop."""
     loop = loop or asyncio.get_running_loop()
-    if isinstance(loop, AbstractSchedulingLoop):
-        result = set(loop.ready_tasks())
+    if isinstance(loop, AbstractSimpleSchedulingLoop):
+        result = set(loop.queue_tasks())
     else:
         result = set(ready_tasks(loop=loop))
     assert all(not task_is_blocked(task) for task in result)
