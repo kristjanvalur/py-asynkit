@@ -442,11 +442,20 @@ class TestInterrupt:
 
 @pytest.mark.parametrize("ctask", [True, False], ids=["ctask", "pytask"])
 class TestTimeout:
-    async def test_sleep(self, ctask):
+    @pytest.mark.parametrize("timeout", [0.0, 0.05, -1])
+    async def test_sleep(self, ctask, timeout):
         async def task():
             with pytest.raises(asyncio.TimeoutError):
-                async with task_timeout(0.05):
+                async with task_timeout(timeout):
                     await asyncio.sleep(0.1)
+
+        task = create_task(ctask, task())
+        await task
+
+    async def test_nosleep(self, ctask):
+        async def task():
+            async with task_timeout(0.0):
+                pass
 
         task = create_task(ctask, task())
         await task
@@ -489,4 +498,12 @@ class TestTimeout:
                     await inner()
 
         task = create_task(ctask, outer())
+        await task
+
+    async def test_sleep_none(self, ctask):
+        async def task():
+            async with task_timeout(None):
+                await asyncio.sleep(0.01)
+
+        task = create_task(ctask, task())
         await task

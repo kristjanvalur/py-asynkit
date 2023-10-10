@@ -1,6 +1,7 @@
 import asyncio
 import asyncio.tasks
 import contextlib
+import logging
 import sys
 from asyncio import AbstractEventLoop
 from typing import Any, AsyncGenerator, Coroutine, Optional
@@ -272,8 +273,12 @@ class TimeoutInterrupt(BaseException):
 
 
 @contextlib.asynccontextmanager
-async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
+async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
     """Context manager to interrupt a task after a timeout."""
+    if timeout is None:
+        yield
+        return
+
     task = asyncio.current_task()
     assert task is not None
     loop = task.get_loop()
@@ -288,9 +293,12 @@ async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
         # preempt each other.  Instead, we interrupt from
         # a task, so that only one interrupt can be active.
         async def interruptor() -> None:
-            if is_active:  # pragma: no branch
-                assert task is not None  # typing
-                await task_interrupt(task, my_interrupt)
+            try:
+                if is_active:  # pragma: no branch
+                    assert task is not None  # typing
+                    await task_interrupt(task, my_interrupt)
+            except Exception:  # pragma: no cover
+                logging.exception("task_timeout: interruptor failed")
 
         loop.create_task(interruptor())
 
