@@ -7,6 +7,7 @@ from typing import Any, AsyncGenerator, Coroutine, Optional
 
 from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
 from asynkit.loop.types import FutureAny, TaskAny
+from asynkit.scheduling import task_switch
 
 __all__ = [
     "create_pytask",
@@ -46,9 +47,7 @@ def create_pytask(
     return task
 
 
-def task_throw(
-    task: TaskAny, exception: BaseException, *, immediate: bool = False
-) -> None:
+def task_throw(task: TaskAny, exception: BaseException) -> None:
     """Cause an exception to be raised on a task.  When the function returns, the
     task will be scheduled to run with the given exception.  Note that
     this function can override a previously thrown error, which has not
@@ -154,16 +153,6 @@ def task_throw(
             callback,
             arg,
         )
-
-    if immediate:
-        # Make sure it runs next.  This guarantees that the task doesn't
-        # exist in a half-interrupted state for other tasks to see and perhaps
-        # try to interrupt it again, which makes it easier to reason
-        # about task behaviour.
-        # Move target task to the head of the queue
-        handle = scheduling_loop.ready_remove(task)
-        assert handle is not None
-        scheduling_loop.ready_insert(0, handle)
 
 
 def c_task_reschedule(
@@ -274,8 +263,8 @@ async def task_interrupt(task: TaskAny, exception: BaseException) -> None:
     # if task._must_cancel:
     #    raise RuntimeError("cannot interrupt task with pending cancellation")
 
-    task_throw(task, exception, immediate=True)
-    await asyncio.sleep(0)
+    task_throw(task, exception)
+    await task_switch(task)
 
 
 class TimeoutInterrupt(BaseException):
