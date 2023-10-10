@@ -1,12 +1,14 @@
 import asyncio
 import asyncio.tasks
 import contextlib
+import logging
 import sys
 from asyncio import AbstractEventLoop
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
 from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
 from asynkit.loop.types import FutureAny, TaskAny
+from asynkit.scheduling import task_switch
 
 __all__ = [
     "create_pytask",
@@ -46,9 +48,7 @@ def create_pytask(
     return task
 
 
-def task_throw(
-    task: TaskAny, exception: BaseException, *, immediate: bool = False
-) -> None:
+def task_throw(task: TaskAny, exception: BaseException) -> None:
     """Cause an exception to be raised on a task.  When the function returns, the
     task will be scheduled to run with the given exception.  Note that
     this function can override a previously thrown error, which has not
@@ -157,18 +157,6 @@ def task_throw(
             callback,
             arg,
         )
-
-    if immediate:
-        # Make sure it runs next.  This guarantees that the task doesn't
-        # exist in a half-interrupted state for other tasks to see and perhaps
-        # try to interrupt it again, which makes it easier to reason
-        # about task behaviour.
-        # Move target task to the head of the queue
-        handle = scheduling_loop.queue_find(
-            key=scheduling_loop.task_key(task), remove=True
-        )
-        assert handle is not None
-        scheduling_loop.queue_insert_pos(handle, 0)
 
 
 def c_task_reschedule(
@@ -282,8 +270,8 @@ async def task_interrupt(task: TaskAny, exception: BaseException) -> None:
     # if task._must_cancel:
     #    raise RuntimeError("cannot interrupt task with pending cancellation")
 
-    task_throw(task, exception, immediate=True)
-    await asyncio.sleep(0)
+    task_throw(task, exception)
+    await task_switch(task)
 
 
 class TimeoutInterrupt(BaseException):
@@ -291,8 +279,12 @@ class TimeoutInterrupt(BaseException):
 
 
 @contextlib.asynccontextmanager
-async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
+async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
     """Context manager to interrupt a task after a timeout."""
+    if timeout is None:
+        yield
+        return
+
     task = asyncio.current_task()
     assert task is not None
     loop = task.get_loop()
@@ -307,9 +299,12 @@ async def task_timeout(timeout: float) -> AsyncGenerator[None, None]:
         # preempt each other.  Instead, we interrupt from
         # a task, so that only one interrupt can be active.
         async def interruptor() -> None:
-            if is_active:  # pragma: no branch
-                assert task is not None  # typing
-                await task_interrupt(task, my_interrupt)
+            try:
+                if is_active:  # pragma: no branch
+                    assert task is not None  # typing
+                    await task_interrupt(task, my_interrupt)
+            except Exception:  # pragma: no cover
+                logging.exception("task_timeout: interruptor failed")
 
         loop.create_task(interruptor())
 

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "asynkit"
-version = "0.10.4"
+version = "0.10.5"
 description = "A toolkit for Python coroutines"
 authors = ["Kristján Valur Jónsson <sweskman@gmail.com>"]
 repository = "https://github.com/kristjanvalur/py-asynkit"

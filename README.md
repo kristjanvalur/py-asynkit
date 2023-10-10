@@ -728,16 +728,18 @@ the task hasn't become active yet, it is still awoken with an exception.
 ### `task_throw()`
 
 ```python
-def task_throw(task: Task, exc: BaseException, immediate: bool=False):
+def task_throw(task: Task, exc: BaseException):
     pass
 ```
 
 This method will make the target `Task` immediately runnable with the given exception
-pending.  if `immediate` is `True`, it is placed at the head of the runnable queue
-to be next in line for execution.
+pending.
 
-- This method should probably not be used directly.  Throwing exceptions into tasks should
-  be _synchronous_, i.e. we should deliver them immediately, because there is no way to
+- If the Task was runnable due to a _previous_ call to `task_throw()`, this will override
+  that call and its exception.
+
+- Because of that, this method should probably not be used directly.  It is better to ensure that the
+  target _takes delivery_ of the exception right away, because there is no way to
   queue pending exceptions and they do not add up in any meaningful way.
   Prefer to use `task_interrupt()` below.
 
@@ -751,9 +753,9 @@ to be next in line for execution.
 async def task_interrupt(task: Task, exc: BaseException):
     pass
 ```
-An `async` version of `task_throw()`.  When awaited, `task_interrupt()` is invoked with
-`immediate=True`.  Subsequently the calling `Task` is suspended and the target task is
-run.  Once awaited, the exception **has been raised** on the target task.
+An `async` version of `task_throw()`.  When awaited, `task_interrupt()` is called,
+followed by a `task_switch()` to the target.  Once awaited, the exception
+**has been raised** on the target task.
 
 By ensuring that the target task runs immediately, it is possible to reason about task
 execution without having to rely on external synchronization primitives and the cooperation
@@ -780,12 +782,15 @@ async def test():
 
 ### `create_pytask()`
 
-Similar to `asyncio.create_task()` but will create a task which can be used as the target
-of `task_throw() and task_interrupt()`
+Similar to `asyncio.create_task()` but will create a pure **Python** `Task` which can safely
+be used as the target for `task_throw()`and `task_interrupt()`.  Because of implementation
+issues, regular **C** `Task` objects, as returned by `asyncio.create_task()`, cannot
+be interrupted in all cases, in particular when doing an `await asyncio.sleep(0)` or
+directly after having been created.
 
 ## `task_timeout()`
 
 This is a context manager providing a timeout functionality, similar to `asyncio.timeout()`.
 By leveraging `task_throw()` and a custom `BaseException` subclass, `TimeoutInterrupt`, 
-the logic is very simple and there is no unintended interaction with regular
-task cancellation()
+the logic becomes very simple and there is no unintended interaction with regular
+task cancellation().

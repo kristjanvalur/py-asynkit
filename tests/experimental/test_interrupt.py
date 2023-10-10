@@ -30,8 +30,7 @@ def create_task(ctask, coro, name=None):
 class TestThrow:
     """Test the task_throw() experimental function."""
 
-    @pytest.mark.parametrize("immediate", [True, False])
-    async def test_event(self, ctask, immediate):
+    async def test_event(self, ctask):
         """Test that we can throw an exception into a task."""
         # create a task, have it wait on event
         e = asyncio.Event()
@@ -50,7 +49,7 @@ class TestThrow:
         task = create_task(ctask, task())
         await w.wait()
         assert self.state == "waiting"
-        task_throw(task, ZeroDivisionError(), immediate=immediate)
+        task_throw(task, ZeroDivisionError())
         if not ctask:
             # NOTE Test is unreliable for ctasks until they have been run
             # since the task._fut_waiter cannot be cleared for them.
@@ -60,8 +59,7 @@ class TestThrow:
         assert self.state == "interrupted"
         assert task.done()
 
-    @pytest.mark.parametrize("immediate", [True, False])
-    async def test_execution_order(self, ctask, immediate):
+    async def test_execution_order(self, ctask):
         """Test that we can throw an exception into a task."""
         # create a task, have it wait on event
         e = asyncio.Event()
@@ -74,11 +72,8 @@ class TestThrow:
             w.set()
             with pytest.raises(ZeroDivisionError):
                 await e.wait()
-            if immediate:
-                assert self.state == "interrupting"
-            else:
-                # other task ran first
-                assert self.state == "task2"
+            # other task ran first
+            assert self.state == "task2"
             self.state = "interrupted"
 
         task = create_task(ctask, task())
@@ -86,25 +81,18 @@ class TestThrow:
         assert self.state == "waiting"
 
         async def task2():
-            if immediate:
-                # interrupted task ran first
-                assert self.state == "interrupted"
-            else:
-                assert self.state == "interrupting"
+            assert self.state == "interrupting"
             self.state = "task2"
 
         task2 = asyncio.create_task(task2())
-        task_throw(task, ZeroDivisionError(), immediate=immediate)
+        task_throw(task, ZeroDivisionError())
         if not ctask:
             # NOTE Test is unreliable for ctasks until they have been run
             # since the task._fut_waiter cannot be cleared for them.
             assert task_is_runnable(task)
         self.state = "interrupting"
         await task
-        if immediate:
-            assert self.state == "task2"  # interrupted task ran first
-        else:
-            assert self.state == "interrupted"
+        assert self.state == "interrupted"
         assert task.done()
 
     async def _test_ctask(self, ctask):
@@ -454,11 +442,20 @@ class TestInterrupt:
 
 @pytest.mark.parametrize("ctask", [True, False], ids=["ctask", "pytask"])
 class TestTimeout:
-    async def test_sleep(self, ctask):
+    @pytest.mark.parametrize("timeout", [0.0, 0.05, -1])
+    async def test_sleep(self, ctask, timeout):
         async def task():
             with pytest.raises(asyncio.TimeoutError):
-                async with task_timeout(0.05):
+                async with task_timeout(timeout):
                     await asyncio.sleep(0.1)
+
+        task = create_task(ctask, task())
+        await task
+
+    async def test_nosleep(self, ctask):
+        async def task():
+            async with task_timeout(0.0):
+                pass
 
         task = create_task(ctask, task())
         await task
@@ -501,4 +498,12 @@ class TestTimeout:
                     await inner()
 
         task = create_task(ctask, outer())
+        await task
+
+    async def test_sleep_none(self, ctask):
+        async def task():
+            async with task_timeout(None):
+                await asyncio.sleep(0.01)
+
+        task = create_task(ctask, task())
         await task
