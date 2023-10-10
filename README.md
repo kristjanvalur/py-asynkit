@@ -782,12 +782,15 @@ async def test():
 
 ### `create_pytask()`
 
-Similar to `asyncio.create_task()` but will create a task which can be used as the target
-of `task_throw() and task_interrupt()`
+Similar to `asyncio.create_task()` but will create a pure **Python** `Task` which can safely
+be used as the target for `task_throw()`and `task_interrupt()`.  Because of implementation
+issues, regular **C** `Task` objects, as returned by `asyncio.create_task()`, cannot
+be interrupted in all cases, in particular when doing an `await asyncio.sleep(0)` or
+directly after having been created.
 
 ## `task_timeout()`
 
 This is a context manager providing a timeout functionality, similar to `asyncio.timeout()`.
 By leveraging `task_throw()` and a custom `BaseException` subclass, `TimeoutInterrupt`, 
-the logic is very simple and there is no unintended interaction with regular
-task cancellation()
+the logic becomes very simple and there is no unintended interaction with regular
+task cancellation().
