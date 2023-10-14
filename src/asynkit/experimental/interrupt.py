@@ -124,7 +124,10 @@ def task_throw(task: TaskAny, exception: BaseException) -> None:
 
             # it is in the ready queue (has __step / __wakeup scheduled)
             # or it is the running task..
-            handle = scheduling_loop.ready_remove(task)
+            handle = scheduling_loop.queue_find(
+                scheduling_loop.task_key(task),
+                remove=True,
+            )
             if handle is None:
                 # it is the running task
                 assert task is asyncio.current_task()
@@ -184,7 +187,10 @@ def c_task_reschedule(
 
         # it is in the ready queue (has __step / __wakeup scheduled)
         # or it is the running task..
-        handle = scheduling_loop.ready_remove(task)
+        handle = scheduling_loop.queue_find(
+            scheduling_loop.task_key(task),
+            remove=True,
+        )
         if handle is None:
             # it is the running task
             assert task is asyncio.current_task()
@@ -213,7 +219,7 @@ def c_task_reschedule(
         # bummer.
         if "TaskStepMethWrapper" in cbname:
             assert handle is not None
-            scheduling_loop.ready_insert(-1, handle)  # re-insert it somewhere
+            scheduling_loop.queue_insert(handle)  # re-insert it somewhere
             raise RuntimeError(
                 "cannot interrupt a c-task with a plain __step scheduled"
             )

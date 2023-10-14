@@ -570,15 +570,15 @@ implementations of these methods.
 
 ### `SchedulingMixin` mixin class
 
-This class adds some handy scheduling functions to the event loop. They primarily
-work with the _ready queue_, a queue of callbacks representing tasks ready
-to be executed.
+This class adds some handy scheduling functions to the event loop. The are intended
+to facilitate some scheduling tricks, particularly switching to tasks, which require
+finding items in the queue and re-inserting them at an _early_ position.  Nothing
+is assumed about the underlying implementation of the queue.
 
-- `ready_len(self)` - returns the length of the ready queue
-- `ready_pop(self, pos=-1)` - pops an entry off the queue
-- `ready_insert(self, pos, element)` - inserts a previously popped element into the queue
-- `ready_rotate(self, n)` - rotates the queue
-- `call_insert(self, pos, ...)` - schedules a callback at position `pos` in the queue
+- `queue_len()` - returns the length of the ready queue
+- `queue_find(self, key, remove)` - finds and optionally removes an element in the queue
+- `queue_insert_pos(self, pos, element)` - inserts an element at position `pos` the queue
+- `call_pos(self, pos, ...)` - schedules a callback at position `pos` in the queue
 
 ### Concrete event loop classes
 

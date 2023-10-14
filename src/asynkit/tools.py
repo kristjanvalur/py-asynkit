@@ -5,7 +5,6 @@ from typing import (
     Any,
     Coroutine,
     Deque,
-    List,
     Optional,
     TypeVar,
 )
@@ -39,23 +38,20 @@ def deque_pop(d: Deque[T], pos: int = -1) -> T:
     The `pos` argument has the same meaning as for
     `list.pop()`
     """
-    if pos == -1:
-        return d.pop()
-    elif pos == 0:
-        return d.popleft()
-
-    if pos >= 0:
-        if pos < len(d):
-            d.rotate(-pos)
-            r = d.popleft()
-            d.rotate(pos)
-            return r
-    elif pos >= -len(d):
-        pos += 1
+    ld = len(d)
+    if pos < 0:
+        pos += ld  # convert to positive index
+        if pos < 0:
+            raise IndexError("pop index out of range")
+    if pos < ld >> 2:  # closer to head
+        d.rotate(-pos)
+        r = d.popleft()
+        d.rotate(pos)
+        return r
+    if pos < ld:  # pop of the tail end
+        pos -= ld - 1
         d.rotate(-pos)
         r = d.pop()
         d.rotate(pos)
         return r
-    # create exception
-    empty: List[T] = []
-    return empty.pop(pos)
+    raise IndexError("pop index out of range")

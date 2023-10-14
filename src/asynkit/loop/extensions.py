@@ -1,7 +1,7 @@
 import asyncio
 from asyncio import AbstractEventLoop, Handle
 from contextvars import Context
-from typing import Any, Callable, Deque, Optional, Set, cast
+from typing import Any, Callable, Iterable, Optional, cast
 
 from . import default
 from .schedulingloop import AbstractSchedulingLoop as AbstractSchedulingLoop
@@ -31,19 +31,26 @@ def get_scheduling_loop(
     else:
         # in future, select other loop types here
         helpers = default
-        return cast(AbstractSchedulingLoop, helpers.SchedulingHelper(loop))
+        return cast(AbstractSchedulingLoop, helpers.SchedulingLoopHelper(loop))
 
 
 # loop extensions
-# functions which extend the loop API
-def call_insert(
+# functions which extend the loop API for extended Task scheduling
+
+
+def call_pos(
     position: int,
     callback: Callable[..., Any],
     *args: Any,
     context: Optional[Context] = None,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Handle:
-    return get_scheduling_loop(loop).call_insert(
+    """Arrange for a callback to be made at position 'pos' near the the head of
+    the callable queue.  'position' is typically a low number, 0 or 1, where 0
+    means that the callback will be called __immediately__ after the currently
+    running callback.
+    """
+    return get_scheduling_loop(loop).call_pos(
         position, callback, *args, context=context
     )
 
@@ -51,69 +58,64 @@ def call_insert(
 def ready_len(
     loop: Optional[AbstractEventLoop] = None,
 ) -> int:
-    return get_scheduling_loop(loop).ready_len()
-
-
-def ready_pop(
-    position: int = -1,
-    loop: Optional[AbstractEventLoop] = None,
-) -> Any:
-    return get_scheduling_loop(loop).ready_pop(position)
+    """Returns the length of the ready queue.  This is the number
+    of Handles in there, which may not all represent ready Tasks.
+    """
+    return get_scheduling_loop(loop).queue_len()
 
 
 def ready_remove(
-    task: TaskAny,
+    handle: Handle,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Optional[Handle]:
-    return get_scheduling_loop(loop).ready_remove(task)
+    """Removes a handle from the ready queue.
+    Raises ValueError if not found."""
+    sl = get_scheduling_loop(loop)
+    return sl.queue_remove(handle)
 
 
-def ready_index(
+def ready_find(
     task: TaskAny,
     loop: Optional[AbstractEventLoop] = None,
-) -> int:
-    return get_scheduling_loop(loop).ready_index(task)
-
-
-def ready_append(
-    item: Any,
-    loop: Optional[AbstractEventLoop] = None,
-) -> None:
-    get_scheduling_loop(loop).ready_append(item)
+    remove: bool = False,
+) -> Optional[Handle]:
+    """Finds a task in the ready queue, and returns its handle,
+    optionally removing it from the queue.
+    Returns None if not found."""
+    sl = get_scheduling_loop(loop)
+    return sl.queue_find(key=lambda h: task is sl.task_from_handle(h), remove=remove)
 
 
 def ready_insert(
-    position: int,
-    item: Any,
+    item: Handle,
     loop: Optional[AbstractEventLoop] = None,
 ) -> None:
-    get_scheduling_loop(loop).ready_insert(position, item)
-
-
-def ready_rotate(
-    n: int = -1,
-    loop: Optional[AbstractEventLoop] = None,
-) -> None:
-    get_scheduling_loop(loop).ready_rotate(n)
+    """Inserts a handle in the default position on the ready queue"""
+    get_scheduling_loop(loop).queue_insert(item)
 
 
 def ready_tasks(
     loop: Optional[AbstractEventLoop] = None,
-) -> Set[TaskAny]:
-    return get_scheduling_loop(loop).ready_tasks()
+) -> Iterable[TaskAny]:
+    """Returns all the Tasks in the ready queue"""
+    sl = get_scheduling_loop(loop)
+    for handle in sl.queue_items():
+        task = sl.task_from_handle(handle)
+        if task is not None:
+            yield task
 
 
 def get_ready_queue(
     loop: Optional[AbstractEventLoop] = None,
-) -> Deque[Handle]:
+) -> Iterable[Handle]:
     """
     Low level routine, mostly used for testing.  May
     raise NotImplementedError if not supported.
     """
-    return get_scheduling_loop(loop).get_ready_queue()
+    return get_scheduling_loop(loop).queue_items()
 
 
-def get_task_from_handle(
+def task_from_handle(
     handle: Handle,
     loop: Optional[AbstractEventLoop] = None,
 ) -> Optional[TaskAny]:
@@ -121,4 +123,4 @@ def get_task_from_handle(
     Low level routine, mostly used for testing.  May
     raise NotImplementedError if not supported.
     """
-    return get_scheduling_loop(loop).get_task_from_handle(handle)
+    return get_scheduling_loop(loop).task_from_handle(handle)

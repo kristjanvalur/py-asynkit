@@ -1,3 +1,4 @@
+* Remove Deque assumption in AbstractSchedulingLoop.  Remove frivolous "rotate" feature.
 * Release 0.10.5
 * Remove the "immediate" keyword from `task_throw()`
 * Release 0.10.4
@@ -16,11 +17,11 @@
 * Rename MonitorAwaitable to BoundMonitor, add convenience
   BoundMonitor is returned by calling Monitor with coroutine.
 * add `aclose()` to Monitor and MonitorAwaitable
-* Relase 0.9.2
+* Release 0.9.2
 * rename `ensure_corofunc` to `asyncfunction`, add `syncfunction`
-* Relase 0.9.1
+* Release 0.9.1
 * Add `ensure_corofunc`
-* Relase 0.9.0
+* Release 0.9.0
 * Add `coro_sync`
 * Add `CoroStart.aclose()` and related
 * Release 0.8.0

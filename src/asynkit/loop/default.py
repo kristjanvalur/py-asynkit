@@ -2,7 +2,7 @@ import asyncio
 import asyncio.tasks
 from asyncio import AbstractEventLoop, Handle, Task
 from contextvars import Context
-from typing import Any, Callable, Deque, Optional, Set, Tuple, cast
+from typing import Any, Callable, Deque, Iterable, Optional, Tuple, cast
 
 from ..compat import call_soon
 from ..tools import deque_pop
@@ -24,57 +24,48 @@ Python's asyncio module.
 """
 
 
-class SchedulingHelper(AbstractSchedulingLoop):
-    """
-    Helper class providing scheduling methods for the default
-    event loop.
+class SchedulingLoopHelper(AbstractSchedulingLoop):
+    """Helper class providing the scheduling methods
+    for the default event loop
     """
 
     def __init__(self, loop: Optional[AbstractEventLoop] = None) -> None:
         self._loop = loop or asyncio.get_running_loop()
         self._queue: QueueType = loop._ready  # type: ignore
 
-    def get_ready_queue(self) -> QueueType:
-        return self._queue
-
-    def ready_append(self, element: Handle) -> None:
-        self._queue.append(element)
-
-    def ready_len(self) -> int:
+    def queue_len(self) -> int:
         return len(self._queue)
 
-    def ready_index(self, task: TaskAny) -> int:
-        return ready_index_impl(self._queue, task)
+    def queue_items(self) -> Iterable[Handle]:
+        """Enumerate the scheduled callbacks in the loop.
+        The elements are returned in the order they will be called."""
+        return self._queue
 
-    def ready_insert(self, pos: int, element: Handle) -> None:
-        self._queue.insert(pos, element)
+    def queue_find(
+        self, key: Callable[[Handle], bool], remove: bool = False
+    ) -> Optional[Handle]:
+        return queue_find(self._queue, key, remove)
 
-    def ready_pop(self, pos: int = -1) -> Handle:
-        return deque_pop(self._queue, pos)
+    def queue_insert(self, handle: Handle) -> None:
+        self._queue.append(handle)
 
-    def ready_remove(self, task: TaskAny) -> Optional[Handle]:
-        idx = ready_find_impl(self._queue, task)
-        if idx >= 0:
-            return deque_pop(self._queue, idx)
-        return None
+    def queue_insert_pos(self, handle: Handle, pos: int) -> None:
+        self._queue.insert(pos, handle)
 
-    def ready_rotate(self, n: int) -> None:
-        self._queue.rotate(n)
+    def queue_remove(self, in_handle: Handle) -> None:
+        return queue_remove(self._queue, in_handle)
 
-    def call_insert(
+    def call_pos(
         self,
-        position: int,
+        pos: int,
         callback: Callable[..., Any],
         *args: Any,
         context: Optional[Context] = None,
     ) -> Handle:
-        return call_insert_impl(self._loop, position, callback, *args, context=context)
+        return call_pos(self._loop, pos, callback, *args, context=context)
 
-    def get_task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
-        return get_task_from_handle_impl(handle)
-
-    def ready_tasks(self) -> Set[TaskAny]:
-        return ready_tasks_impl(self._queue)
+    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+        return task_from_handle(handle)
 
 
 # Asyncio does not directly have the concept of "runnable"
@@ -92,57 +83,7 @@ class SchedulingHelper(AbstractSchedulingLoop):
 # EventLoop considered Tasks separately from scheduled callbacks though.
 
 
-def ready_index_impl(
-    queue: Deque[Handle],
-    task: TaskAny,
-) -> int:
-    idx = ready_find_impl(queue, task)
-    if idx >= 0:
-        return idx
-    raise ValueError("task not in ready queue")
-
-
-def ready_find_impl(
-    queue: Deque[Handle],
-    task: TaskAny,
-) -> int:
-    for i, handle in enumerate(reversed(queue)):
-        found = get_task_from_handle_impl(handle)
-        if found is task:
-            return len(queue) - i - 1
-    return -1
-    raise ValueError("task not in ready queue")
-
-
-def ready_tasks_impl(queue: QueueType) -> Set[TaskAny]:
-    result = set()
-    for handle in queue:
-        task = get_task_from_handle_impl(handle)
-        if task:
-            result.add(task)
-    return result
-
-
-def call_insert_impl(
-    loop: AbstractEventLoop,
-    position: int,
-    callback: Callable[..., Any],
-    *args: Any,
-    context: Optional[Context] = None,
-) -> Handle:
-    """
-    Arrange for a callback to be inserted at `position` in the queue to be
-    called later.
-    """
-    handle = call_soon(loop, callback, *args, context=context)
-    queue = loop._ready  # type: ignore
-    handle2 = deque_pop(queue, -1)
-    assert handle2 is handle
-    queue.insert(position, handle)
-    return handle
-
-
-def get_task_from_handle_impl(
+def task_from_handle(
     handle: Handle,
 ) -> Optional[TaskAny]:
     """
@@ -152,6 +93,8 @@ def get_task_from_handle_impl(
     """
     # It would be _great_ if a Handle object contained meta information,
     # like the Task it was created for. But it doesn't.
+    # it would be possible by replacing the callable with a custom class instance
+    # with extra information, but it requires cooperation from the Task
     try:
         task = handle._callback.__self__  # type: ignore
     except AttributeError:
@@ -159,3 +102,46 @@ def get_task_from_handle_impl(
     if isinstance(task, TaskTypes):
         return cast(TaskAny, task)
     return None
+
+
+def queue_find(
+    queue: Deque[Handle], key: Callable[[Handle], bool], remove: bool = False
+) -> Optional[Handle]:
+    # search from the end of the queue since this is commonly
+    # done for just-inserted callbacks
+    for i, handle in enumerate(reversed(queue)):
+        if key(handle):
+            if remove:
+                popped = deque_pop(queue, len(queue) - i - 1)
+                assert popped is handle
+            return handle
+    return None
+
+
+def queue_remove(queue: Deque[Handle], in_handle: Handle) -> None:
+    # search from the end
+    for i, handle in enumerate(reversed(queue)):
+        if in_handle is handle:
+            deque_pop(queue, len(queue) - i - 1)
+            break
+    else:
+        raise ValueError("handle not in queue")
+
+
+def call_pos(
+    loop: AbstractEventLoop,
+    pos: int,
+    callback: Callable[..., Any],
+    *args: Any,
+    context: Optional[Context] = None,
+) -> Handle:
+    """
+    Arrange for a callback to be inserted at the head of the queue to be
+    called later.
+    """
+    handle = call_soon(loop, callback, *args, context=context)
+    queue = loop._ready  # type: ignore
+    handle2 = queue.pop()
+    assert handle2 is handle
+    queue.insert(pos, handle)
+    return handle
