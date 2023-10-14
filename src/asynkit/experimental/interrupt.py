@@ -299,12 +299,26 @@ async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
         # preempt each other.  Instead, we interrupt from
         # a task, so that only one interrupt can be active.
         async def interruptor() -> None:
+            assert task is not None  # typing
             try:
-                if is_active:  # pragma: no branch
-                    assert task is not None  # typing
-                    await task_interrupt(task, my_interrupt)
-            except Exception:  # pragma: no cover
-                logging.exception("task_timeout: interruptor failed")
+                # retry a few times, to catch e.g. the case
+                # when there is a cancellation pending.
+                for i in range(3):
+                    if is_active:  # pragma: no branch
+                        try:
+                            await task_interrupt(task, my_interrupt)
+                        except RuntimeError:  # pragma: no cover
+                            if i == 2:
+                                raise
+                            await asyncio.sleep(0)
+            except Exception as exc:  # pragma: no cover
+                context = {
+                    "message": f"timeout interruptor failed for task {task!r}",
+                    "task": asyncio.current_task(),
+                    "exception": exc,
+                }
+                asyncio.get_running_loop().call_exception_handler(context)
+                context = exc = None  # break reference cycle
 
         loop.create_task(interruptor())
 
