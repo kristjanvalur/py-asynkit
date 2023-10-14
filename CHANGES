@@ -1,3 +1,4 @@
+* Release 0.11.0
 * Remove Deque assumption in AbstractSchedulingLoop.  Remove frivolous "rotate" feature.
 * Release 0.10.5
 * Remove the "immediate" keyword from `task_throw()`
