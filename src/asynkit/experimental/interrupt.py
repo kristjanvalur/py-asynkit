@@ -1,7 +1,6 @@
 import asyncio
 import asyncio.tasks
 import contextlib
-import logging
 import sys
 from asyncio import AbstractEventLoop
 from typing import Any, AsyncGenerator, Coroutine, Optional

@@ -115,3 +115,16 @@ async def test_interrupt_ack():
     await asyncio.sleep(0)
     r = await interrupt.create_pytask(interruptor())
     assert r == ["ack", "noack"]
+
+
+async def test_task_timeout():
+    """show the interrupt.timeout contextmanager in action"""
+    with pytest.raises(asyncio.TimeoutError):
+        async with interrupt.task_timeout(0.1):
+            try:
+                await asyncio.sleep(1)
+                assert False, "should not get here"
+            except BaseException as e:
+                # it interrupts us with a base exception
+                assert isinstance(e, interrupt.TimeoutInterrupt)
+                raise
