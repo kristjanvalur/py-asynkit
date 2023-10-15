@@ -317,7 +317,8 @@ async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
                     "exception": exc,
                 }
                 asyncio.get_running_loop().call_exception_handler(context)
-                context = exc = None  # break reference cycle
+                # break any reference cycles
+                context = exc = None  # type: ignore[assignment]
 
         loop.create_task(interruptor())
 
