@@ -854,29 +854,59 @@ class TestCoroIter:
             self.args = args or ["bar1", "bar2"]
 
         def __await__(self):
+            # manually create a coroutine object
             return asynkit.coro_iter(self.coro(self.args.pop(0)))
 
     class Awaiter2(Awaiter):
         """
-        Test the awaitable decorator
+        Test the awaitmethod decorator
+        """
+
+        @asynkit.awaitmethod_iter
+        async def __await__(self):
+            return await self.coro(self.args.pop(0))
+
+    class Awaiter3(Awaiter):
+        """
+        Test the awaitmethod decorator
         """
 
         @asynkit.awaitmethod
         async def __await__(self):
             return await self.coro(self.args.pop(0))
 
-    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2])
+    class Awaiter4:
+        """
+        Test the awaitmethod classmethod
+        """
+
+        @classmethod
+        @asynkit.awaitmethod
+        async def __await__(cls) -> str:
+            return "Awaiter4"
+
+    class Awaiter5:
+        """
+        Test the awaitmethod staticmethod
+        """
+
+        @staticmethod
+        @asynkit.awaitmethod
+        async def __await__() -> str:
+            return "Awaiter5"
+
+    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2, Awaiter3])
     async def test_await(self, awaiter):
         a = awaiter(self.coroutine1, ["bar1"])
         assert await a == "foobar1"
 
-    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2])
+    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2, Awaiter3])
     async def test_await_again(self, awaiter):
         a = awaiter(self.coroutine1, ["bar2", "bar3"])
         assert await a == "foobar2"
         assert await a == "foobar3"  # it can be awaited again
 
-    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2])
+    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2, Awaiter3])
     async def test_await_exception(self, awaiter):
         a = awaiter(self.coroutine2)
         with pytest.raises(RuntimeError) as err:
@@ -886,7 +916,7 @@ class TestCoroIter:
             await a
         assert err.value.args[0] == "foobar2"
 
-    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2])
+    @pytest.mark.parametrize("awaiter", [Awaiter, Awaiter2, Awaiter3])
     async def test_await_immediate(self, awaiter):
         async def coroutine(arg):
             return "coro" + arg
@@ -939,6 +969,14 @@ class TestCoroIter:
         assert step == 2
         assert err.value.value == "foo"
         c.close()
+
+    @pytest.mark.parametrize("awaiter", [Awaiter4, Awaiter5])
+    async def test_await_static(self, awaiter):
+        a = awaiter()
+        if awaiter == self.Awaiter4:
+            assert await a == "Awaiter4"
+        else:
+            assert await a == "Awaiter5"
 
 
 async def test_async_function():

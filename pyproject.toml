@@ -20,6 +20,13 @@ black = "black ."
 test = "pytest tests examples"
 cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 typing = "mypy -p asynkit -p tests -p examples"
+blacken-docs = "blacken-docs README.md"
+blackall = ["black", "blacken-docs"]
+check = ["style", "lint", "typing", "cov"]
+
+[tool.poe.tasks.style]
+help = "Validate black code style"
+cmd  = "black . --check --diff"
 
 [tool.poetry.dependencies]
 python = "^3.8"

@@ -29,6 +29,7 @@ from .tools import create_task
 __all__ = [
     "CoroStart",
     "awaitmethod",
+    "awaitmethod_iter",
     "coro_await",
     "coro_eager",
     "func_eager",
@@ -483,18 +484,33 @@ def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
                 return cast(T, exc.value)
 
 
-def awaitmethod(
-    func: Callable[[S], Coroutine[Any, Any, T]]
-) -> Callable[[S], Iterator[T]]:
+def awaitmethod(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, Iterator[T]]:
     """
     Decorator to make a function return an awaitable.
     The function must be a coroutine function.
     Specifically intended to be used for __await__ methods.
+    Can also be used for class or static methods.
     """
 
     @functools.wraps(func)
-    def wrapper(self: S) -> Iterator[T]:
-        return coro_iter(func(self))
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> Iterator[T]:
+        return func(*args, **kwargs).__await__()
+
+    return wrapper
+
+
+def awaitmethod_iter(
+    func: Callable[P, Coroutine[Any, Any, T]]
+) -> Callable[P, Iterator[T]]:
+    """
+    Same as above, but implemented using the coro_iter helper.
+    Only included for completeness, it is better to use the
+    builtin coroutine.__await__() method.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> Iterator[T]:
+        return coro_iter(func(*args, **kwargs))
 
     return wrapper
 

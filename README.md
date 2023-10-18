@@ -171,7 +171,7 @@ async code blocked.  If the code tries to access the event loop, e.g. by creatin
 The `syncfunction()` decorator can be used to automatically wrap an async function
 so that it is executed using `await_sync()`:
 
-```python
+```pycon
 >>> @asynkit.syncfunction
 ... async def sync_function():
 ...     async def async_function():
@@ -206,6 +206,7 @@ a generator, leveraging the `await_sync()` method:
 async def agen():
     for v in range(3):
         yield v
+
 
 assert list(aiter_sync(agen())) == [1, 2, 3]
 ```
@@ -279,10 +280,6 @@ async def main():
 This is similar to `contextvars.Context.run()` but works for async functions.  This function is
 implemented using [`CoroStart`](#corostart)
 
-## `coro_iter()`
-
-This helper function turns a coroutine function into an iterator.  It is primarily
-intended to be used by the [`awaitmethod()`](#awaitmethod) function decorator.
 
 ## `awaitmethod()`
 
@@ -290,7 +287,7 @@ This decorator turns the decorated method into a `Generator` as required for
 `__await__` methods, which must only return `Iterator` objects.
 It does so by invoking the `coro_iter()` helper.
 
-This makes it simple to make a class _awaitable_ by decorating an `async`
+This makes it simple to make a class instance _awaitable_ by decorating an `async`
 `__await__()` method.
 
 ```python
@@ -318,6 +315,31 @@ async def main():
 asyncio.run(main())
 ```
 Unlike a regular _coroutine_ (the result of calling a _coroutine function_), an object with an `__await__` method can potentially be awaited multiple times.
+
+The method can also be a `classmethod` or `staticmethod:`
+```python
+class Constructor:
+    @staticmethod
+    @asynkit.awaitmethod
+    async def __await__():
+        await asyncio.sleep(0)
+        return Constructor()
+
+
+async def construct():
+    return await Constructor
+```
+
+## `awaitmethod_iter()`
+
+An alternative way of creating an __await__ method, it uses
+the `coro_iter()` method to to create a coroutine iterator.  It
+is provided for completeness.
+
+## `coro_iter()`
+
+This helper function turns a coroutine function into an iterator.  It is primarily
+intended to be used by the [`awaitmethod_iter()`](#awaitmethod_iter) function decorator.
 
 ## `Monitor`
 
@@ -359,6 +381,7 @@ to keep the coroutine around.  Calling the monitor with the coroutine returns a 
 async def coro(m):
     await m.oob("foo")
     return "bar"
+
 
 m = Monitor()
 b = m(coro(m))
@@ -433,6 +456,7 @@ async def stateful_parser(monitor, input_data):
         input_data += await monitor.oob()  # request more
     # continue parsing, maye requesting more data
     return await parsed_data(monitor, input_data)
+
 
 m: Monitor[Tuple[Any, bytes]] = Monitor()
 initial_data = b""
@@ -766,6 +790,7 @@ be) and therefore it cannot cause collisions with other interrupts.
 async def test():
     async def task():
         await asyncio.sleep(1)
+
     create_pytask(task)
     await asyncio.sleep(0)
     assert task_is_blocked(task)
@@ -777,7 +802,6 @@ async def test():
         pass
     else:
         assert False, "never happens"
-
 ```
 
 ### `create_pytask()`
