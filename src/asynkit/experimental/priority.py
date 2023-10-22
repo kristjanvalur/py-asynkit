@@ -268,7 +268,10 @@ class PriorityQueue(Generic[T]):
         return None
 
     def reschedule(
-        self, key: Callable[[T], bool], priority_hint: Optional[float]
+        self,
+        key: Callable[[T], bool],
+        new_priority: float,
+        priority_hint: Optional[float] = None,
     ) -> None:
         """
         Reschedule an object which is already in the queue.
@@ -276,12 +279,24 @@ class PriorityQueue(Generic[T]):
         # look for it in the queues, with hint of priority
         hint = (1, priority_hint) if priority_hint is not None else None
         r = self._find(key, remove=False, priority_hint=hint)
-        if not r:
-            raise ValueError("object not found")
         pri, obj = r
-        new_priority = self._get_priority(obj)
         if pri == (1, new_priority):
             return  # nothing needs to be done
         # remove it from the queue
         r = self._find(key, remove=True, priority_hint=pri)
         self.append_pri(obj, new_priority)
+
+    def reschedule_all(self):
+        """
+        Reschedule all objects in the queue based on their priority,
+        except the one in the immediate priority class which have
+        a fixed ordering.
+        """
+        queues = self._queues
+        self._queues = defaultdict(deque)
+        for pri, queue in sorted(queues.items()):
+            if pri[0] == 0:
+                self._queues[pri] = queue
+            else:
+                for obj in queue:
+                    self.append(obj)

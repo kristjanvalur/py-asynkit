@@ -323,3 +323,87 @@ class TestPriorityQueue:
             queue.clear()
             expected = [1, 1, 2, 2, 3, 4, 4]
             assert pris == expected
+
+    def test_reschedule(self):
+        """Verify that iteration returns items in priority order"""
+        queue = PriorityQueue(priority_key)
+
+        obj1 = PriorityObject(1)
+        obj2 = PriorityObject(2)
+        obj3 = PriorityObject(3)
+        obj4 = PriorityObject(4)
+
+        for i in range(3):
+            queue.clear()
+            assert len(queue) == 0
+            obj = [obj1, obj2, obj3, obj4]
+            random.shuffle(obj)
+            for o in obj:
+                queue.append(o)
+            for o in obj:
+                queue.append(PriorityObject(o.priority))
+
+            def getkey(obj):
+                return lambda k: k is obj
+
+            objs = list(queue)
+            assert objs[4] is obj3
+
+            queue.reschedule(getkey(obj3), 7)
+            objs = list(queue)
+            assert objs[-1] is obj3
+
+            queue.reschedule(getkey(obj3), -1, priority_hint=7)
+            objs = list(queue)
+            assert objs[0] is obj3
+
+            queue.reschedule(getkey(obj3), 3, priority_hint=7)
+            objs = list(queue)
+            assert objs[5] is obj3  # now at end of its priority deque
+            pris = [o.priority for o in objs]
+            assert pris == [1, 1, 2, 2, 3, 3, 4, 4]
+
+    def test_reschedule_all(self):
+        """Verify that we can reschedule all items in a priority deque"""
+        queue = PriorityQueue(priority_key)
+
+        queue.clear()
+        obj = [PriorityObject(random.randint(0, 5)) for i in range(50)]
+        pris = [o.priority for o in obj]
+        for o in obj:
+            queue.append(o)
+
+        objs = list(queue)
+        pris2 = [o.priority for o in objs]
+        assert pris2 == sorted(pris)
+
+        # reverse the priorityes
+        for o in obj:
+            o.oldpri = o.priority
+            o.priority = -o.oldpri
+
+        objs = list(queue)
+        pris2 = [-o.priority for o in objs]
+        assert pris2 == sorted(pris)
+
+        queue.reschedule_all()
+
+        objs = list(queue)
+        pris2 = [-o.priority for o in objs]
+        assert pris2 == list(reversed(sorted(pris)))
+
+        # add an immediate dude
+        queue.insert(0, PriorityObject(100))
+        objs = list(queue)
+        pris2 = [-o.priority for o in objs]
+        assert pris2 == [-100] + list(reversed(sorted(pris)))
+
+        # reverse the priorites back
+        for o in obj:
+            o.oldpri = o.priority
+            o.priority = -o.oldpri
+
+        queue.reschedule_all()
+        objs = list(queue)
+        pris2 = [o.priority for o in objs]
+        assert pris2 == [100] + (sorted(pris))
