@@ -230,7 +230,8 @@ class PriorityQueue(Generic[T]):
     ) -> Optional[T]:
         hint = (1, priority_hint) if priority_hint is not None else None
         r = self._find(key, remove, hint)
-        return r[1]
+        if r is not None:
+            return r[1]
 
     def _find(
         self,
@@ -244,6 +245,8 @@ class PriorityQueue(Generic[T]):
             if priq is not None:
                 obj = self._deque_find(priq, key, remove)
                 if obj is not None:
+                    if remove and not priq:
+                        del self._queues[priority_hint]
                     return priority_hint, obj
         else:
             priq = None
@@ -254,8 +257,10 @@ class PriorityQueue(Generic[T]):
                 continue
             obj = self._deque_find(queue, key, remove)
             if obj is not None:
+                if remove and not queue:
+                    del self._queues[priority]
                 return priority, obj
-        raise ValueError("object not found")
+        return None  # not found
 
     def _deque_find(
         self, queue: Deque[T], key: Callable[[T], bool], remove: bool = False
@@ -279,12 +284,16 @@ class PriorityQueue(Generic[T]):
         # look for it in the queues, with hint of priority
         hint = (1, priority_hint) if priority_hint is not None else None
         r = self._find(key, remove=False, priority_hint=hint)
+        if r is None:
+            return None  # not found
         pri, obj = r
         if pri == (1, new_priority):
             return  # nothing needs to be done
         # remove it from the queue
         r = self._find(key, remove=True, priority_hint=pri)
+        assert r is not None
         self.append_pri(obj, new_priority)
+        return obj
 
     def reschedule_all(self):
         """
