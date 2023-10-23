@@ -793,46 +793,35 @@ class TestGenerator:
             async def consumer():
                 while True:
                     await sleep(0)
-                    yield
-                    # print('received', message)
+                    if (yield) is None:
+                        break
 
         else:
 
             async def gf(g):
                 while True:
                     await sleep(0)
-                    await g.ayield(None)
-                    # print('received', message)
+                    if await g.ayield(None) is None:
+                        break
 
             def consumer():
                 g = GeneratorObject()
                 return g(gf(g))
 
-        agenerator = consumer()
-        await agenerator.asend(None)
-        fa = asyncio.create_task(agenerator.asend("A"))
-        fb = asyncio.create_task(agenerator.asend("B"))
-        await fa
-        with pytest.raises(RuntimeError) as err:
-            await fb
-        assert err.match("already running")
+        for op, args in [("asend", ["A"]), ("athrow", [EOFError]), ("aclose", [])]:
 
-        agenerator = consumer()
-        await agenerator.asend(None)
-        fa = asyncio.create_task(agenerator.asend("A"))
-        fb = asyncio.create_task(agenerator.athrow(EOFError))
-        await fa
-        with pytest.raises(RuntimeError) as err:
-            await fb
-        assert err.match("already running")
-
-        await agenerator.asend(None)
-        fa = asyncio.create_task(agenerator.asend("A"))
-        fb = asyncio.create_task(agenerator.aclose())
-        await fa
-        with pytest.raises(RuntimeError) as err:
-            await fb
-        assert err.match("already running")
+            agenerator = consumer()
+            await agenerator.asend(None) # start it
+            # fa will hit sleep and then fb will run
+            fa = asyncio.create_task(agenerator.asend("A"))
+            coro = getattr(agenerator, op)(*args)
+            fb = asyncio.create_task(coro)
+            await fa
+            with pytest.raises(RuntimeError) as err:
+                await fb
+            assert err.match("already running")
+            with pytest.raises(StopAsyncIteration):
+                await agenerator.asend(None)  # close it
 
     @pytest.mark.parametrize("anyio_backend", ["asyncio"])
     @pytest.mark.parametrize("gentype", ["std", "oob"], ids=["async gen", "Generator"])
