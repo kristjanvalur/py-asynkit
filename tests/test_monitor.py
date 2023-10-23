@@ -885,3 +885,39 @@ class TestGenerator:
         assert not closed
         await asyncio.get_running_loop().shutdown_asyncgens()
         assert closed
+
+
+async def test_ag_running():
+    """
+    Verify that as_running transitions correctly in
+    an async generator
+    """
+    def run():
+        state = 0
+        async def agen():
+            nonlocal state
+            state = 1
+            await asyncio.sleep(0)
+            state = 2
+            value = yield "foo"
+            state = value
+
+        a = agen()
+        coro = a.asend(None)
+        assert state == 0
+        coro.send(None)
+        assert state == 1
+        assert a.ag_running is True
+        try:
+            coro.send(None)
+        except StopIteration as v:
+            assert v.value == "foo"
+        assert state == 2
+        assert a.ag_running is False
+        
+        # finish it
+        coro = a.asend("bar")
+        pytest.raises(StopAsyncIteration, coro.send, None)
+        assert a.ag_running is False
+        assert state == "bar"
+        
