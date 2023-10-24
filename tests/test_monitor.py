@@ -793,46 +793,35 @@ class TestGenerator:
             async def consumer():
                 while True:
                     await sleep(0)
-                    yield
-                    # print('received', message)
+                    if (yield) is None:
+                        break
 
         else:
 
             async def gf(g):
                 while True:
                     await sleep(0)
-                    await g.ayield(None)
-                    # print('received', message)
+                    if await g.ayield(None) is None:
+                        break
 
             def consumer():
                 g = GeneratorObject()
                 return g(gf(g))
 
-        agenerator = consumer()
-        await agenerator.asend(None)
-        fa = asyncio.create_task(agenerator.asend("A"))
-        fb = asyncio.create_task(agenerator.asend("B"))
-        await fa
-        with pytest.raises(RuntimeError) as err:
-            await fb
-        assert err.match("already running")
+        for op, args in [("asend", ["A"]), ("athrow", [EOFError]), ("aclose", [])]:
 
-        agenerator = consumer()
-        await agenerator.asend(None)
-        fa = asyncio.create_task(agenerator.asend("A"))
-        fb = asyncio.create_task(agenerator.athrow(EOFError))
-        await fa
-        with pytest.raises(RuntimeError) as err:
-            await fb
-        assert err.match("already running")
-
-        await agenerator.asend(None)
-        fa = asyncio.create_task(agenerator.asend("A"))
-        fb = asyncio.create_task(agenerator.aclose())
-        await fa
-        with pytest.raises(RuntimeError) as err:
-            await fb
-        assert err.match("already running")
+            agenerator = consumer()
+            await agenerator.asend(None)  # start it
+            # fa will hit sleep and then fb will run
+            fa = asyncio.create_task(agenerator.asend("A"))
+            coro = getattr(agenerator, op)(*args)
+            fb = asyncio.create_task(coro)
+            await fa
+            with pytest.raises(RuntimeError) as err:
+                await fb
+            assert err.match("already running")
+            with pytest.raises(StopAsyncIteration):
+                await agenerator.asend(None)  # close it
 
     @pytest.mark.parametrize("anyio_backend", ["asyncio"])
     @pytest.mark.parametrize("gentype", ["std", "oob"], ids=["async gen", "Generator"])
@@ -885,3 +874,58 @@ class TestGenerator:
         assert not closed
         await asyncio.get_running_loop().shutdown_asyncgens()
         assert closed
+
+    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
+    @pytest.mark.parametrize("gentype", ["std", "oob"], ids=["async gen", "Generator"])
+    async def test_ag_running(self, gentype, anyio_backend):
+        """
+        Verify that as_running transitions correctly in
+        an async generator
+        """
+        state = 0
+
+        if gentype == "std":
+
+            if PYPY:
+                pytest.skip("pypy does not implemente ag_running correctly")
+
+            async def generator():
+                nonlocal state
+                state = 1
+                await asyncio.sleep(0)
+                state = 2
+                value = yield "foo"
+                state = value
+
+        else:
+
+            async def genfunc(go):
+                nonlocal state
+                state = 1
+                await asyncio.sleep(0)
+                state = 2
+                value = await go.ayield("foo")
+                state = value
+
+            def generator():
+                go = GeneratorObject()
+                return go(genfunc(go))
+
+        a = generator()
+        coro = a.asend(None)
+        assert state == 0
+        coro.send(None)
+        assert state == 1
+        assert a.ag_running is True
+        try:
+            coro.send(None)
+        except StopIteration as v:
+            assert v.value == "foo"
+        assert state == 2
+        assert a.ag_running is False
+
+        # finish it
+        coro = a.asend("bar")
+        pytest.raises(StopAsyncIteration, coro.send, None)
+        assert a.ag_running is False
+        assert state == "bar"
