@@ -314,7 +314,8 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
     def __init__(self, monitor: Monitor[Any], coro: Coroutine[Any, Any, Any]) -> None:
         self.monitor = monitor
         self.coro = coro
-        self.ag_running = False
+        # Mypy thinks ag_running is read-only
+        self.ag_running = False  # type: ignore[misc]
         self.finalizer: Optional[Callable[[Any], None]] = None
 
     def __aiter__(self) -> AsyncIterator[T_co]:
@@ -340,7 +341,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
             raise StopAsyncIteration()
         elif coro_is_new(self.coro):
             self._first_iter()
-        self.ag_running = True
+        self.ag_running = True  # type: ignore[misc]
         try:
             await self.monitor.aawait(self.coro, value)
         except OOBData as oob:
@@ -353,7 +354,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         else:
             raise StopAsyncIteration()
         finally:
-            self.ag_running = False
+            self.ag_running = False  # type: ignore[misc]
 
     @overload
     async def athrow(
@@ -400,7 +401,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
             return None
         elif coro_is_new(self.coro):
             self._first_iter()
-        self.ag_running = True
+        self.ag_running = True  # type: ignore[misc]
         try:
             if type is not None:
                 # athrow()
@@ -428,4 +429,4 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
                 return None  # aclose() resulted in coroutine exit
             raise StopAsyncIteration()
         finally:
-            self.ag_running = False
+            self.ag_running = False  # type: ignore[misc]
