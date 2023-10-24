@@ -886,6 +886,9 @@ class TestGenerator:
 
         if gentype == "std":
 
+            if PYPY:
+                pytest.skip("pypy does not implemente ag_running correctly")
+
             async def generator():
                 nonlocal state
                 state = 1
