@@ -811,7 +811,7 @@ class TestGenerator:
         for op, args in [("asend", ["A"]), ("athrow", [EOFError]), ("aclose", [])]:
 
             agenerator = consumer()
-            await agenerator.asend(None) # start it
+            await agenerator.asend(None)  # start it
             # fa will hit sleep and then fb will run
             fa = asyncio.create_task(agenerator.asend("A"))
             coro = getattr(agenerator, op)(*args)
@@ -875,23 +875,40 @@ class TestGenerator:
         await asyncio.get_running_loop().shutdown_asyncgens()
         assert closed
 
-
-async def test_ag_running():
-    """
-    Verify that as_running transitions correctly in
-    an async generator
-    """
-    def run():
+    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
+    @pytest.mark.parametrize("gentype", ["std", "oob"], ids=["async gen", "Generator"])
+    async def test_ag_running(self, gentype, anyio_backend):
+        """
+        Verify that as_running transitions correctly in
+        an async generator
+        """
         state = 0
-        async def agen():
-            nonlocal state
-            state = 1
-            await asyncio.sleep(0)
-            state = 2
-            value = yield "foo"
-            state = value
 
-        a = agen()
+        if gentype == "std":
+
+            async def generator():
+                nonlocal state
+                state = 1
+                await asyncio.sleep(0)
+                state = 2
+                value = yield "foo"
+                state = value
+
+        else:
+
+            async def genfunc(go):
+                nonlocal state
+                state = 1
+                await asyncio.sleep(0)
+                state = 2
+                value = await go.ayield("foo")
+                state = value
+
+            def generator():
+                go = GeneratorObject()
+                return go(genfunc(go))
+
+        a = generator()
         coro = a.asend(None)
         assert state == 0
         coro.send(None)
@@ -903,10 +920,9 @@ async def test_ag_running():
             assert v.value == "foo"
         assert state == 2
         assert a.ag_running is False
-        
+
         # finish it
         coro = a.asend("bar")
         pytest.raises(StopAsyncIteration, coro.send, None)
         assert a.ag_running is False
         assert state == "bar"
-        

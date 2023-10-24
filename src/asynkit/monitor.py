@@ -309,12 +309,12 @@ class GeneratorObject(Generic[T, V]):
 
 
 class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
-    __slots__ = ["monitor", "coro", "running", "finalizer", "__weakref__"]
+    __slots__ = ["monitor", "coro", "ag_running", "finalizer", "__weakref__"]
 
     def __init__(self, monitor: Monitor[Any], coro: Coroutine[Any, Any, Any]) -> None:
         self.monitor = monitor
         self.coro = coro
-        self.running = False
+        self.ag_running = False
         self.finalizer: Optional[Callable[[Any], None]] = None
 
     def __aiter__(self) -> AsyncIterator[T_co]:
@@ -334,13 +334,13 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         self.finalizer = cast(Optional[Callable[[Any], None]], hooks.finalizer)
 
     async def asend(self, value: Optional[T_contra]) -> T_co:
-        if self.running:
+        if self.ag_running:
             raise RuntimeError("asend(): asynchronous generator is already running")
         if coro_is_finished(self.coro):
             raise StopAsyncIteration()
         elif coro_is_new(self.coro):
             self._first_iter()
-        self.running = True
+        self.ag_running = True
         try:
             await self.monitor.aawait(self.coro, value)
         except OOBData as oob:
@@ -353,7 +353,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         else:
             raise StopAsyncIteration()
         finally:
-            self.running = False
+            self.ag_running = False
 
     @overload
     async def athrow(
@@ -391,7 +391,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         value: Union[BaseException, object],
         traceback: Optional[TracebackType],
     ) -> Optional[T_co]:
-        if self.running:
+        if self.ag_running:
             raise RuntimeError(
                 ("athrow" if type is not None else "aclose")
                 + "(): asynchronous generator is already running"
@@ -400,7 +400,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
             return None
         elif coro_is_new(self.coro):
             self._first_iter()
-        self.running = True
+        self.ag_running = True
         try:
             if type is not None:
                 # athrow()
@@ -428,4 +428,4 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
                 return None  # aclose() resulted in coroutine exit
             raise StopAsyncIteration()
         finally:
-            self.running = False
+            self.ag_running = False
