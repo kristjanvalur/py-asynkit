@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from asynkit.experimental.priority import PriorityLock, PriorityQueue, PriorityTask
+from asynkit.experimental.priority import FancyPriorityQueue, PriorityLock, PriorityTask
 
 pytestmark = pytest.mark.anyio
 
@@ -147,7 +147,7 @@ def priority_key(obj):
 
 class TestPriorityQueue:
     def test_append(self):
-        queue = PriorityQueue(priority_key)
+        queue = FancyPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -167,7 +167,7 @@ class TestPriorityQueue:
 
     def test_append_pri(self):
         """Test that we can specify priority when appending"""
-        queue = PriorityQueue(priority_key)
+        queue = FancyPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -187,7 +187,7 @@ class TestPriorityQueue:
 
     def test_fifo(self):
         """Verify that same priority gets FIFO ordering"""
-        queue = PriorityQueue(priority_key)
+        queue = FancyPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -219,7 +219,7 @@ class TestPriorityQueue:
 
     def test_priority_iter(self):
         """Verify that iteration returns items in priority order"""
-        queue = PriorityQueue(priority_key)
+        queue = FancyPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -238,7 +238,7 @@ class TestPriorityQueue:
 
     def test_insert_pos(self):
         """Verify that we can insert at a specific position"""
-        queue = PriorityQueue(priority_key)
+        queue = FancyPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -262,7 +262,7 @@ class TestPriorityQueue:
 
     def test_insert_pos2(self):
         """Verify that we can insert two at specific positions"""
-        queue = PriorityQueue(priority_key)
+        queue = FancyPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -289,7 +289,7 @@ class TestPriorityQueue:
 
     def test_find(self):
         """Verify that iteration returns items in priority order"""
-        queue = PriorityQueue(priority_key)
+        queue = FancyPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -327,7 +327,7 @@ class TestPriorityQueue:
 
     def test_reschedule(self):
         """Verify that iteration returns items in priority order"""
-        queue = PriorityQueue(priority_key)
+        queue = FancyPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -375,7 +375,7 @@ class TestPriorityQueue:
 
     def test_reschedule_all(self):
         """Verify that we can reschedule all items in a priority deque"""
-        queue = PriorityQueue(priority_key)
+        queue = FancyPriorityQueue(priority_key)
 
         queue.clear()
         obj = [PriorityObject(random.randint(0, 5)) for i in range(50)]

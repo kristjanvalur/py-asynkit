@@ -146,7 +146,7 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         """
 
 
-class PriorityQueue(Generic[T]):
+class FancyPriorityQueue(Generic[T]):
     """
     A simple priority queue for objects, which also allows scheduling
     at a fixed early position.  It respects floating point priority
@@ -232,6 +232,7 @@ class PriorityQueue(Generic[T]):
         r = self._find(key, remove, hint)
         if r is not None:
             return r[1]
+        return None
 
     def _find(
         self,
@@ -277,7 +278,7 @@ class PriorityQueue(Generic[T]):
         key: Callable[[T], bool],
         new_priority: float,
         priority_hint: Optional[float] = None,
-    ) -> None:
+    ) -> Optional[T]:
         """
         Reschedule an object which is already in the queue.
         """
@@ -288,14 +289,14 @@ class PriorityQueue(Generic[T]):
             return None  # not found
         pri, obj = r
         if pri == (1, new_priority):
-            return  # nothing needs to be done
+            return obj  # nothing needs to be done
         # remove it from the queue
         r = self._find(key, remove=True, priority_hint=pri)
         assert r is not None
         self.append_pri(obj, new_priority)
         return obj
 
-    def reschedule_all(self):
+    def reschedule_all(self) -> None:
         """
         Reschedule all objects in the queue based on their priority,
         except the one in the immediate priority class which have
