@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import asyncio
+import heapq
 import sys
-from collections import defaultdict, deque
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
     Coroutine,
-    DefaultDict,
     Deque,
     Generic,
     Iterator,
     Optional,
+    Protocol,
     Tuple,
     TypeVar,
 )
@@ -19,7 +21,17 @@ from typing import (
 PYTHON_38 = sys.version_info[:2] <= (3, 8)
 
 T = TypeVar("T")
-P = TypeVar("P")
+
+
+class Sortable(Protocol):
+    """Objects that have the < operator defined"""
+
+    def __lt__(self: T, other: T) -> bool:
+        ...  # pragma: no cover
+
+
+P = TypeVar("P", bound=Sortable)
+
 
 if TYPE_CHECKING:
     _TaskAny = asyncio.Task[Any]
@@ -68,101 +80,96 @@ class PriorityQueue(Generic[P, T]):
     """
     A simple priority queue for objects.  Allows 'append' at thend
     and 'popleft'.  The objects are sorted by priority, which is provided.
+    Popping and iterating returns (prioritt, object) typles, and iteration
+    is in the order they would be popped.
     Identical priorites are returned in the order they were inserted.
-    Also allows for searching and removing objects by key.
+    Also allows for searching, removing and rescheduling objects by key.
     """
 
     def __init__(self) -> None:
-        # the queues are stored in a dictionary, keyed by (priority-class, priority)
-        # the priority-class is 1 for regular priority, 0 for immediate priority.
-        self._queues: DefaultDict[P, Deque[T]] = defaultdict(deque)
-
-    def clear(self) -> None:
-        self._queues.clear()
+        self._sequence = 0
+        self._pq: list[PriEntry[P, T]] = []
 
     def __len__(self) -> int:
-        return sum(len(q) for q in self._queues.values())
+        return len(self._pq)
 
     def __bool__(self) -> bool:
-        return bool(self._queues)
+        return bool(self._pq)
 
     def __iter__(self) -> Iterator[Tuple[P, T]]:
-        for pri, queue in sorted(self._queues.items()):
-            for obj in queue:
-                yield pri, obj
+        for entry in sorted(self._pq):
+            yield entry.priority, entry.obj
+
+    def clear(self) -> None:
+        self._pq.clear()
+        self._sequence = 0
 
     def append(self, pri: P, obj: T) -> None:
-        """
-        Insert an item into its default place according to priority
-        """
-        self._queues[pri].append(obj)
+        heapq.heappush(self._pq, PriEntry(pri, self._sequence, obj))
+        self._sequence += 1
 
     def popleft(self) -> Tuple[P, T]:
-        if self._queues:
-            pri, queue = min(self._queues.items())
-            result = queue.popleft()
-            if not queue:
-                del self._queues[pri]
-            return pri, result
-        raise IndexError("pop from empty queue")
+        entry = heapq.heappop(self._pq)
+        if not self._pq:
+            self._sequence = 0
+        return entry.priority, entry.obj
 
     def find(
         self,
         key: Callable[[T], bool],
         remove: bool = False,
-        priority_hint: Optional[P] = None,
     ) -> Optional[Tuple[P, T]]:
-        # first look in the given queue
-        if priority_hint is not None:
-            priq = self._queues.get(priority_hint, None)
-            if priq is not None:
-                obj = self._deque_find(priq, key, remove)
-                if obj is not None:
-                    if remove and not priq:
-                        del self._queues[priority_hint]
-                    return priority_hint, obj
-        else:
-            priq = None
-
-        # then look in the other queues
-        for priority, queue in self._queues.items():
-            if priq is queue:
-                continue
-            obj = self._deque_find(queue, key, remove)
-            if obj is not None:
-                if remove and not queue:
-                    del self._queues[priority]
-                return priority, obj
-        return None  # not found
-
-    def _deque_find(
-        self, queue: Deque[T], key: Callable[[T], bool], remove: bool = False
-    ) -> Optional[T]:
-        for i, obj in enumerate(reversed(queue)):
-            if key(obj):
+        # reversed is a heuristic because we are more likely to be looking for
+        # more recently added items
+        for i, entry in enumerate(reversed(self._pq)):
+            if key(entry.obj):
                 if remove:
-                    deque_pop(queue, len(queue) - i - 1)
-                return obj
+                    # remove the entry. We replace the deleted item with the tail
+                    # and heapify again, which disturbs the heap the least.
+                    if i != 0:
+                        i = len(self._pq) - i - 1
+                        self._pq[i] = self._pq.pop()
+                        heapq.heapify(self._pq)
+                    else:
+                        self._pq.pop()
+                        if not self._pq:
+                            self._sequence = 0
+                return entry.priority, entry.obj
         return None
 
     def reschedule(
         self,
         key: Callable[[T], bool],
         new_priority: P,
-        priority_hint: Optional[P] = None,
     ) -> Optional[T]:
         """
         Reschedule an object which is already in the queue.
         """
-        # look for it in the queues, with hint of priority
-        r = self.find(key, remove=False, priority_hint=priority_hint)
-        if r is None:
-            return None  # not found
-        pri, obj = r
-        if pri == new_priority:
-            return obj  # nothing needs to be done
-        # remove it from the queue
-        r = self.find(key, remove=True, priority_hint=pri)
-        assert r is not None
-        self.append(new_priority, obj)
-        return obj
+        for entry in reversed(self._pq):
+            if key(entry.obj):
+                # use only the __lt__ operator to determine if priority has changed
+                # since that is the one used to define priority for the heap
+                if entry.priority < new_priority or new_priority < entry.priority:
+                    # it retains its old squence number
+                    # could mark the old entry as removed and re-add a new entry,
+                    # that will be O(logn) instead of O(n) but lets not worry.
+                    entry.priority = new_priority
+                    heapq.heapify(self._pq)
+                return entry.obj
+        return None
+
+
+class PriEntry(Generic[P, T]):
+    sequence: int = 0
+
+    def __init__(self, priority: P, sequence: int, obj: T) -> None:
+        self.priority = priority
+        self.sequence = sequence
+        self.obj = obj
+
+    def __lt__(self, other: PriEntry[P, T]) -> bool:
+        # only use the __lt__ opeator on the priority object,
+        # even in reverse to determine non-equality
+        return (self.priority < other.priority) or (
+            not (other.priority < self.priority) and self.sequence < other.sequence
+        )

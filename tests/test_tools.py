@@ -146,11 +146,8 @@ class TestPriorityQueue:
 
             assert queue.find(getkey(obj1)) == (1, obj1)
             assert queue.find(getkey(obj2)) == (2, obj2)
-            assert queue.find(getkey(obj2), priority_hint=2) == (2, obj2)
-            assert queue.find(getkey(obj2), priority_hint=1) == (2, obj2)
-            assert queue.find(getkey(obj2), priority_hint=7) == (2, obj2)
-            assert queue.find(getkey(obj3), priority_hint=3, remove=True) == (3, obj3)
-            assert queue.find(lambda k: False, priority_hint=2) is None
+            assert queue.find(getkey(obj3), remove=True) == (3, obj3)
+            assert queue.find(lambda k: False) is None
 
             assert queue.find(getkey(obj3), remove=True) is None
 
@@ -159,8 +156,12 @@ class TestPriorityQueue:
             expected = [1, 1, 2, 2, 3, 4, 4]
             assert pris == expected
             assert queue
+            # empty the queye by removing objects in random order
+            random.shuffle(itered)
             for pri, obj in itered:
                 assert queue.find(getkey(obj), remove=True) == (obj.priority, obj)
+                pris = [o.priority for (pri, o) in queue]
+                assert pris == sorted(pris)
             assert len(queue) == 0
             assert not queue
 
@@ -193,21 +194,22 @@ class TestPriorityQueue:
             objs = list(queue)
             assert objs[-1][1] is obj3
 
-            found = queue.reschedule(getkey(obj3), -1, priority_hint=7)
+            found = queue.reschedule(getkey(obj3), -1)
             assert found == obj3
             objs = list(queue)
             assert objs[0][1] is obj3
 
-            queue.reschedule(getkey(obj3), 3, priority_hint=7)
+            queue.reschedule(getkey(obj3), 3)
             objs = list(queue)
-            assert objs[5][1] is obj3  # now at end of its priority deque
+            # don't define where it goes in the new priority
+            assert obj3 in (objs[4][1], objs[5][1])
             pris = [o.priority for (pri, o) in objs]
             assert pris == [1, 1, 2, 2, 3, 3, 4, 4]
 
             # reschedule to same priority
-            queue.reschedule(getkey(obj3), 3, priority_hint=7)
+            queue.reschedule(getkey(obj3), 3)
 
             # pop first value and try to reschedule a popped value
             pri, obj = queue.popleft()
-            found = queue.reschedule(getkey(obj), 3, priority_hint=7)
+            found = queue.reschedule(getkey(obj), 3)
             assert found is None
