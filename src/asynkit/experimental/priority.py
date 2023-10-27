@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from asyncio import Lock, Task
 from typing import (
     Callable,
+    Generic,
     Iterator,
     Optional,
     Set,
@@ -142,7 +143,7 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         """
 
 
-class FancyPriorityQueue(PriorityQueue[Tuple[int, float], T]):
+class FancyPriorityQueue(Generic[T]):
     """
     A simple priority queue for objects, which also allows scheduling
     at a fixed early position.  It respects floating point priority
@@ -153,29 +154,35 @@ class FancyPriorityQueue(PriorityQueue[Tuple[int, float], T]):
     def __init__(self, get_priority: Callable[[T], float]) -> None:
         # the queues are stored in a dictionary, keyed by (priority-class, priority)
         # the priority-class is 1 for regular priority, 0 for immediate priority.
-        super().__init__()
+        self._pq: PriorityQueue[Tuple[int, float], T] = PriorityQueue()
         self._get_priority = get_priority
         self._immediates = 0
 
     def __iter__(self) -> Iterator[T]:
-        for _, obj in super().__iter__():
+        for _, obj in self._pq:
             yield obj
 
+    def __len__(self) -> int:
+        return len(self._pq)
+
+    def __bool__(self) -> bool:
+        return bool(self._pq)
+
     def clear(self) -> None:
-        super().clear()
+        self._pq.clear()
         self._immediates = 0
 
     def append(self, obj: T) -> None:
         """
         Insert an item into its default place according to priority
         """
-        super().append((1, self._get_priority(obj)), obj)
+        self._pq.append((1, self._get_priority(obj)), obj)
 
     def append_pri(self, obj: T, priority: float) -> None:
         """
         Insert an item at a specific priority
         """
-        super().append((1, priority), obj)
+        self._pq.append((1, priority), obj)
 
     def insert(self, position: int, obj: T) -> None:
         """
@@ -189,14 +196,14 @@ class FancyPriorityQueue(PriorityQueue[Tuple[int, float], T]):
 
         if position == self._immediates:
             # we can just add another immediate.
-            super().append((0, 0), obj)
+            self._pq.append((0, 0), obj)
             self._immediates += 1
             return
 
         # we must promote.  We must pop all immediates off and then regulars
         # to create the new list of immediates.  This is O(n) but we expect
         # n to be low, 0 or 1 most of the time.
-        promoted = []
+        promoted: list[T] = []
         try:
             while self._immediates > 0 or position >= len(promoted):
                 promoted.append(self.popleft())
@@ -204,11 +211,11 @@ class FancyPriorityQueue(PriorityQueue[Tuple[int, float], T]):
             pass  # no more to promote
         promoted.insert(position, obj)
         for obj in promoted:
-            super().append((0, 0), obj)
+            self._pq.append((0, 0), obj)
         self._immediates = len(promoted)
 
     def popleft(self) -> T:
-        pri, obj = super().popleft()
+        pri, obj = self._pq.popleft()
         if self._immediates > 0:
             assert pri == (0, 0)
             self._immediates -= 1
@@ -219,7 +226,7 @@ class FancyPriorityQueue(PriorityQueue[Tuple[int, float], T]):
         key: Callable[[T], bool],
         remove: bool = False,
     ) -> Optional[T]:
-        found = super().find(key, remove)
+        found = self._pq.find(key, remove)
         if found is not None:
             pri, obj = found
             if remove and pri == (0, 0):
@@ -235,7 +242,7 @@ class FancyPriorityQueue(PriorityQueue[Tuple[int, float], T]):
         """
         Reschedule an object which is already in the queue.
         """
-        return super().reschedule(key, (1, new_priority))
+        return self._pq.reschedule(key, (1, new_priority))
 
     def reschedule_all(self) -> None:
         """
@@ -244,9 +251,9 @@ class FancyPriorityQueue(PriorityQueue[Tuple[int, float], T]):
         a fixed ordering.
         """
         newpri = []
-        for pri, obj in super().__iter__():
+        for pri, obj in self._pq:
             if pri != (0, 0):
                 pri = (1, self._get_priority(obj))
             newpri.append((pri, obj))
-        super().clear()
-        super().extend(newpri)
+        self._pq.clear()
+        self._pq.extend(newpri)

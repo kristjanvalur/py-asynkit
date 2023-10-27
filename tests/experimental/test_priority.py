@@ -156,8 +156,10 @@ class TestPriorityQueue:
         for i in range(5):
             obj = [obj1, obj2, obj3]
             random.shuffle(obj)
+            assert not queue
             for o in obj:
                 queue.append(o)
+            assert queue
 
             assert len(queue) == 3
             assert queue.popleft() is obj1

@@ -10,6 +10,7 @@ from typing import (
     Coroutine,
     Deque,
     Generic,
+    Iterable,
     Iterator,
     Optional,
     Protocol,
@@ -108,7 +109,7 @@ class PriorityQueue(Generic[P, T]):
         heapq.heappush(self._pq, PriEntry(pri, self._sequence, obj))
         self._sequence += 1
 
-    def extend(self, entries: Iterator[Tuple[P, T]]) -> None:
+    def extend(self, entries: Iterable[Tuple[P, T]]) -> None:
         # use this to add a lot of entries at once, since heapify is O(n)
         for pri, obj in entries:
             self._pq.append(PriEntry(pri, self._sequence, obj))
