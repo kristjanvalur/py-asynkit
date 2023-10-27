@@ -160,10 +160,10 @@ class TestPriorityQueue:
                 queue.append(o)
 
             assert len(queue) == 3
-            assert queue.pop() is obj1
-            assert queue.pop() is obj2
-            assert queue.pop() is obj3
-            pytest.raises(IndexError, queue.pop)
+            assert queue.popleft() is obj1
+            assert queue.popleft() is obj2
+            assert queue.popleft() is obj3
+            pytest.raises(IndexError, queue.popleft)
 
     def test_append_pri(self):
         """Test that we can specify priority when appending"""
@@ -180,10 +180,10 @@ class TestPriorityQueue:
                 queue.append_pri(o, i)
 
             assert len(queue) == 3
-            assert queue.pop() is obj3
-            assert queue.pop() is obj2
-            assert queue.pop() is obj1
-            pytest.raises(IndexError, queue.pop)
+            assert queue.popleft() is obj3
+            assert queue.popleft() is obj2
+            assert queue.popleft() is obj1
+            pytest.raises(IndexError, queue.popleft)
 
     def test_fifo(self):
         """Verify that same priority gets FIFO ordering"""
@@ -209,13 +209,13 @@ class TestPriorityQueue:
                 queue.append(o)
 
             assert len(queue) == 6
-            assert queue.pop() is obj1
-            assert queue.pop() is obj1a
-            assert queue.pop() is obj2
-            assert queue.pop() is obj2a
-            assert queue.pop() is obj3
-            assert queue.pop() is obj3a
-            pytest.raises(IndexError, queue.pop)
+            assert queue.popleft() is obj1
+            assert queue.popleft() is obj1a
+            assert queue.popleft() is obj2
+            assert queue.popleft() is obj2a
+            assert queue.popleft() is obj3
+            assert queue.popleft() is obj3a
+            pytest.raises(IndexError, queue.popleft)
 
     def test_priority_iter(self):
         """Verify that iteration returns items in priority order"""
@@ -233,7 +233,7 @@ class TestPriorityQueue:
                 queue.append(o)
 
             itered = list(queue)
-            popped = [queue.pop() for i in range(3)]
+            popped = [queue.popleft() for i in range(3)]
             assert itered == popped
 
     def test_insert_pos(self):
@@ -310,12 +310,18 @@ class TestPriorityQueue:
 
             assert queue.find(getkey(obj1)) is obj1
             assert queue.find(getkey(obj2)) is obj2
-            assert queue.find(getkey(obj2), priority_hint=2) is obj2
-            assert queue.find(getkey(obj2), priority_hint=1) is obj2
-            assert queue.find(getkey(obj2), priority_hint=7) is obj2
-            assert queue.find(getkey(obj3), priority_hint=3, remove=True) is obj3
+            assert queue.find(getkey(obj2)) is obj2
+            assert queue.find(getkey(obj3), remove=True) is obj3
 
             assert queue.find(getkey(obj3), remove=True) is None
+
+            pri5 = PriorityObject(5)
+            queue.insert(1, pri5)
+            pris = [o.priority for o in queue]
+            expected = [1, 5]
+            assert pris[:2] == expected
+
+            assert queue.find(getkey(pri5), remove=True) is pri5
 
             itered = list(queue)
             pris = [o.priority for o in itered]
@@ -347,30 +353,37 @@ class TestPriorityQueue:
             def getkey(obj):
                 return lambda k: k is obj
 
+            assert len(queue) == 8
             objs = list(queue)
             assert objs[4] is obj3
 
+            assert len(queue) == 8
             queue.reschedule(getkey(obj3), 7)
             objs = list(queue)
             assert objs[-1] is obj3
 
-            found = queue.reschedule(getkey(obj3), -1, priority_hint=7)
+            assert len(queue) == 8
+            found = queue.reschedule(getkey(obj3), -1)
             assert found == obj3
             objs = list(queue)
             assert objs[0] is obj3
 
-            queue.reschedule(getkey(obj3), 3, priority_hint=7)
+            assert len(queue) == 8
+            pris = [o.priority for o in objs]
+            assert pris == [3, 1, 1, 2, 2, 3, 4, 4]
+            queue.reschedule(getkey(obj3), 3)
             objs = list(queue)
-            assert objs[5] is obj3  # now at end of its priority deque
+            # assert obj3 in (objs[4], objs[5]) # exact order within
+            # the same priority level is not defined.
             pris = [o.priority for o in objs]
             assert pris == [1, 1, 2, 2, 3, 3, 4, 4]
 
             # reschedule to same priority
-            queue.reschedule(getkey(obj3), 3, priority_hint=7)
+            queue.reschedule(getkey(obj3), 3)
 
             # pop first value and try to reschedule a popped value
-            obj = queue.pop()
-            found = queue.reschedule(getkey(obj), 3, priority_hint=7)
+            obj = queue.popleft()
+            found = queue.reschedule(getkey(obj), 3)
             assert found is None
 
     def test_reschedule_all(self):

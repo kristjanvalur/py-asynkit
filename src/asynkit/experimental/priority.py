@@ -2,12 +2,8 @@ import asyncio
 import weakref
 from abc import ABC, abstractmethod
 from asyncio import Lock, Task
-from collections import defaultdict, deque
 from typing import (
     Callable,
-    DefaultDict,
-    Deque,
-    Generic,
     Iterator,
     Optional,
     Set,
@@ -20,7 +16,7 @@ from typing_extensions import Literal
 
 from asynkit.loop.types import TaskAny
 from asynkit.scheduling import task_is_runnable
-from asynkit.tools import deque_pop
+from asynkit.tools import PriorityQueue
 
 T = TypeVar("T")
 
@@ -146,7 +142,7 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         """
 
 
-class FancyPriorityQueue(Generic[T]):
+class FancyPriorityQueue(PriorityQueue[Tuple[int, float], T]):
     """
     A simple priority queue for objects, which also allows scheduling
     at a fixed early position.  It respects floating point priority
@@ -157,24 +153,29 @@ class FancyPriorityQueue(Generic[T]):
     def __init__(self, get_priority: Callable[[T], float]) -> None:
         # the queues are stored in a dictionary, keyed by (priority-class, priority)
         # the priority-class is 1 for regular priority, 0 for immediate priority.
-        self._queues: DefaultDict[Tuple[int, float], Deque[T]] = defaultdict(deque)
+        super().__init__()
         self._get_priority = get_priority
+        self._immediates = 0
+
+    def __iter__(self) -> Iterator[T]:
+        for _, obj in super().__iter__():
+            yield obj
 
     def clear(self) -> None:
-        self._queues.clear()
+        super().clear()
+        self._immediates = 0
 
     def append(self, obj: T) -> None:
         """
         Insert an item into its default place according to priority
         """
-        priority = self._get_priority(obj)
-        self._queues[(1, priority)].append(obj)
+        super().append((1, self._get_priority(obj)), obj)
 
     def append_pri(self, obj: T, priority: float) -> None:
         """
         Insert an item at a specific priority
         """
-        self._queues[(1, priority)].append(obj)
+        super().append((1, priority), obj)
 
     def insert(self, position: int, obj: T) -> None:
         """
@@ -186,115 +187,55 @@ class FancyPriorityQueue(Generic[T]):
         # reglar priority queues are (1, priority) and so the
         # immediate queue is always first.
 
-        # promote priority queue objects to the immediate queue
-        # to place the new object in the right place.
-        # must pop it from the dict so that it is not subject
-        # to self.pop()
-        immediate = self._queues.pop((0, 0), None)
-        if immediate is None:
-            immediate = deque()
+        if position == self._immediates:
+            # we can just add another immediate.
+            super().append((0, 0), obj)
+            self._immediates += 1
+            return
+
+        # we must promote.  We must pop all immediates off and then regulars
+        # to create the new list of immediates.  This is O(n) but we expect
+        # n to be low, 0 or 1 most of the time.
+        promoted = []
         try:
-            while len(immediate) < position:
-                try:
-                    promote = self.pop()
-                    immediate.append(promote)
-                except IndexError:
-                    # just put it at the end
-                    break
-            immediate.insert(position, obj)
-        finally:
-            self._queues[(0, 0)] = immediate
+            while self._immediates > 0 or position >= len(promoted):
+                promoted.append(self.popleft())
+        except IndexError:
+            pass  # no more to promote
+        promoted.insert(position, obj)
+        for obj in promoted:
+            super().append((0, 0), obj)
+        self._immediates = len(promoted)
 
-    def __iter__(self) -> Iterator[T]:
-        for _, queue in sorted(self._queues.items()):
-            for obj in queue:
-                yield obj
-
-    def __len__(self) -> int:
-        return sum(len(q) for q in self._queues.values())
-
-    def pop(self) -> T:
-        if self._queues:
-            pri, queue = min(self._queues.items())
-            result = queue.popleft()
-            if not queue:
-                del self._queues[pri]
-            return result
-        raise IndexError("pop from empty queue")
+    def popleft(self) -> T:
+        pri, obj = super().popleft()
+        if self._immediates > 0:
+            assert pri == (0, 0)
+            self._immediates -= 1
+        return obj
 
     def find(
         self,
         key: Callable[[T], bool],
         remove: bool = False,
-        priority_hint: Optional[float] = None,
     ) -> Optional[T]:
-        hint = (1, priority_hint) if priority_hint is not None else None
-        r = self._find(key, remove, hint)
-        if r is not None:
-            return r[1]
-        return None
-
-    def _find(
-        self,
-        key: Callable[[T], bool],
-        remove: bool = False,
-        priority_hint: Optional[Tuple[int, float]] = None,
-    ) -> Optional[Tuple[Tuple[int, float], T]]:
-        # first look in the given queue
-        if priority_hint is not None:
-            priq = self._queues.get(priority_hint, None)
-            if priq is not None:
-                obj = self._deque_find(priq, key, remove)
-                if obj is not None:
-                    if remove and not priq:
-                        del self._queues[priority_hint]
-                    return priority_hint, obj
-        else:
-            priq = None
-
-        # then look in the other queues
-        for priority, queue in self._queues.items():
-            if priq is queue:
-                continue
-            obj = self._deque_find(queue, key, remove)
-            if obj is not None:
-                if remove and not queue:
-                    del self._queues[priority]
-                return priority, obj
-        return None  # not found
-
-    def _deque_find(
-        self, queue: Deque[T], key: Callable[[T], bool], remove: bool = False
-    ) -> Optional[T]:
-        for i, obj in enumerate(reversed(queue)):
-            if key(obj):
-                if remove:
-                    deque_pop(queue, len(queue) - i - 1)
-                return obj
+        found = super().find(key, remove)
+        if found is not None:
+            pri, obj = found
+            if remove and pri == (0, 0):
+                self._immediates -= 1
+            return obj
         return None
 
     def reschedule(
         self,
         key: Callable[[T], bool],
         new_priority: float,
-        priority_hint: Optional[float] = None,
     ) -> Optional[T]:
         """
         Reschedule an object which is already in the queue.
         """
-        # look for it in the queues, with hint of priority
-        hint = (1, priority_hint) if priority_hint is not None else None
-        r = self._find(key, remove=False, priority_hint=hint)
-        if r is None:
-            return None  # not found
-        pri, obj = r
-        if pri == (1, new_priority):
-            return obj  # nothing needs to be done
-        # remove it from the queue
-        r = self._find(key, remove=True, priority_hint=pri)
-        assert r is not None
-        self.append_pri(obj, new_priority)
-        return obj
+        return super().reschedule(key, (1, new_priority))
 
     def reschedule_all(self) -> None:
         """
@@ -302,11 +243,10 @@ class FancyPriorityQueue(Generic[T]):
         except the one in the immediate priority class which have
         a fixed ordering.
         """
-        queues = self._queues
-        self._queues = defaultdict(deque)
-        for pri, queue in sorted(queues.items()):
-            if pri[0] == 0:
-                self._queues[pri] = queue
-            else:
-                for obj in queue:
-                    self.append(obj)
+        newpri = []
+        for pri, obj in super().__iter__():
+            if pri != (0, 0):
+                pri = (1, self._get_priority(obj))
+            newpri.append((pri, obj))
+        super().clear()
+        super().extend(newpri)
