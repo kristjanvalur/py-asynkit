@@ -26,6 +26,7 @@ __all__ = [
 
 _have_context = sys.version_info > (3, 8)
 _have_get_loop = sys.version_info >= (3, 10)
+_is_310 = sys.version_info >= (3, 10)
 
 # Crate a python Task.  We need access to the __step method and this is hidden
 # in the C implementation from _asyncio module
@@ -443,34 +444,34 @@ class InterruptSemaphore(asyncio.Semaphore, LoopBoundMixin):
         try:
             await fut
         except BaseException:
-            try:
+            if _is_310:
+                # prior to 3.10, release() removed the waiter.
                 self._waiters.remove(fut)
-            except ValueError:
-                pass  # prior to 3.10, release() removed the waiter.
             if fut.done() and not fut.cancelled():
                 # _wake_up_next() was called by release().
                 # undo the decr from _wake_up_next() and re,
-                self._value += 1
+                if _is_310:
+                    self._value += 1
                 self._wake_up_next()
             raise
 
-        try:
+        if _is_310:
             self._waiters.remove(fut)
-        except ValueError:
-            pass  # version < 3.10 comptibility
-        if self._value > 0:
-            self._wake_up_next()
+            if self._value > 0:
+                self._wake_up_next()
+        else:
+            self._value -= 1  # prior to 3.10, this was done here.
         return True
 
 
 class InterruptBoundedSemaphore(InterruptSemaphore):
     """Interrupt safe version of the BoundedSempahore."""
 
-    def __init__(self, value=1):
+    def __init__(self, value: int = 1) -> None:
         self._bound_value = value
         super().__init__(value)
 
-    def release(self):  # pragma: no cover
+    def release(self) -> None:  # pragma: no cover
         if self._value >= self._bound_value:
             raise ValueError("BoundedSemaphore released too many times")
         super().release()
