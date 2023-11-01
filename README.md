@@ -733,7 +733,17 @@ A task which is blocked, waiting for a future, is immediately freed and schedule
 If the task is already scheduled to run, i.e. it is _new_, or the future has triggered but
 the task hasn't become active yet, it is still awoken with an exception.
 
-- __Note:__ These functions currently are only work **reliably** with `Task` object implemented in Python.
+- __Note 1:__ The Python library in places assumes that the only exception that can be
+  raised out of awaitables is `CancelledError`.  In particular, there are edge cases
+  in `asyncio.Lock`, `asyncio.Semaphore` and `asyncio.Condition` where the raised interrupt
+  when acquiring these primitives will leave them in an incorrect state.
+  
+  For this reason, we also provide the classes `IntterruptLock`, `InterruptSemaphore`
+  and `InterruptCondition` which handle this properly.  The fixes are
+  trivial and the the standard library really should have handled `BaseException` instead
+  of only `CancelledError``.
+
+- __Note 2:__ These functions currently are only work **reliably** with `Task` object implemented in Python.
   Modern implementation often have a native "C" implementation of `Task` objects and they contain inaccessible code which cannot be used by the library.  In particular, the
   `Task.__step` method cannot be explicitly scheduled to the event loop.  For that reason,
   a special `create_pytask()` helper is provided to create a suitable python `Task` instance.
