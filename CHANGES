@@ -1,5 +1,5 @@
 * Release 0.11.1
-* Add InterruptLock, InterruptSemaphore, InterruptCondition, to handle interruptions
+* Add InterrupException and InterruptCondition, to handle interruptions
   other than CancelledError
 * Release 0.11.0
 * Remove Deque assumption in AbstractSchedulingLoop.  Remove frivolous "rotate" feature.
