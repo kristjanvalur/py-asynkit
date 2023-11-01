@@ -18,6 +18,7 @@ __all__ = [
     "TimeoutInterrupt",
     "PyTask",
     "InterruptLock",
+    "InterruptSemaphore",
 ]
 
 _have_context = sys.version_info > (3, 8)
@@ -386,4 +387,48 @@ class InterruptLock(asyncio.Lock):
 
         self._waiters.remove(fut)
         self._locked = True
+        return True
+
+
+class InterruptSemaphore(asyncio.Semaphore):
+    """
+    A class which fixes the lack of support in asyncio.Semaphore for arbitrary
+    exceptions being raised during the acquire() call.
+    """
+
+    async def acquire(self):  # pragma: no cover
+        """Acquire a semaphore.
+
+        If the internal counter is larger than zero on entry,
+        decrement it by one and return True immediately.  If it is
+        zero on entry, block, waiting until some other coroutine has
+        called release() to make it larger than 0, and then return
+        True.
+        """
+        if not self.locked():
+            self._value -= 1
+            return True
+
+        if self._waiters is None:
+            self._waiters = collections.deque()
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+
+        # Finally block should be called before the CancelledError
+        # handling as we don't want CancelledError to call
+        # _wake_up_first() and attempt to wake up itself.
+        try:
+            await fut
+        except BaseException:
+            self._waiters.remove(fut)
+            if fut.done() and not fut.cancelled():
+                # _wake_up_next() was called.
+                # undo the decr from _wake_up_next() and re,
+                self._value += 1
+                self._wake_up_next()
+            raise
+
+        self._waiters.remove(fut)
+        if self._value > 0:
+            self._wake_up_next()
         return True

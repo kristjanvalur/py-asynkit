@@ -4,6 +4,7 @@ import pytest
 
 from asynkit.experimental import (
     InterruptLock,
+    InterruptSemaphore,
     create_pytask,
     task_interrupt,
     task_throw,
@@ -463,6 +464,44 @@ class TestInterrupt:
         await asyncio.sleep(0)
         # both tasks are waiting on the lock, task1 is first in the queue
         lock.release()
+        # task1 is now runnable, task2 is still waiting
+        assert task_is_runnable(task1)
+        assert task_is_blocked(task2)
+        await task_interrupt(task1, ZeroDivisionError())
+        with pytest.raises(ZeroDivisionError):
+            await task1
+        # task2 is now runnable, it should have got the lock instead of 1 which
+        # was interrupted
+        if not task_is_runnable(task2):
+            task2.cancel()
+            assert False, "task2 should be runnable"
+        assert task_is_runnable(task2)
+        await task2
+
+    @pytest.mark.xfail(reason="regular semaphore can only deal with 'CancelledError'")
+    async def test_cancelled_semaphore_acquire_regular(self, ctask):
+        await self._cancelled_semaphore_acquire(ctask, asyncio.Semaphore())
+
+    async def test_cancelled_semaphore_acquire_Interrupt(self, ctask):
+        await self._cancelled_semaphore_acquire(ctask, InterruptSemaphore())
+
+    async def _cancelled_semaphore_acquire(self, ctask, sem):
+        """
+        Test that a Task can be interrupted when acquiring a mutex,
+        even in the critical phase while runnable after being awoken,
+        leaving the mutex in a consistent state.
+        """
+
+        async def func():
+            await sem.acquire()
+            sem.release()
+
+        await sem.acquire()
+        task1 = create_task(ctask, func())
+        task2 = create_task(ctask, func())
+        await asyncio.sleep(0)
+        # both tasks are waiting on the lock, task1 is first in the queue
+        sem.release()
         # task1 is now runnable, task2 is still waiting
         assert task_is_runnable(task1)
         assert task_is_blocked(task2)
