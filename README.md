@@ -733,27 +733,33 @@ A task which is blocked, waiting for a future, is immediately freed and schedule
 If the task is already scheduled to run, i.e. it is _new_, or the future has triggered but
 the task hasn't become active yet, it is still awoken with an exception.
 
-- __Note 1:__ The Python library in places assumes that the only exception that can be
-  raised out of awaitables is `CancelledError`.  In particular, there are edge cases
-  in `asyncio.Lock`, `asyncio.Semaphore` and `asyncio.Condition` where the raised interrupt
-  when acquiring these primitives will leave them in an incorrect state.
-  
-  For this reason, we also provide the classes `IntterruptLock`, `InterruptSemaphore`, `InterruptBoundedSemaphore`
-  and `InterruptCondition` which handle this properly.  The fixes are
-  trivial and the the standard library really should have handled `BaseException` instead
-  of only `CancelledError``.
+Please note the following cases: 
 
-- __Note 2:__ These functions currently are only work **reliably** with `Task` object implemented in Python.
-  Modern implementation often have a native "C" implementation of `Task` objects and they contain inaccessible code which cannot be used by the library.  In particular, the
-  `Task.__step` method cannot be explicitly scheduled to the event loop.  For that reason,
-  a special `create_pytask()` helper is provided to create a suitable python `Task` instance.
-- __However:__ This library does go through extra hoops to make it usable with C Tasks.
-  It almost works, but with two caveats:
+1. The Python library in places assumes that the only exception that can be
+   raised out of awaitables is `CancelledError`.  In particular, there are edge cases
+   in `asyncio.Lock`, `asyncio.Semaphore` and `asyncio.Condition` where raising something
+   else when acquiring these primitives will leave them in an incorrect state.
 
-  - CTasks which have plain `TaskStepMethWrapper` callbacks scheduled cannot be interrupted.
+   Therefore, we provide a base class, `InterruptError`, deriving from `CancelledError` which
+   should be used for interrupts in general.
+
+   However, currently `asyncio.Condition` will not correctly pass on such a subclass
+   for `wait()` in all cases, so  a safer version, `InterruptCondition` is provided.
+
+2.  Even subclasses of `CancelledError` will be converted to a new `CancelledError`
+   instance when not handled in a task, and awaited.
+
+3.  These functions currently are only work **reliably** with `Task` object implemented in Python.
+   Modern implementation often have a native "C" implementation of `Task` objects and they contain inaccessible code which cannot be used by the library.  In particular, the
+   `Task.__step` method cannot be explicitly scheduled to the event loop.  For that reason,
+   a special `create_pytask()` helper is provided to create a suitable python `Task` instance.
+4. __However:__ This library does go through extra hoops to make it usable with C Tasks.
+   It almost works, but with two caveats:
+
+   - CTasks which have plain `TaskStepMethWrapper` callbacks scheduled cannot be interrupted.
     These are typically tasks executing `await asyncio.sleep(0)` or freshly created
     tasks that haven't started executing.
-  - The CTask's `_fut_waiting` member _cannot_ be cleared from our code, so there exists a time
+   - The CTask's `_fut_waiting` member _cannot_ be cleared from our code, so there exists a time
     where it can point to a valid, not-done, Future, even though the Task is about
     to wake up.  This will make methods such as `task_is_blocked()` return incorrect
     values.  It __will__ get cleared when the interrupted task starts executing, however. All the more reason to use `task_interrupt()` over `task_throw()` since
@@ -804,11 +810,11 @@ async def test():
     create_pytask(task)
     await asyncio.sleep(0)
     assert task_is_blocked(task)
-    await task_interrupt(task, ZeroDivisionError())
+    await task_interrupt(task, InterruptException())
     assert task.done()  # the error has already been raised.
     try:
         await task
-    except ZeroDivisionError:
+    except CancelledError:  # original error is substituted
         pass
     else:
         assert False, "never happens"
