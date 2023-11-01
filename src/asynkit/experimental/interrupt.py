@@ -14,6 +14,7 @@ from asynkit.scheduling import task_switch
 __all__ = [
     "InterruptCondition",
     "InterruptLock",
+    "InterruptBoundedSemaphore",
     "InterruptSemaphore",
     "create_pytask",
     "task_interrupt",
@@ -460,6 +461,19 @@ class InterruptSemaphore(asyncio.Semaphore, LoopBoundMixin):
         if self._value > 0:
             self._wake_up_next()
         return True
+
+
+class InterruptBoundedSemaphore(InterruptSemaphore):
+    """Interrupt safe version of the BoundedSempahore."""
+
+    def __init__(self, value=1):
+        self._bound_value = value
+        super().__init__(value)
+
+    def release(self):  # pragma: no cover
+        if self._value >= self._bound_value:
+            raise ValueError("BoundedSemaphore released too many times")
+        super().release()
 
 
 class InterruptCondition(asyncio.Condition, LoopBoundMixin):

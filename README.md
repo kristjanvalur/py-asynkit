@@ -738,7 +738,7 @@ the task hasn't become active yet, it is still awoken with an exception.
   in `asyncio.Lock`, `asyncio.Semaphore` and `asyncio.Condition` where the raised interrupt
   when acquiring these primitives will leave them in an incorrect state.
   
-  For this reason, we also provide the classes `IntterruptLock`, `InterruptSemaphore`
+  For this reason, we also provide the classes `IntterruptLock`, `InterruptSemaphore`, `InterruptBoundedSemaphore`
   and `InterruptCondition` which handle this properly.  The fixes are
   trivial and the the standard library really should have handled `BaseException` instead
   of only `CancelledError``.

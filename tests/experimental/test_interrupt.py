@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 from asynkit.experimental import (
+    InterruptBoundedSemaphore,
     InterruptCondition,
     InterruptLock,
     InterruptSemaphore,
@@ -480,11 +481,13 @@ class TestInterrupt:
         await task2
 
     @pytest.mark.xfail(reason="regular semaphore can only deal with 'CancelledError'")
-    async def test_cancelled_semaphore_acquire_regular(self, ctask):
-        await self._cancelled_semaphore_acquire(ctask, asyncio.Semaphore())
+    @pytest.mark.parametrize("base", [asyncio.Semaphore, asyncio.BoundedSemaphore])
+    async def test_cancelled_semaphore_acquire_regular(self, ctask, base):
+        await self._cancelled_semaphore_acquire(ctask, base())
 
-    async def test_cancelled_semaphore_acquire_Interrupt(self, ctask):
-        await self._cancelled_semaphore_acquire(ctask, InterruptSemaphore())
+    @pytest.mark.parametrize("base", [InterruptSemaphore, InterruptBoundedSemaphore])
+    async def test_cancelled_semaphore_acquire_Interrupt(self, ctask, base):
+        await self._cancelled_semaphore_acquire(ctask, base())
 
     async def _cancelled_semaphore_acquire(self, ctask, sem):
         """
@@ -517,7 +520,7 @@ class TestInterrupt:
         assert task_is_runnable(task2)
         await task2
 
-    @pytest.mark.xfail(reason="regular semaphore can only deal with 'CancelledError'")
+    @pytest.mark.xfail(reason="regular condition can only deal with 'CancelledError'")
     async def test_cancelled_condition_wait_acquire_regular(self, ctask):
         await self._cancelled_condition_wait_acquire(
             ctask, asyncio.Condition(InterruptLock())
