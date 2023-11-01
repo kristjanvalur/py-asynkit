@@ -3,10 +3,8 @@ import asyncio
 import pytest
 
 from asynkit.experimental import (
-    InterruptBoundedSemaphore,
     InterruptCondition,
-    InterruptLock,
-    InterruptSemaphore,
+    InterruptException,
     create_pytask,
     task_interrupt,
     task_throw,
@@ -443,22 +441,21 @@ class TestInterrupt:
         with pytest.raises(asyncio.CancelledError):
             await task
 
-    @pytest.mark.xfail(reason="regular lock can only deal with 'CancelledError'")
-    async def test_cancelled_lock_acquire_regular(self, ctask):
-        await self._cancelled_lock_acquire(ctask, asyncio.Lock())
-
-    async def test_cancelled_lock_acquire_Interrupt(self, ctask):
-        await self._cancelled_lock_acquire(ctask, InterruptLock())
-
-    async def _cancelled_lock_acquire(self, ctask, lock):
+    async def test_cancelled_lock_acquire(self, ctask):
         """
         Test that we can interrupt a lock acquire at a critical phase
         where the lock has been freed.
         """
 
+        lock = asyncio.Lock()
+
         async def func():
-            await lock.acquire()
+            try:
+                await lock.acquire()
+            except InterruptException:
+                return 0
             lock.release()
+            return 1
 
         await lock.acquire()
         task1 = create_task(ctask, func())
@@ -469,36 +466,32 @@ class TestInterrupt:
         # task1 is now runnable, task2 is still waiting
         assert task_is_runnable(task1)
         assert task_is_blocked(task2)
-        await task_interrupt(task1, ZeroDivisionError())
-        with pytest.raises(ZeroDivisionError):
-            await task1
+        await task_interrupt(task1, InterruptException())
+        assert await task1 == 0
         # task2 is now runnable, it should have got the lock instead of 1 which
         # was interrupted
         if not task_is_runnable(task2):
             task2.cancel()
             assert False, "task2 should be runnable"
         assert task_is_runnable(task2)
-        await task2
+        assert await task2 == 1
 
-    @pytest.mark.xfail(reason="regular semaphore can only deal with 'CancelledError'")
     @pytest.mark.parametrize("base", [asyncio.Semaphore, asyncio.BoundedSemaphore])
-    async def test_cancelled_semaphore_acquire_regular(self, ctask, base):
-        await self._cancelled_semaphore_acquire(ctask, base())
-
-    @pytest.mark.parametrize("base", [InterruptSemaphore, InterruptBoundedSemaphore])
-    async def test_cancelled_semaphore_acquire_Interrupt(self, ctask, base):
-        await self._cancelled_semaphore_acquire(ctask, base())
-
-    async def _cancelled_semaphore_acquire(self, ctask, sem):
+    async def test_cancelled_semaphore_acquire(self, ctask, base):
         """
         Test that a Task can be interrupted when acquiring a mutex,
         even in the critical phase while runnable after being awoken,
         leaving the mutex in a consistent state.
         """
+        sem = base()
 
         async def func():
-            await sem.acquire()
+            try:
+                await sem.acquire()
+            except InterruptException:
+                return 0
             sem.release()
+            return 1
 
         await sem.acquire()
         task1 = create_task(ctask, func())
@@ -509,22 +502,19 @@ class TestInterrupt:
         # task1 is now runnable, task2 is still waiting
         assert task_is_runnable(task1)
         assert task_is_blocked(task2)
-        await task_interrupt(task1, ZeroDivisionError())
-        with pytest.raises(ZeroDivisionError):
-            await task1
+        await task_interrupt(task1, InterruptException())
+        assert await task1 == 0
         # task2 is now runnable, it should have got the lock instead of 1 which
         # was interrupted
         if not task_is_runnable(task2):
             task2.cancel()
             assert False, "task2 should be runnable"
         assert task_is_runnable(task2)
-        await task2
+        assert await task2 == 1
 
     @pytest.mark.xfail(reason="regular condition can only deal with 'CancelledError'")
     async def test_cancelled_condition_wait_acquire_regular(self, ctask):
-        await self._cancelled_condition_wait_acquire(
-            ctask, asyncio.Condition(InterruptLock())
-        )
+        await self._cancelled_condition_wait_acquire(ctask, asyncio.Condition())
 
     async def test_cancelled_condition_wait_acquire_interrupt(self, ctask):
         await self._cancelled_condition_wait_acquire(ctask, InterruptCondition())
@@ -540,7 +530,7 @@ class TestInterrupt:
 
         async def func():
             async with cond:
-                with pytest.raises(ZeroDivisionError):
+                with pytest.raises(InterruptException):
                     await cond.wait_for(lambda: wake)
                 print("task woke up")
             # leaving the context manager releases the lock, and if it is not already
@@ -557,7 +547,7 @@ class TestInterrupt:
         # task is now trying to re-acquire the lock
         cond.release()
         # send it an interrupt while on the runnable queue to return from lock.acquire()
-        await task_interrupt(task1, ZeroDivisionError())
+        await task_interrupt(task1, InterruptException())
         # task should finish
         assert await task1 is None
 

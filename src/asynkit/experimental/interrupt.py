@@ -1,6 +1,5 @@
 import asyncio
 import asyncio.tasks
-import collections
 import contextlib
 import sys
 import threading
@@ -12,10 +11,8 @@ from asynkit.loop.types import FutureAny, TaskAny
 from asynkit.scheduling import task_switch
 
 __all__ = [
+    "InterruptException",
     "InterruptCondition",
-    "InterruptLock",
-    "InterruptBoundedSemaphore",
-    "InterruptSemaphore",
     "create_pytask",
     "task_interrupt",
     "task_throw",
@@ -281,7 +278,17 @@ async def task_interrupt(task: TaskAny, exception: BaseException) -> None:
     await task_switch(task)
 
 
-class TimeoutInterrupt(BaseException):
+class InterruptException(asyncio.CancelledError):
+    """A BaseException used to interrupt a task when a timeout occurs.
+    It is based on asyncio.CanceledError, a base exception, because
+    a code in asyncio specifically handles CancelledError correctly
+    when synchronization primitives are interrupted by it.
+    Note that subclasses of CancelledError will be turned into
+    plain CancelledError when not handled in a task.
+    """
+
+
+class TimeoutInterrupt(InterruptException):
     """A BaseException used to interrupt a task when a timeout occurs."""
 
 
@@ -361,129 +368,13 @@ class LoopBoundMixin:
             return loop
 
 
-class InterruptLock(asyncio.Lock, LoopBoundMixin):
-    """
-    A class which fixes the lack of support in asyncio.Lock for arbitrary
-    exceptions being raised during the acquire() call.
-    """
-
-    # copy of the original, with different error handling.  We leave coverage
-    # testing to the standard lib.
-    async def acquire(self) -> Literal[True]:  # pragma: no cover
-        """Acquire a lock.
-
-        This method blocks until the lock is unlocked, then sets it to
-        locked and returns True.
-        """
-        # This is a "fair" lock.  Its  policy is to always wait if there
-        # are others waiting.
-        # A different policy ("opportunistic") is to greedily
-        # aquire the lock if possible, jumping ahead of any waiters.  This
-        # lowers latency with OS level locks, but is unsuitable in cooperative
-        # multi-tasking where otherwise we a single task could starve others.
-
-        # Note: there os no need to check for cancellation here, because
-        # a cancelled task will wake up another task to take the lock.
-        # we leave that logic in place here however, inherited from the original.
-
-        self._locked: bool
-        if not self._locked and (
-            self._waiters is None or all(w.cancelled() for w in self._waiters)
-        ):
-            self._locked = True
-            return True
-
-        if self._waiters is None:
-            self._waiters: Any = collections.deque()
-        fut = self._get_loop().create_future()
-        self._waiters.append(fut)
-
-        # A base exception can happen _after_ this
-        # task was woken up via release() (cancellation, interrupt). In that case
-        # we must wake up another task to take the lock
-        try:
-            await fut
-        except BaseException:
-            self._waiters.remove(fut)
-            if not self._locked:
-                self._wake_up_first()  # type: ignore[attr-defined]
-            raise
-
-        self._waiters.remove(fut)
-        self._locked = True
-        return True
-
-
-class InterruptSemaphore(asyncio.Semaphore, LoopBoundMixin):
-    """
-    A class which fixes the lack of support in asyncio.Semaphore for arbitrary
-    exceptions being raised during the acquire() call.
-    """
-
-    async def acquire(self) -> Literal[True]:  # pragma: no cover
-        """Acquire a semaphore.
-
-        If the internal counter is larger than zero on entry,
-        decrement it by one and return True immediately.  If it is
-        zero on entry, block, waiting until some other coroutine has
-        called release() to make it larger than 0, and then return
-        True.
-        """
-        if not self.locked():
-            self._value -= 1
-            return True
-
-        if self._waiters is None:
-            self._waiters = collections.deque()
-        fut = self._get_loop().create_future()
-        self._waiters.append(fut)
-
-        # Finally block should be called before the CancelledError
-        # handling as we don't want CancelledError to call
-        # _wake_up_first() and attempt to wake up itself.
-        try:
-            await fut
-        except BaseException:
-            if _is_310:
-                # prior to 3.10, release() removed the waiter.
-                self._waiters.remove(fut)
-            if fut.done() and not fut.cancelled():
-                # _wake_up_next() was called by release().
-                # undo the decr from _wake_up_next() and re,
-                if _is_310:
-                    self._value += 1
-                self._wake_up_next()
-            raise
-
-        if _is_310:
-            self._waiters.remove(fut)
-            if self._value > 0:
-                self._wake_up_next()
-        else:
-            self._value -= 1  # prior to 3.10, this was done here.
-        return True
-
-
-class InterruptBoundedSemaphore(InterruptSemaphore):
-    """Interrupt safe version of the BoundedSempahore."""
-
-    def __init__(self, value: int = 1) -> None:
-        self._bound_value = value
-        super().__init__(value)
-
-    def release(self) -> None:  # pragma: no cover
-        if self._value >= self._bound_value:
-            raise ValueError("BoundedSemaphore released too many times")
-        super().release()
-
-
 class InterruptCondition(asyncio.Condition, LoopBoundMixin):
     """
     A class which fixes the lack of support in asyncio.Condition for arbitrary
     exceptions being raised during the lock.acquire() call in wait().
     """
 
-    LockType = InterruptLock
+    LockType = asyncio.Lock
 
     def __init__(self, lock: Any = None) -> None:
         if lock is None:  # pragma: no branch
