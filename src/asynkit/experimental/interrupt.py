@@ -1,5 +1,6 @@
 import asyncio
 import asyncio.tasks
+import collections
 import contextlib
 import sys
 from asyncio import AbstractEventLoop
@@ -16,6 +17,7 @@ __all__ = [
     "task_timeout",
     "TimeoutInterrupt",
     "PyTask",
+    "InterruptLock",
 ]
 
 _have_context = sys.version_info > (3, 8)
@@ -334,3 +336,54 @@ async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
     finally:
         is_active = False
         timeout_handle.cancel()
+
+
+class InterruptLock(asyncio.Lock):
+    """
+    A class which fixes the lack of support in asyncio.Lock for arbitrary
+    exceptions being raised during the acquire() call.
+    """
+
+    # copy of the original, with different error handling.  We leave coverage
+    # testing to the standard lib.
+    async def acquire(self):  # pragma: no cover
+        """Acquire a lock.
+
+        This method blocks until the lock is unlocked, then sets it to
+        locked and returns True.
+        """
+        # This is a "fair" lock.  Its  policy is to always wait if there
+        # are others waiting.
+        # A different policy ("opportunistic") is to greedily
+        # aquire the lock if possible, jumping ahead of any waiters.  This
+        # lowers latency with OS level locks, but is unsuitable in cooperative
+        # multi-tasking where otherwise we a single task could starve others.
+
+        # Note: there os no need to check for cancellation here, because
+        # a cancelled task will wake up another task to take the lock.
+        # we leave that logic in place here however, inherited from the original.
+        if not self._locked and (
+            self._waiters is None or all(w.cancelled() for w in self._waiters)
+        ):
+            self._locked = True
+            return True
+
+        if self._waiters is None:
+            self._waiters = collections.deque()
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+
+        # A base exception can happen _after_ this
+        # task was woken up via release() (cancellation, interrupt). In that case
+        # we must wake up another task to take the lock
+        try:
+            await fut
+        except BaseException:
+            self._waiters.remove(fut)
+            if not self._locked:
+                self._wake_up_first()
+            raise
+
+        self._waiters.remove(fut)
+        self._locked = True
+        return True
