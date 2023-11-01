@@ -3,6 +3,7 @@ import asyncio.tasks
 import collections
 import contextlib
 import sys
+import threading
 from asyncio import AbstractEventLoop
 from typing import Any, AsyncGenerator, Coroutine, Optional
 
@@ -23,6 +24,7 @@ __all__ = [
 ]
 
 _have_context = sys.version_info > (3, 8)
+_have_get_loop = sys.version_info >= (3, 10)
 
 # Crate a python Task.  We need access to the __step method and this is hidden
 # in the C implementation from _asyncio module
@@ -340,7 +342,30 @@ async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
         timeout_handle.cancel()
 
 
-class InterruptLock(asyncio.Lock):
+if not _have_get_loop:  # pragma: no cover
+
+    class LoopBoundMixin:
+        _global_lock = threading.Lock()
+        _loop = None
+
+        def _get_loop(self):
+            loop = asyncio.get_running_loop()
+
+            if self._loop is None:
+                with self._global_lock:
+                    if self._loop is None:
+                        self._loop = loop
+            if loop is not self._loop:
+                raise RuntimeError(f"{self!r} is bound to a different event loop")
+            return loop
+
+else:
+
+    class LoopBoundMixin:
+        pass
+
+
+class InterruptLock(asyncio.Lock, LoopBoundMixin):
     """
     A class which fixes the lack of support in asyncio.Lock for arbitrary
     exceptions being raised during the acquire() call.
@@ -391,7 +416,7 @@ class InterruptLock(asyncio.Lock):
         return True
 
 
-class InterruptSemaphore(asyncio.Semaphore):
+class InterruptSemaphore(asyncio.Semaphore, LoopBoundMixin):
     """
     A class which fixes the lack of support in asyncio.Semaphore for arbitrary
     exceptions being raised during the acquire() call.
@@ -435,7 +460,7 @@ class InterruptSemaphore(asyncio.Semaphore):
         return True
 
 
-class InterruptCondition(asyncio.Condition):
+class InterruptCondition(asyncio.Condition, LoopBoundMixin):
     """
     A class which fixes the lack of support in asyncio.Condition for arbitrary
     exceptions being raised during the lock.acquire() call in wait().
