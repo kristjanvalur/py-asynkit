@@ -359,7 +359,7 @@ if not _have_get_loop:  # pragma: no cover
                 raise RuntimeError(f"{self!r} is bound to a different event loop")
             return loop
 
-else:
+else:  # pragma: no cover
 
     class LoopBoundMixin:
         pass
@@ -446,15 +446,21 @@ class InterruptSemaphore(asyncio.Semaphore, LoopBoundMixin):
         try:
             await fut
         except BaseException:
-            self._waiters.remove(fut)
+            try:
+                self._waiters.remove(fut)
+            except ValueError:
+                pass  # prior to 3.10, release() removed the waiter.
             if fut.done() and not fut.cancelled():
-                # _wake_up_next() was called.
+                # _wake_up_next() was called by release().
                 # undo the decr from _wake_up_next() and re,
                 self._value += 1
                 self._wake_up_next()
             raise
 
-        self._waiters.remove(fut)
+        try:
+            self._waiters.remove(fut)
+        except ValueError:
+            pass  # version < 3.10 comptibility
         if self._value > 0:
             self._wake_up_next()
         return True
