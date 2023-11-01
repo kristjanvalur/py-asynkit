@@ -11,14 +11,15 @@ from asynkit.loop.types import FutureAny, TaskAny
 from asynkit.scheduling import task_switch
 
 __all__ = [
+    "InterruptCondition",
+    "InterruptLock",
+    "InterruptSemaphore",
     "create_pytask",
     "task_interrupt",
     "task_throw",
     "task_timeout",
     "TimeoutInterrupt",
     "PyTask",
-    "InterruptLock",
-    "InterruptSemaphore",
 ]
 
 _have_context = sys.version_info > (3, 8)
@@ -432,3 +433,57 @@ class InterruptSemaphore(asyncio.Semaphore):
         if self._value > 0:
             self._wake_up_next()
         return True
+
+
+class InterruptCondition(asyncio.Condition):
+    """
+    A class which fixes the lack of support in asyncio.Condition for arbitrary
+    exceptions being raised during the lock.acquire() call in wait().
+    """
+
+    LockType = InterruptLock
+
+    def __init__(self, lock=None):
+        if lock is None:  # pragma: no branch
+            lock = self.LockType()
+        super().__init__(lock)
+
+    async def wait(self):  # pragma: no cover
+        """Wait until notified.
+
+        If the calling coroutine has not acquired the lock when this
+        method is called, a RuntimeError is raised.
+
+        This method releases the underlying lock, and then blocks
+        until it is awakened by a notify() or notify_all() call for
+        the same condition variable in another coroutine.  Once
+        awakened, it re-acquires the lock and returns True.
+        """
+        if not self.locked():
+            raise RuntimeError("cannot wait on un-acquired lock")
+
+        self.release()
+        try:
+            fut = self._get_loop().create_future()
+            self._waiters.append(fut)
+            try:
+                await fut
+                return True
+            finally:
+                self._waiters.remove(fut)
+
+        finally:
+            # Must reacquire lock even if wait is cancelled
+            err = None
+            while True:
+                try:
+                    await self.acquire()
+                    break
+                except BaseException as e:
+                    err = e
+
+            if err is not None:
+                try:
+                    raise err
+                finally:
+                    err = None  # break ref cycle

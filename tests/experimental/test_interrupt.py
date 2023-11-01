@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 from asynkit.experimental import (
+    InterruptCondition,
     InterruptLock,
     InterruptSemaphore,
     create_pytask,
@@ -515,6 +516,47 @@ class TestInterrupt:
             assert False, "task2 should be runnable"
         assert task_is_runnable(task2)
         await task2
+
+    @pytest.mark.xfail(reason="regular semaphore can only deal with 'CancelledError'")
+    async def test_cancelled_condition_wait_acquire_regular(self, ctask):
+        await self._cancelled_condition_wait_acquire(
+            ctask, asyncio.Condition(InterruptLock())
+        )
+
+    async def test_cancelled_condition_wait_acquire_interrupt(self, ctask):
+        await self._cancelled_condition_wait_acquire(ctask, InterruptCondition())
+
+    async def _cancelled_condition_wait_acquire(self, ctask, cond):
+        """
+        Test that interrupting task doing a wait() on a condition,
+        after it has been awoken and waiting to re-aquire the lock,
+        successfully acquires the lock, while raising the exception
+        """
+
+        wake = False
+
+        async def func():
+            async with cond:
+                with pytest.raises(ZeroDivisionError):
+                    await cond.wait_for(lambda: wake)
+                print("task woke up")
+            # leaving the context manager releases the lock, and if it is not already
+            # held, we will get an error
+            print("task re-acquireding lock")
+
+        task1 = create_task(ctask, func())
+        await asyncio.sleep(0)
+        # Task is waiting on the condition
+        await cond.acquire()
+        wake = True
+        cond.notify()
+        await asyncio.sleep(0)
+        # task is now trying to re-acquire the lock
+        cond.release()
+        # send it an interrupt while on the runnable queue to return from lock.acquire()
+        await task_interrupt(task1, ZeroDivisionError())
+        # task should finish
+        assert await task1 is None
 
 
 @pytest.mark.parametrize("ctask", [True, False], ids=["ctask", "pytask"])
