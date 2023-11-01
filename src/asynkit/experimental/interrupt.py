@@ -5,7 +5,7 @@ import contextlib
 import sys
 import threading
 from asyncio import AbstractEventLoop
-from typing import Any, AsyncGenerator, Coroutine, Optional
+from typing import Any, AsyncGenerator, Coroutine, Literal, Optional
 
 from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
 from asynkit.loop.types import FutureAny, TaskAny
@@ -342,13 +342,12 @@ async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
         timeout_handle.cancel()
 
 
-if not _have_get_loop:  # pragma: no cover
-
-    class LoopBoundMixin:
+class LoopBoundMixin:
+    if not _have_get_loop:  # pragma: no cover
         _global_lock = threading.Lock()
         _loop = None
 
-        def _get_loop(self):
+        def _get_loop(self) -> AbstractEventLoop:
             loop = asyncio.get_running_loop()
 
             if self._loop is None:
@@ -359,11 +358,6 @@ if not _have_get_loop:  # pragma: no cover
                 raise RuntimeError(f"{self!r} is bound to a different event loop")
             return loop
 
-else:  # pragma: no cover
-
-    class LoopBoundMixin:
-        pass
-
 
 class InterruptLock(asyncio.Lock, LoopBoundMixin):
     """
@@ -373,7 +367,7 @@ class InterruptLock(asyncio.Lock, LoopBoundMixin):
 
     # copy of the original, with different error handling.  We leave coverage
     # testing to the standard lib.
-    async def acquire(self):  # pragma: no cover
+    async def acquire(self) -> Literal[True]:  # pragma: no cover
         """Acquire a lock.
 
         This method blocks until the lock is unlocked, then sets it to
@@ -389,6 +383,8 @@ class InterruptLock(asyncio.Lock, LoopBoundMixin):
         # Note: there os no need to check for cancellation here, because
         # a cancelled task will wake up another task to take the lock.
         # we leave that logic in place here however, inherited from the original.
+
+        self._locked: bool
         if not self._locked and (
             self._waiters is None or all(w.cancelled() for w in self._waiters)
         ):
@@ -396,7 +392,7 @@ class InterruptLock(asyncio.Lock, LoopBoundMixin):
             return True
 
         if self._waiters is None:
-            self._waiters = collections.deque()
+            self._waiters: Any = collections.deque()
         fut = self._get_loop().create_future()
         self._waiters.append(fut)
 
@@ -408,7 +404,7 @@ class InterruptLock(asyncio.Lock, LoopBoundMixin):
         except BaseException:
             self._waiters.remove(fut)
             if not self._locked:
-                self._wake_up_first()
+                self._wake_up_first()  # type: ignore[attr-defined]
             raise
 
         self._waiters.remove(fut)
@@ -422,7 +418,7 @@ class InterruptSemaphore(asyncio.Semaphore, LoopBoundMixin):
     exceptions being raised during the acquire() call.
     """
 
-    async def acquire(self):  # pragma: no cover
+    async def acquire(self) -> Literal[True]:  # pragma: no cover
         """Acquire a semaphore.
 
         If the internal counter is larger than zero on entry,
@@ -474,12 +470,12 @@ class InterruptCondition(asyncio.Condition, LoopBoundMixin):
 
     LockType = InterruptLock
 
-    def __init__(self, lock=None):
+    def __init__(self, lock: Any = None) -> None:
         if lock is None:  # pragma: no branch
             lock = self.LockType()
         super().__init__(lock)
 
-    async def wait(self):  # pragma: no cover
+    async def wait(self) -> Literal[True]:  # pragma: no cover
         """Wait until notified.
 
         If the calling coroutine has not acquired the lock when this
@@ -496,12 +492,12 @@ class InterruptCondition(asyncio.Condition, LoopBoundMixin):
         self.release()
         try:
             fut = self._get_loop().create_future()
-            self._waiters.append(fut)
+            self._waiters.append(fut)  # type: ignore[attr-defined]
             try:
                 await fut
                 return True
             finally:
-                self._waiters.remove(fut)
+                self._waiters.remove(fut)  # type: ignore[attr-defined]
 
         finally:
             # Must reacquire lock even if wait is cancelled
