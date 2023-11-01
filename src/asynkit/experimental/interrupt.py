@@ -406,17 +406,20 @@ class InterruptCondition(asyncio.Condition, LoopBoundMixin):
                 self._waiters.remove(fut)  # type: ignore[attr-defined]
 
         finally:
-            # Must reacquire lock even if wait is cancelled
+            # Must reacquire lock even if wait is cancelled.  We only
+            # catch CancelledError (and subclasses) so that we don't get in the way
+            # of KeyboardInterrupts or SystemExits or other serious errors.
             err = None
             while True:
                 try:
                     await self.acquire()
                     break
-                except BaseException as e:
+                except asyncio.CancelledError as e:
                     err = e
 
             if err is not None:
                 try:
+                    # re-raise the actual error caught
                     raise err
                 finally:
                     err = None  # break ref cycle
