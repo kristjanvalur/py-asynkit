@@ -113,7 +113,7 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
         # greedily reschedule a runnable owning task
         # in case its priority has changed
         owning = self._owning() if self._owning is not None else None
-        if owning is not None:
+        if owning is not None:  # pragma: no branch
             if task_is_runnable(owning):  # pragma: no branch
                 try:
                     owning.reschedule()  # type: ignore[attr-defined]
@@ -142,7 +142,7 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
 
     def release(self) -> None:
         if not self._locked:
-            raise RuntimeError("Lock is not acquired.")
+            raise RuntimeError("Lock is not acquired.")  # pragma: no cover
 
         task = asyncio.current_task()
         assert task is not None
@@ -162,7 +162,7 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
             return
         fut, _ = self._waiters.peek()
 
-        if not fut.done():
+        if not fut.done():  # pragma: no branch
             fut.set_result(True)
 
     def effective_priority(self) -> Optional[float]:
@@ -194,7 +194,7 @@ class PriorityCondition(asyncio.Condition, LockHelper):
         self._waiters: PriorityQueue[float, asyncio.Future[bool]] = PriorityQueue()
 
     async def wait(self) -> Literal[True]:
-        if not self.locked():
+        if not self.locked():  # pragma: no cover
             raise RuntimeError("cannot wait on un-acquired lock")
 
         task = asyncio.current_task()
@@ -220,7 +220,7 @@ class PriorityCondition(asyncio.Condition, LockHelper):
             raise
 
     def notify(self, n: int = 1) -> None:
-        if not self.locked():
+        if not self.locked():  # pragma: no cover
             raise RuntimeError("cannot notify on un-acquired lock")
         self._notify(n)
 

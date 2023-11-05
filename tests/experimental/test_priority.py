@@ -57,7 +57,8 @@ class TestPriorityLock:
         await asyncio.gather(task1, task2, task3, task4)
         assert lock.effective_priority() is None
 
-    async def test_lock_scheduling(self):
+    @pytest.mark.parametrize("tasktype", [PriorityTask, asyncio.Task])
+    async def test_lock_scheduling(self, tasktype):
         """Test that tasks acquire lock in order of priority"""
         lock = PriorityLock()
         results = []
@@ -69,18 +70,55 @@ class TestPriorityLock:
         async with lock:
             values = list(range(20))
             random.shuffle(values)
-            tasks = [PriorityTask(doit(i), priority=i) for i in values]
+            if tasktype is PriorityTask:
+                tasks = [PriorityTask(doit(i), priority=i) for i in values]
+            else:
+                tasks = [asyncio.Task(doit(i)) for i in values]
             await asyncio.sleep(0.001)
             assert results == []
 
         await asyncio.gather(*tasks)
-        assert results == list(range(20))
+        if tasktype is PriorityTask:
+            assert results == list(range(20))
+        else:
+            assert results != list(range(20))
+
+    async def test_lock_cancel(self):
+        """Test that cancellation logic is correct"""
+        lock = PriorityLock()
+        results = []
+
+        async def doit(i):
+            try:
+                async with lock:
+                    results.append(i)
+            except asyncio.CancelledError:
+                pass
+
+        async with lock:
+            values = list(range(20))
+            random.shuffle(values)
+            tasks = [(PriorityTask(doit(i), priority=i), i) for i in values]
+            await asyncio.sleep(0.001)
+            assert results == []
+            task1, i = tasks[8]
+            task2, j = tasks[12]
+            task1.cancel()
+            await asyncio.sleep(0.001)
+            task2.cancel()
+
+        expect = list(range(20))
+        expect.remove(i)
+        expect.remove(j)
+        await asyncio.gather(*(task for (task, i) in tasks))
+        assert results == expect
 
 
 class TestPriorityCondition:
+    @pytest.mark.parametrize("tasktype", [PriorityTask, asyncio.Task])
     @pytest.mark.parametrize("locktype", [PriorityLock, asyncio.Lock])
-    async def test_lock_scheduling(self, locktype):
-        """Test that tasks acquire lock in order of priority"""
+    async def test_notify_scheduling(self, tasktype, locktype):
+        """Test that tasks are notified in order of priority"""
         lock = locktype()
         cond = PriorityCondition(lock)
         results = []
@@ -94,7 +132,10 @@ class TestPriorityCondition:
 
         values = list(range(20))
         random.shuffle(values)
-        tasks = [PriorityTask(doit(i), priority=i) for i in values]
+        if tasktype is PriorityTask:
+            tasks = [PriorityTask(doit(i), priority=i) for i in values]
+        else:
+            tasks = [asyncio.Task(doit(i)) for i in values]
         await asyncio.sleep(0.001)
         assert results == []
         async with cond:
@@ -102,7 +143,40 @@ class TestPriorityCondition:
             cond.notify()
 
         await asyncio.gather(*tasks)
-        assert results == list(range(20))
+        if tasktype is PriorityTask:
+            assert results == list(range(20))
+        else:
+            assert results != list(range(20))
+
+    async def test_notify_cancel(self):
+        """Test that cancellation logic is correct"""
+        cond = PriorityCondition()
+        results = []
+        wake = False
+
+        async def doit(i):
+            try:
+                async with cond:
+                    await cond.wait_for(lambda: wake)
+                    results.append(i)
+                    cond.notify(1)
+            except asyncio.CancelledError:
+                pass
+
+        values = list(range(20))
+        random.shuffle(values)
+        tasks = [(PriorityTask(doit(i), priority=i), i) for i in values]
+        await asyncio.sleep(0.001)
+        assert results == []
+        async with cond:
+            task, i = tasks[10]
+            task.cancel()
+            wake = True
+            cond.notify()
+
+        await asyncio.gather(*(task for (task, i) in tasks))
+        expect = list(range(i)) + list(range(i + 1, 20))
+        assert results == expect
 
 
 async def test_priority_inheritance():
