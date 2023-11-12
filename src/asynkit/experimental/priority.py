@@ -2,22 +2,29 @@ import asyncio
 import contextlib
 import weakref
 from abc import ABC, abstractmethod
-from asyncio import Lock, Task
+from asyncio import Handle, Lock, Task
+from contextvars import Context
 from typing import (
+    Any,
     AsyncIterator,
     Callable,
     Generic,
+    Iterable,
     Iterator,
     List,
     Optional,
+    Protocol,
     Set,
     Tuple,
     TypeVar,
+    cast,
 )
 
 from typing_extensions import Literal
 
 from asynkit.compat import LockHelper
+from asynkit.loop.default import task_from_handle
+from asynkit.loop.schedulingloop import AbstractSchedulingLoop
 from asynkit.loop.types import TaskAny
 from asynkit.scheduling import task_is_runnable
 from asynkit.tools import PriorityQueue
@@ -247,9 +254,11 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         name=None,
         priority: float = 0,
     ) -> None:
-        super().__init__(coro, loop=loop, name=name)
+        # Must initialize these attributes before calling parent init
+        # because that will schedule the task.
         self.priority_value = priority
         self._holding_locks: Set[PriorityLock] = set()
+        super().__init__(coro, loop=loop, name=name)
 
     def add_owned_lock(self, lock: PriorityLock) -> None:
         self._holding_locks.add(lock)
@@ -274,12 +283,14 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         """
 
 
-class FancyPriorityQueue(Generic[T]):
+class PosPriorityQueue(Generic[T]):
     """
     A simple priority queue for objects, which also allows scheduling
     at a fixed early position.  It respects floating point priority
     values of objects, but also allows positional scheduling when
     required.  Lower priority values are scheduled first.
+    It supports "append" and "popleft" operations and as such can
+    be directly plugged in as a deque to an event loop.
     """
 
     def __init__(self, get_priority: Callable[[T], float]) -> None:
@@ -347,6 +358,12 @@ class FancyPriorityQueue(Generic[T]):
     def popleft(self) -> T:
         return self._pq.pop()
 
+    def remove(self, obj: T) -> None:
+        """
+        Remove an object from the queue.
+        """
+        self._pq.remove(obj)
+
     def find(
         self,
         key: Callable[[T], bool],
@@ -381,3 +398,85 @@ class FancyPriorityQueue(Generic[T]):
             newpri.append((pri, obj))
         self._pq.clear()
         self._pq.extend(newpri)
+
+
+FancyPriorityQueue = PosPriorityQueue
+
+
+class EventLoopLike(Protocol):
+    def call_soon(
+        self,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Optional[Context] = None,
+    ) -> Handle:
+        ...
+
+
+class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
+    def init(self) -> None:
+        self.ready_queue: PosPriorityQueue[Handle] = PosPriorityQueue(self.get_priority)
+
+    def get_priority(self, handle: Handle) -> float:
+        task = self.task_from_handle(handle)
+        if task is not None:
+            try:
+                priority = task.effective_priority()  # type: ignore[attr-defined]
+                return cast(float, priority)
+            except AttributeError:
+                pass
+        return 0.0
+
+    def queue_len(self) -> int:
+        return len(self.ready_queue)
+
+    def queue_items(self) -> Iterable[Handle]:
+        return iter(self.ready_queue)
+
+    def queue_find(
+        self, key: Callable[[Handle], bool], remove: bool = False
+    ) -> Optional[Handle]:
+        return self.ready_queue.find(key, remove)
+
+    def queue_remove(self, handle: Handle) -> None:
+        self.ready_queue.remove(handle)
+
+    def queue_insert(self, handle: Handle) -> None:
+        self.ready_queue.append(handle)
+
+    def queue_insert_pos(self, handle: Handle, position: int) -> None:
+        self.ready_queue.insert(position, handle)
+
+    def call_pos(
+        self,
+        position: int,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Optional[Context] = None,
+    ) -> Handle:
+        """Arrange for a callback to be inserted at position 'pos' near the the head of
+        the queue to be called soon.  'position' is typically a low number, 0 or 1.
+        This is effectively the same as calling
+        `call_soon()`, `queue_remove()` and `queue_insert_pos()` in turn.
+        """
+        handle = self.call_soon(callback, *args, context=context)
+        self.queue_remove(handle)
+        self.queue_insert_pos(handle, position)
+        return handle
+
+    # helper to find tasks from handles and to find certain handles
+    # in the queue
+    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+        """
+        Extract the runnable Task object
+        from its scheduled callback.  Returns None if the
+        Handle does not represent a callback for a Task.
+        """
+        return task_from_handle(handle)
+
+
+class PrioritySelectorEventLoop(asyncio.SelectorEventLoop, PrioritySchedulingMixin):
+    def __init__(self, arg: Any = None) -> None:
+        super().__init__(arg)
+        self.init()
+        self._ready = self.ready_queue

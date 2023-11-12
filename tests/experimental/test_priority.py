@@ -8,6 +8,7 @@ from asynkit.experimental.priority import (
     FancyPriorityQueue,
     PriorityCondition,
     PriorityLock,
+    PrioritySelectorEventLoop,
     PriorityTask,
 )
 
@@ -16,7 +17,7 @@ pytestmark = pytest.mark.anyio
 
 @pytest.fixture
 def anyio_backend():
-    return "asyncio"
+    return "asyncio", {"policy": asyncio.DefaultEventLoopPolicy()}
 
 
 class TestPriorityLock:
@@ -559,3 +560,62 @@ class TestPriorityQueue:
         objs = list(queue)
         pris2 = [o.priority for o in objs]
         assert pris2 == [100] + (sorted(pris))
+
+
+# loop policy for pytest-anyio plugin
+class PriorityEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+    def __init__(self, request):
+        super().__init__()
+        self.request = request
+
+    def new_event_loop(self):
+        return PrioritySelectorEventLoop()
+
+
+class TestPriorityScheduling:
+    @pytest.fixture
+    def anyio_backend(self, request):
+        return ("asyncio", {"policy": PriorityEventLoopPolicy(request)})
+
+    async def test_create_event_loop(self):
+        loop = asyncio.get_running_loop()
+        assert isinstance(loop, PrioritySelectorEventLoop)
+        assert loop._ready is loop.ready_queue
+
+    async def test_simple_task(self):
+        async def taskfunc():
+            await asyncio.sleep(0.001)
+            await asyncio.sleep(0)
+            return 1
+
+        task = asyncio.create_task(taskfunc())
+        assert await task == 1
+
+    async def test_priority_tasks(self):
+
+        finished = []
+
+        async def taskfunc(pri):
+            finished.append(pri)
+
+        for i in range(20):
+            pri = random.randint(-5, 5)
+            PriorityTask(taskfunc(pri), priority=pri)
+
+        await asyncio.sleep(0.001)
+        assert finished == sorted(finished)
+
+    async def test_priority_tasks_same(self):
+        """Test that same priority tasks are scheduled in FIFO order"""
+
+        finished = []
+
+        async def taskfunc(pri, i):
+            finished.append((pri, i))
+
+        for i in range(40):
+            pri = random.randint(-5, 5)
+            PriorityTask(taskfunc(pri, i), priority=pri)
+
+        await asyncio.sleep(0.001)
+        assert finished == sorted(finished)
