@@ -282,6 +282,19 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         in case its effective priority has changed.
         """
 
+    def propagate_priority(self) -> None:
+        """Notify that someone has started waiting for this task, having it
+        pass that notification onwards or reschedule itself if necessary.
+        """
+        # TODO: Have it propagate to any lock it is waiting for
+        if task_is_runnable(self):
+            loop = asyncio.get_running_loop()
+            # if the loop supports it, ask for this task to be rescheduled
+            try:
+                loop.task_reschedule(self)  # type: ignore[attr-defined]
+            except AttributeError:  # pragma: no cover
+                pass
+
 
 class PosPriorityQueue(Generic[T]):
     """
@@ -400,9 +413,6 @@ class PosPriorityQueue(Generic[T]):
         self._pq.extend(newpri)
 
 
-FancyPriorityQueue = PosPriorityQueue
-
-
 class EventLoopLike(Protocol):
     def call_soon(
         self,
@@ -410,7 +420,7 @@ class EventLoopLike(Protocol):
         *args: Any,
         context: Optional[Context] = None,
     ) -> Handle:
-        ...
+        ...  # pragma: no cover
 
 
 class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
@@ -473,6 +483,21 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
         Handle does not represent a callback for a Task.
         """
         return task_from_handle(handle)
+
+    def task_reschedule(self, task: TaskAny) -> None:
+        """
+        Ask the event loop to reschedule the task, if runnable,
+        in case its effective priority has changed.
+        """
+        try:
+            priority = task.effective_priority()  # type: ignore[attr-defined]
+        except AttributeError:  # pragma: no cover
+            return  # not a priority task, it already has the right priority of 0
+
+        def key(handle: Handle) -> bool:
+            return task is self.task_from_handle(handle)
+
+        self.ready_queue.reschedule(key, priority)
 
 
 class PrioritySelectorEventLoop(asyncio.SelectorEventLoop, PrioritySchedulingMixin):

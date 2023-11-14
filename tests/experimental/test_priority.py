@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from asynkit.experimental.priority import (
-    FancyPriorityQueue,
+    PosPriorityQueue,
     PriorityCondition,
     PriorityLock,
     PrioritySelectorEventLoop,
@@ -141,7 +141,7 @@ class TestPriorityCondition:
         assert results == []
         async with cond:
             wake = True
-            cond.notify()
+            cond.notify(1)
 
         await asyncio.gather(*tasks)
         if tasktype is PriorityTask:
@@ -273,9 +273,9 @@ def priority_key(obj):
     return obj.priority
 
 
-class TestPriorityQueue:
+class TestPosPriorityQueue:
     def test_append(self):
-        queue = FancyPriorityQueue(priority_key)
+        queue = PosPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -297,7 +297,7 @@ class TestPriorityQueue:
 
     def test_append_pri(self):
         """Test that we can specify priority when appending"""
-        queue = FancyPriorityQueue(priority_key)
+        queue = PosPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -317,7 +317,7 @@ class TestPriorityQueue:
 
     def test_fifo(self):
         """Verify that same priority gets FIFO ordering"""
-        queue = FancyPriorityQueue(priority_key)
+        queue = PosPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -349,7 +349,7 @@ class TestPriorityQueue:
 
     def test_priority_iter(self):
         """Verify that iteration returns items in priority order"""
-        queue = FancyPriorityQueue(priority_key)
+        queue = PosPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -368,7 +368,7 @@ class TestPriorityQueue:
 
     def test_insert_pos(self):
         """Verify that we can insert at a specific position"""
-        queue = FancyPriorityQueue(priority_key)
+        queue = PosPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -392,7 +392,7 @@ class TestPriorityQueue:
 
     def test_insert_pos2(self):
         """Verify that we can insert two at specific positions"""
-        queue = FancyPriorityQueue(priority_key)
+        queue = PosPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -419,7 +419,7 @@ class TestPriorityQueue:
 
     def test_find(self):
         """Verify that iteration returns items in priority order"""
-        queue = FancyPriorityQueue(priority_key)
+        queue = PosPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -463,7 +463,7 @@ class TestPriorityQueue:
 
     def test_reschedule(self):
         """Verify that iteration returns items in priority order"""
-        queue = FancyPriorityQueue(priority_key)
+        queue = PosPriorityQueue(priority_key)
 
         obj1 = PriorityObject(1)
         obj2 = PriorityObject(2)
@@ -518,7 +518,7 @@ class TestPriorityQueue:
 
     def test_reschedule_all(self):
         """Verify that we can reschedule all items in a priority deque"""
-        queue = FancyPriorityQueue(priority_key)
+        queue = PosPriorityQueue(priority_key)
 
         queue.clear()
         obj = [PriorityObject(random.randint(0, 5)) for i in range(50)]
@@ -577,6 +577,13 @@ class TestPriorityScheduling:
     def anyio_backend(self, request):
         return ("asyncio", {"policy": PriorityEventLoopPolicy(request)})
 
+    async def await_tasks(self):
+        async def nothing():
+            pass
+
+        final_task = PriorityTask(nothing(), priority=1000)
+        await final_task
+
     async def test_create_event_loop(self):
         loop = asyncio.get_running_loop()
         assert isinstance(loop, PrioritySelectorEventLoop)
@@ -602,7 +609,8 @@ class TestPriorityScheduling:
             pri = random.randint(-5, 5)
             PriorityTask(taskfunc(pri), priority=pri)
 
-        await asyncio.sleep(0.001)
+        await self.await_tasks()
+        assert len(finished) == 20
         assert finished == sorted(finished)
 
     async def test_priority_tasks_same(self):
@@ -617,5 +625,34 @@ class TestPriorityScheduling:
             pri = random.randint(-5, 5)
             PriorityTask(taskfunc(pri, i), priority=pri)
 
-        await asyncio.sleep(0.001)
+        await self.await_tasks()
+        assert len(finished) == 40
+        assert finished == sorted(finished)
+
+    async def test_priority_tasks_reschedule(self):
+        """Test that we can reschedule a task to be ahead of others"""
+        finished = []
+        alltasks = []
+
+        async def taskfunc(pri, i):
+            finished.append((pri, i))
+
+        for i in range(40):
+            pri = random.randint(-5, 5)
+            t = PriorityTask(taskfunc(pri, i), priority=pri)
+            alltasks.append((t, pri, i))
+
+        # make the first task have lowest priority, and the last task highest
+        alltasks[0][0].priority_value = 10
+        alltasks[0][0].propagate_priority()
+        alltasks[-1][0].priority_value = -10
+        alltasks[-1][0].propagate_priority()
+
+        await self.await_tasks()
+        assert len(finished) == 40
+        first = finished.pop(0)
+        last = finished.pop(-1)
+        assert first[1] == 39
+        assert last[1] == 0
+
         assert finished == sorted(finished)
