@@ -17,6 +17,7 @@ from typing import (
 
 from typing_extensions import Literal
 
+from asynkit.compat import LockHelper
 from asynkit.loop.types import TaskAny
 from asynkit.scheduling import task_is_runnable
 from asynkit.tools import PriorityQueue
@@ -63,7 +64,7 @@ async def _released(lock: Lock) -> AsyncIterator[None]:
                 err = None
 
 
-class PriorityLock(Lock, BasePriorityObject):
+class PriorityLock(Lock, BasePriorityObject, LockHelper):
     """
     A lock which supports keeping track of the waiting Task
     objects and can compute the highest effective priority
@@ -182,7 +183,7 @@ class PriorityLock(Lock, BasePriorityObject):
         return min(priorities, default=None)
 
 
-class PriorityCondition(asyncio.Condition):
+class PriorityCondition(asyncio.Condition, LockHelper):
     """A Condition variable which notifies waiters in priority order."""
 
     LockType = PriorityLock
