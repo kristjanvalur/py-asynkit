@@ -14,42 +14,62 @@ def anyio_backend():
     return "asyncio"
 
 
-async def test_priority_lock():
-    """
-    Test that a priority lock correctly assumes the priority of the waiting tasks
-    """
+class TestPriorityLock:
+    async def test_lock_effective_priority(self):
+        """
+        Test that a priority lock correctly assumes the priority of the waiting tasks
+        """
 
-    lock = PriorityLock()
+        lock = PriorityLock()
 
-    async def do_something():
-        await lock.acquire()
-        await asyncio.sleep(0.1)
-        lock.release()
+        async def do_something():
+            await lock.acquire()
+            await asyncio.sleep(0.1)
+            lock.release()
 
-    async with lock:
+        async with lock:
+            assert lock.effective_priority() is None
+
+            task1 = asyncio.Task(do_something())
+            await asyncio.sleep(0)
+            assert lock.effective_priority() == 0
+
+            task2 = PriorityTask(do_something())
+            task2.priority_value = -1
+            await asyncio.sleep(0)
+            assert lock.effective_priority() == -1
+
+            task3 = PriorityTask(do_something())
+            task3.priority_value = -2
+            await asyncio.sleep(0)
+            assert lock.effective_priority() == -2
+
+            task4 = PriorityTask(do_something())
+            task4.priority_value = 2
+            await asyncio.sleep(0)
+            assert lock.effective_priority() == -2
+
+        await asyncio.gather(task1, task2, task3, task4)
         assert lock.effective_priority() is None
 
-        task1 = asyncio.Task(do_something())
-        await asyncio.sleep(0)
-        assert lock.effective_priority() == 0
+    async def test_lock_scheduling(self):
+        """Test that tasks acquire lock in order of priority"""
+        lock = PriorityLock()
+        results = []
 
-        task2 = PriorityTask(do_something())
-        task2.priority_value = -1
-        await asyncio.sleep(0)
-        assert lock.effective_priority() == -1
+        async def doit(i):
+            async with lock:
+                results.append(i)
 
-        task3 = PriorityTask(do_something())
-        task3.priority_value = -2
-        await asyncio.sleep(0)
-        assert lock.effective_priority() == -2
+        async with lock:
+            values = list(range(20))
+            random.shuffle(values)
+            tasks = [PriorityTask(doit(i), priority=i) for i in values]
+            await asyncio.sleep(0.001)
+            assert results == []
 
-        task4 = PriorityTask(do_something())
-        task4.priority_value = 2
-        await asyncio.sleep(0)
-        assert lock.effective_priority() == -2
-
-    await asyncio.gather(task1, task2, task3, task4)
-    assert lock.effective_priority() is None
+        await asyncio.gather(*tasks)
+        assert results == list(range(20))
 
 
 async def test_priority_inheritance():

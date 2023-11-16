@@ -12,7 +12,6 @@ from typing import (
     Tuple,
     TypeVar,
 )
-from weakref import WeakSet
 
 from typing_extensions import Literal
 
@@ -46,44 +45,79 @@ class PriorityLock(Lock, BasePriorityObject):
     of all waiting Tasks.
     """
 
-    def __init__(self, *, loop=None) -> None:  # type: ignore[no-untyped-def]
-        if loop is not None:
-            super().__init__(loop=loop)  # pragma: no cover
-        else:
-            super().__init__()
+    _waiters: Optional[
+        PriorityQueue[
+            float, Tuple[asyncio.Future[bool], weakref.ReferenceType[TaskAny]]
+        ]
+    ]
+
+    def __init__(self) -> None:
         # we use weakrefs to avoid reference cycles.  Tasks _own_ locks,
         # but locks don't own tasks. These are _backrefs_.
-        self._waiting: WeakSet[TaskAny] = WeakSet()
+        super().__init__()
         self._owning: Optional[weakref.ReferenceType[TaskAny]] = None
 
     async def acquire(self) -> Literal[True]:
+        """Acquire a lock.
+
+        This method blocks until the lock is unlocked, then sets it to
+        locked and returns True.
+        """
         task = asyncio.current_task()
         assert task is not None
-        self._waiting.add(task)
+
+        if not self._locked and not self._waiters:
+            self._take_lock(task)
+            return True
+
+        # we are about to wait
+
+        if self._waiters is None:
+            self._waiters = PriorityQueue()
         try:
-            # greedily reschedule a runnable owning task
-            # in case its priority has changed
-            owning = self._owning() if self._owning is not None else None
-            if owning is not None:
-                if task_is_runnable(owning):  # pragma: no branch
-                    try:
-                        owning.reschedule()  # type: ignore[attr-defined]
-                    except AttributeError:
-                        pass
+            priority = task.effective_priority()  # type: ignore[attr-defined]
+        except AttributeError:
+            priority = 0
+        fut = self._get_loop().create_future()  # type: ignore[attr-defined]
+        # tasks 'own' locks, but not the other way round.  Use weakref to make sure we
+        # don't create refrerence cycles.
+        entry = (fut, weakref.ref(task))
+        self._waiters.add(priority, entry)
 
-            await super().acquire()
+        # greedily reschedule a runnable owning task
+        # in case its priority has changed
+        owning = self._owning() if self._owning is not None else None
+        if owning is not None:
+            if task_is_runnable(owning):  # pragma: no branch
+                try:
+                    owning.reschedule()  # type: ignore[attr-defined]
+                except AttributeError:
+                    pass
 
-            assert self._owning is None
-            self._owning = weakref.ref(task)
+        try:
             try:
-                task.add_owned_lock(self)  # type: ignore[attr-defined]
-            except AttributeError:
-                pass
+                await fut
+            finally:
+                self._waiters.remove(entry)
+            self._take_lock(task)
             return True
         finally:
-            self._waiting.remove(task)
+            if not self._locked:
+                self._wake_up_first()
+
+    def _take_lock(self, task: TaskAny) -> None:
+        assert self._owning is None
+        self._owning = weakref.ref(task)
+        try:
+            task.add_owned_lock(self)  # type: ignore[attr-defined]
+        except AttributeError:
+            pass
+        self._locked = True
 
     def release(self) -> None:
+        if not self._locked:
+            raise RuntimeError("Lock is not acquired.")
+
         task = asyncio.current_task()
         assert task is not None
         assert self._owning is not None and self._owning() is task
@@ -92,16 +126,31 @@ class PriorityLock(Lock, BasePriorityObject):
             task.remove_owned_lock(self)  # type: ignore[attr-defined]
         except AttributeError:
             pass
-        super().release()
+
+        self._locked = False
+        self._wake_up_first()
+
+    def _wake_up_first(self) -> None:
+        """Make sure the highest priorty waiter will run."""
+        if not self._waiters:
+            return
+        fut, _ = self._waiters.peek()
+
+        if not fut.done():
+            fut.set_result(True)
 
     def effective_priority(self) -> Optional[float]:
         # waiting tasks are either PriorityTasks or not.
         # regular tasks are given a priority of 0
+        if not self._waiters:
+            return None
         priorities = []
-        for t in self._waiting:
+        for _, weak_task in self._waiters:
+            task = weak_task()
+            assert task is not None
             try:
                 priorities.append(
-                    t.effective_priority(),  # type: ignore[attr-defined]
+                    task.effective_priority(),  # type: ignore[attr-defined]
                 )
             except AttributeError:
                 priorities.append(0)
