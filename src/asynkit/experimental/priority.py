@@ -163,8 +163,7 @@ class FancyPriorityQueue(Generic[T]):
         Iterate over the objects in the queue, in the order they would be popped.
         """
         self._pq.sort()
-        for _, obj in self._pq:
-            yield obj
+        yield from self._pq
 
     def __len__(self) -> int:
         return len(self._pq)
@@ -219,7 +218,7 @@ class FancyPriorityQueue(Generic[T]):
         self._immediates = len(promoted)
 
     def popleft(self) -> T:
-        pri, obj = self._pq.pop()
+        pri, obj = self._pq.popitem()
         if self._immediates > 0:
             assert pri == (0, 0)
             self._immediates -= 1
@@ -255,7 +254,7 @@ class FancyPriorityQueue(Generic[T]):
         a fixed ordering.
         """
         newpri = []
-        for pri, obj in self._pq:
+        for pri, obj in self._pq.items():
             if pri != (0, 0):
                 pri = (1, self._get_priority(obj))
             newpri.append((pri, obj))

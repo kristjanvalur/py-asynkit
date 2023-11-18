@@ -97,11 +97,16 @@ class PriorityQueue(Generic[P, T]):
     def __bool__(self) -> bool:
         return bool(self._pq)
 
-    def __iter__(self) -> Iterator[Tuple[P, T]]:
+    def __iter__(self) -> Iterator[T]:
         """
         Iterate over the queue.  The order is not necessarily priority order,
         unless sort() has been called.
         """
+        for entry in self._pq:
+            yield entry.obj
+
+    def items(self) -> Iterator[Tuple[P, T]]:
+        """Iterate over the queue, returning (priority, object) tuples"""
         for entry in self._pq:
             yield entry.priority, entry.obj
 
@@ -126,7 +131,13 @@ class PriorityQueue(Generic[P, T]):
         heapq.heappush(self._pq, PriEntry(pri, self._sequence, obj))
         self._sequence += 1
 
-    def pop(self) -> Tuple[P, T]:
+    def pop(self) -> T:
+        entry = heapq.heappop(self._pq)
+        if not self._pq:
+            self._sequence = 0
+        return entry.obj
+
+    def popitem(self) -> Tuple[P, T]:
         entry = heapq.heappop(self._pq)
         if not self._pq:
             self._sequence = 0
@@ -139,7 +150,11 @@ class PriorityQueue(Generic[P, T]):
             self._sequence += 1
         heapq.heapify(self._pq)
 
-    def peek(self) -> Tuple[P, T]:
+    def peek(self) -> T:
+        entry = self._pq[0]
+        return entry.obj
+
+    def peekitem(self) -> Tuple[P, T]:
         entry = self._pq[0]
         return entry.priority, entry.obj
 
