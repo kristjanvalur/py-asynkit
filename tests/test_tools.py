@@ -47,6 +47,9 @@ class PriorityObject:
     def __repr__(self):
         return f"PriorityObject({self.priority})"
 
+    def __lt__(self, other):
+        return self.priority < other.priority
+
 
 def priority_key(obj):
     return obj.priority
@@ -220,3 +223,22 @@ class TestPriorityQueue:
             pri, obj = queue.popleft()
             found = queue.reschedule(getkey(obj), 3)
             assert found is None
+
+    def test_remove(self):
+        objs = [PriorityObject(random.random()) for i in range(50)]
+
+        queue = PriorityQueue()
+        for obj in objs:
+            queue.append(obj.priority, obj)
+
+        with pytest.raises(ValueError):
+            queue.remove(PriorityObject(0))
+
+        # remove the objects one by one and verify that the rest of the
+        # objects pop out correctly
+        for i, obj in enumerate(objs):
+            queue.remove(obj)
+            c = queue.copy()
+            popped = [c.popleft()[1] for _ in range(len(c))]
+            assert popped == sorted(objs[i + 1 :], key=priority_key)
+        assert not queue

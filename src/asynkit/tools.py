@@ -113,8 +113,8 @@ class PriorityQueue(Generic[P, T]):
         self._pq.sort()
 
     def sorted(self) -> PriorityQueue[P, T]:
-        """convenience function which returns itself after sorting"""
-        c = self
+        """convenience function which returns a sorted copy of itself"""
+        c = self.copy()
         c.sort()
         return c
 
@@ -138,6 +138,33 @@ class PriorityQueue(Generic[P, T]):
         if not self._pq:
             self._sequence = 0
         return entry.priority, entry.obj
+
+    def remove(self, obj: T) -> None:
+        """
+        Remove an object from the queue.  The object must be in the queue.
+        comparison is based on object equality.
+        """
+        for i, entry in enumerate(self._pq):
+            if entry.obj == obj:
+                break
+        else:
+            raise ValueError(f"{obj!r} not in queue")
+        if i == 0:
+            heapq.heappop(self._pq)
+        elif i == len(self._pq) - 1:
+            self._pq.pop()
+        else:
+            self._pq[i] = self._pq.pop()
+            heapq.heapify(self._pq)
+        if not self._pq:
+            self._sequence = 0
+
+    def copy(self) -> PriorityQueue[P, T]:
+        """Create a shallow copy of the priority queue"""
+        new = type(self)()
+        new._pq[:] = self._pq[:]
+        new._sequence = self._sequence
+        return new
 
     def find(
         self,
