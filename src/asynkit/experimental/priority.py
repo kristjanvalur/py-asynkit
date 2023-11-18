@@ -159,6 +159,10 @@ class FancyPriorityQueue(Generic[T]):
         self._immediates = 0
 
     def __iter__(self) -> Iterator[T]:
+        """
+        Iterate over the objects in the queue, in the order they would be popped.
+        """
+        self._pq.sort()
         for _, obj in self._pq:
             yield obj
 

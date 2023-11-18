@@ -98,8 +98,25 @@ class PriorityQueue(Generic[P, T]):
         return bool(self._pq)
 
     def __iter__(self) -> Iterator[Tuple[P, T]]:
-        for entry in sorted(self._pq):
+        """
+        Iterate over the queue.  The order is not necessarily priority order,
+        unless sort() has been called.
+        """
+        for entry in self._pq:
             yield entry.priority, entry.obj
+
+    def sort(self) -> None:
+        """
+        Sort the queue in priority order.  Can be used to ensure that
+        iteration is in priority order.
+        """
+        self._pq.sort()
+
+    def sorted(self) -> PriorityQueue[P, T]:
+        """convenience function which returns itself after sorting"""
+        c = self
+        c.sort()
+        return c
 
     def clear(self) -> None:
         self._pq.clear()
@@ -131,19 +148,22 @@ class PriorityQueue(Generic[P, T]):
         # more recently added items
         for i, entry in enumerate(reversed(self._pq)):
             if key(entry.obj):
-                if remove:
-                    # remove the entry. We replace the deleted item with the tail
-                    # and heapify again, which disturbs the heap the least.
-                    if i != 0:
-                        i = len(self._pq) - i - 1
-                        self._pq[i] = self._pq.pop()
-                        heapq.heapify(self._pq)
-                    else:
-                        self._pq.pop()
-                        if not self._pq:
-                            self._sequence = 0
-                return entry.priority, entry.obj
-        return None
+                break
+        else:
+            return None
+
+        if remove:
+            # remove the entry. We replace the deleted item with the tail
+            # and heapify again, which disturbs the heap the least.
+            if i != 0:
+                i = len(self._pq) - i - 1
+                self._pq[i] = self._pq.pop()
+                heapq.heapify(self._pq)
+            else:
+                self._pq.pop()
+                if not self._pq:
+                    self._sequence = 0
+        return entry.priority, entry.obj
 
     def reschedule(
         self,
@@ -174,6 +194,9 @@ class PriEntry(Generic[P, T]):
         self.priority = priority
         self.sequence = sequence
         self.obj = obj
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"PriEntry({self.priority!r}, {self.sequence!r}, {self.obj!r})"
 
     def __lt__(self, other: PriEntry[P, T]) -> bool:
         # only use the __lt__ opeator on the priority object,

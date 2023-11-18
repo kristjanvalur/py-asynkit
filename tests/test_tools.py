@@ -108,23 +108,30 @@ class TestPriorityQueue:
         """Verify that iteration returns items in priority order"""
         queue = PriorityQueue()
 
-        obj1 = PriorityObject(1)
-        obj2 = PriorityObject(2)
-        obj3 = PriorityObject(3)
+        objs = [PriorityObject(i) for i in range(50)]
 
-        for i in range(5):
+        for i in range(2):
             assert len(queue) == 0
-            obj = [obj1, obj2, obj3]
+            obj = list(objs)
             random.shuffle(obj)
             for o in obj:
                 queue.append(o.priority, o)
 
             itered = list(queue)
-            popped = [queue.popleft() for i in range(3)]
-            assert itered == popped
+            popped = [queue.popleft() for i in range(len(queue))]
+            # these are not same order, queue was internally not fully sorted
+            assert itered != popped
+
+            assert not queue
+            for o in obj:
+                queue.append(o.priority, o)
+            queue.sort()
+            itered2 = list(queue)
+            assert itered2 == popped
+            queue.clear()
 
     def test_find(self):
-        """Verify that iteration returns items in priority order"""
+        """Verify that we can find objects in the queue"""
         queue = PriorityQueue()
 
         obj1 = PriorityObject(1)
@@ -151,7 +158,7 @@ class TestPriorityQueue:
 
             assert queue.find(getkey(obj3), remove=True) is None
 
-            itered = list(queue)
+            itered = list(queue.sorted())
             pris = [o.priority for (pri, o) in itered]
             expected = [1, 1, 2, 2, 3, 4, 4]
             assert pris == expected
@@ -160,7 +167,7 @@ class TestPriorityQueue:
             random.shuffle(itered)
             for pri, obj in itered:
                 assert queue.find(getkey(obj), remove=True) == (obj.priority, obj)
-                pris = [o.priority for (pri, o) in queue]
+                pris = [o.priority for (pri, o) in queue.sorted()]
                 assert pris == sorted(pris)
             assert len(queue) == 0
             assert not queue
@@ -187,20 +194,20 @@ class TestPriorityQueue:
             def getkey(obj):
                 return lambda k: k is obj
 
-            objs = list(queue)
+            objs = list(queue.sorted())
             assert objs[4][1] is obj3
 
             queue.reschedule(getkey(obj3), 7)
-            objs = list(queue)
+            objs = list(queue.sorted())
             assert objs[-1][1] is obj3
 
             found = queue.reschedule(getkey(obj3), -1)
             assert found == obj3
-            objs = list(queue)
+            objs = list(queue.sorted())
             assert objs[0][1] is obj3
 
             queue.reschedule(getkey(obj3), 3)
-            objs = list(queue)
+            objs = list(queue.sorted())
             # don't define where it goes in the new priority
             assert obj3 in (objs[4][1], objs[5][1])
             pris = [o.priority for (pri, o) in objs]
