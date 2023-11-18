@@ -6,6 +6,7 @@ from typing import (
     Callable,
     Generic,
     Iterator,
+    List,
     Optional,
     Set,
     Tuple,
@@ -156,7 +157,6 @@ class FancyPriorityQueue(Generic[T]):
         # the priority-class is 1 for regular priority, 0 for immediate priority.
         self._pq: PriorityQueue[Tuple[int, float], T] = PriorityQueue()
         self._get_priority = get_priority
-        self._immediates = 0
 
     def __iter__(self) -> Iterator[T]:
         """
@@ -173,7 +173,6 @@ class FancyPriorityQueue(Generic[T]):
 
     def clear(self) -> None:
         self._pq.clear()
-        self._immediates = 0
 
     def append(self, obj: T) -> None:
         """
@@ -193,36 +192,30 @@ class FancyPriorityQueue(Generic[T]):
         The position is typically 0 or 1, where 0 is the next object.
         """
         assert position >= 0
-        # the immediate queue is one with priority key (0, 0)
+        # the immediate queue is one with priority key (0, n)
         # reglar priority queues are (1, priority) and so the
         # immediate queue is always first.
 
-        if position == self._immediates:
-            # we can just add another immediate.
-            self._pq.add((0, 0), obj)
-            self._immediates += 1
-            return
-
-        # we must promote.  We must pop all immediates off and then regulars
-        # to create the new list of immediates.  This is O(n) but we expect
-        # n to be low, 0 or 1 most of the time.
-        promoted: list[T] = []
+        promoted: List[T] = []
+        priority_val = 0.0
         try:
-            while self._immediates > 0 or position >= len(promoted):
+            while position > len(promoted):
                 promoted.append(self.popleft())
+            # are there other immediate objects in the queue?
+            # if so, we select a one lower priority value for our
+            # inserted objects.
+            (priority_cls, val), _ = self._pq.peekitem()
+            if priority_cls == 0:
+                priority_val = val - 1
         except IndexError:
-            pass  # no more to promote
-        promoted.insert(position, obj)
+            pass
+        promoted.append(obj)
+        pri = (0, priority_val)
         for obj in promoted:
-            self._pq.add((0, 0), obj)
-        self._immediates = len(promoted)
+            self._pq.add(pri, obj)
 
     def popleft(self) -> T:
-        pri, obj = self._pq.popitem()
-        if self._immediates > 0:
-            assert pri == (0, 0)
-            self._immediates -= 1
-        return obj
+        return self._pq.pop()
 
     def find(
         self,
@@ -232,8 +225,6 @@ class FancyPriorityQueue(Generic[T]):
         found = self._pq.find(key, remove)
         if found is not None:
             pri, obj = found
-            if remove and pri == (0, 0):
-                self._immediates -= 1
             return obj
         return None
 
