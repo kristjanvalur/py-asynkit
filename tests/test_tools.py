@@ -67,13 +67,35 @@ class TestPriorityQueue:
             obj = [obj1, obj2, obj3]
             random.shuffle(obj)
             for o in obj:
-                queue.append(o.priority, o)
+                queue.add(o.priority, o)
 
             assert len(queue) == 3
-            assert queue.popleft() == (1, obj1)
-            assert queue.popleft() == (2, obj2)
-            assert queue.popleft() == (3, obj3)
-            pytest.raises(IndexError, queue.popleft)
+            assert queue.pop() == (1, obj1)
+            assert queue.pop() == (2, obj2)
+            assert queue.pop() == (3, obj3)
+            pytest.raises(IndexError, queue.pop)
+
+    def test_peek(self):
+        queue = PriorityQueue()
+
+        obj1 = PriorityObject(1)
+        obj2 = PriorityObject(2)
+        obj3 = PriorityObject(3)
+
+        for i in range(5):
+            obj = [obj1, obj2, obj3]
+            random.shuffle(obj)
+            for o in obj:
+                queue.add(o.priority, o)
+
+            assert len(queue) == 3
+            assert queue.peek() == (1, obj1)
+            assert queue.pop() == (1, obj1)
+            assert queue.peek() == (2, obj2)
+            assert queue.pop() == (2, obj2)
+            assert queue.pop() == (3, obj3)
+            pytest.raises(IndexError, queue.pop)
+            pytest.raises(IndexError, queue.peek)
 
     def test_fifo(self):
         """Verify that same priority gets FIFO ordering"""
@@ -91,21 +113,21 @@ class TestPriorityQueue:
             obj = [obj1, obj2, obj3]
             random.shuffle(obj)
             for o in obj:
-                queue.append(o.priority, o)
+                queue.add(o.priority, o)
 
             obj = [obj1a, obj2a, obj3a]
             random.shuffle(obj)
             for o in obj:
-                queue.append(o.priority, o)
+                queue.add(o.priority, o)
 
             assert len(queue) == 6
-            assert queue.popleft() == (1, obj1)
-            assert queue.popleft() == (1, obj1a)
-            assert queue.popleft() == (2, obj2)
-            assert queue.popleft() == (2, obj2a)
-            assert queue.popleft() == (3, obj3)
-            assert queue.popleft() == (3, obj3a)
-            pytest.raises(IndexError, queue.popleft)
+            assert queue.pop() == (1, obj1)
+            assert queue.pop() == (1, obj1a)
+            assert queue.pop() == (2, obj2)
+            assert queue.pop() == (2, obj2a)
+            assert queue.pop() == (3, obj3)
+            assert queue.pop() == (3, obj3a)
+            pytest.raises(IndexError, queue.pop)
 
     def test_priority_iter(self):
         """Verify that iteration returns items in priority order"""
@@ -118,16 +140,16 @@ class TestPriorityQueue:
             obj = list(objs)
             random.shuffle(obj)
             for o in obj:
-                queue.append(o.priority, o)
+                queue.add(o.priority, o)
 
             itered = list(queue)
-            popped = [queue.popleft() for i in range(len(queue))]
+            popped = [queue.pop() for i in range(len(queue))]
             # these are not same order, queue was internally not fully sorted
             assert itered != popped
 
             assert not queue
             for o in obj:
-                queue.append(o.priority, o)
+                queue.add(o.priority, o)
             queue.sort()
             itered2 = list(queue)
             assert itered2 == popped
@@ -149,7 +171,7 @@ class TestPriorityQueue:
                 obj.append(PriorityObject(i))
             random.shuffle(obj)
             for o in obj:
-                queue.append(o.priority, o)
+                queue.add(o.priority, o)
 
             def getkey(obj):
                 return lambda k: k is obj
@@ -190,9 +212,9 @@ class TestPriorityQueue:
             obj = [obj1, obj2, obj3, obj4]
             random.shuffle(obj)
             for o in obj:
-                queue.append(o.priority, o)
+                queue.add(o.priority, o)
             for o in obj:
-                queue.append(o.priority, PriorityObject(o.priority))
+                queue.add(o.priority, PriorityObject(o.priority))
 
             def getkey(obj):
                 return lambda k: k is obj
@@ -220,7 +242,7 @@ class TestPriorityQueue:
             queue.reschedule(getkey(obj3), 3)
 
             # pop first value and try to reschedule a popped value
-            pri, obj = queue.popleft()
+            pri, obj = queue.pop()
             found = queue.reschedule(getkey(obj), 3)
             assert found is None
 
@@ -229,7 +251,7 @@ class TestPriorityQueue:
 
         queue = PriorityQueue()
         for obj in objs:
-            queue.append(obj.priority, obj)
+            queue.add(obj.priority, obj)
 
         with pytest.raises(ValueError):
             queue.remove(PriorityObject(0))
@@ -239,6 +261,6 @@ class TestPriorityQueue:
         for i, obj in enumerate(objs):
             queue.remove(obj)
             c = queue.copy()
-            popped = [c.popleft()[1] for _ in range(len(c))]
+            popped = [c.pop()[1] for _ in range(len(c))]
             assert popped == sorted(objs[i + 1 :], key=priority_key)
         assert not queue

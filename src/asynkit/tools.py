@@ -122,9 +122,15 @@ class PriorityQueue(Generic[P, T]):
         self._pq.clear()
         self._sequence = 0
 
-    def append(self, pri: P, obj: T) -> None:
+    def add(self, pri: P, obj: T) -> None:
         heapq.heappush(self._pq, PriEntry(pri, self._sequence, obj))
         self._sequence += 1
+
+    def pop(self) -> Tuple[P, T]:
+        entry = heapq.heappop(self._pq)
+        if not self._pq:
+            self._sequence = 0
+        return entry.priority, entry.obj
 
     def extend(self, entries: Iterable[Tuple[P, T]]) -> None:
         # use this to add a lot of entries at once, since heapify is O(n)
@@ -133,13 +139,11 @@ class PriorityQueue(Generic[P, T]):
             self._sequence += 1
         heapq.heapify(self._pq)
 
-    def popleft(self) -> Tuple[P, T]:
-        entry = heapq.heappop(self._pq)
-        if not self._pq:
-            self._sequence = 0
+    def peek(self) -> Tuple[P, T]:
+        entry = self._pq[0]
         return entry.priority, entry.obj
 
-    def remove(self, obj: T) -> None:
+    def remove(self, obj: T) -> P:
         """
         Remove an object from the queue.  The object must be in the queue.
         comparison is based on object equality.
@@ -150,14 +154,16 @@ class PriorityQueue(Generic[P, T]):
         else:
             raise ValueError(f"{obj!r} not in queue")
         if i == 0:
-            heapq.heappop(self._pq)
+            e = heapq.heappop(self._pq)
         elif i == len(self._pq) - 1:
-            self._pq.pop()
+            e = self._pq.pop()
         else:
+            e = self._pq[i]
             self._pq[i] = self._pq.pop()
             heapq.heapify(self._pq)
         if not self._pq:
             self._sequence = 0
+        return e.priority
 
     def copy(self) -> PriorityQueue[P, T]:
         """Create a shallow copy of the priority queue"""

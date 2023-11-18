@@ -180,13 +180,13 @@ class FancyPriorityQueue(Generic[T]):
         """
         Insert an item into its default place according to priority
         """
-        self._pq.append((1, self._get_priority(obj)), obj)
+        self._pq.add((1, self._get_priority(obj)), obj)
 
     def append_pri(self, obj: T, priority: float) -> None:
         """
         Insert an item at a specific priority
         """
-        self._pq.append((1, priority), obj)
+        self._pq.add((1, priority), obj)
 
     def insert(self, position: int, obj: T) -> None:
         """
@@ -200,7 +200,7 @@ class FancyPriorityQueue(Generic[T]):
 
         if position == self._immediates:
             # we can just add another immediate.
-            self._pq.append((0, 0), obj)
+            self._pq.add((0, 0), obj)
             self._immediates += 1
             return
 
@@ -215,11 +215,11 @@ class FancyPriorityQueue(Generic[T]):
             pass  # no more to promote
         promoted.insert(position, obj)
         for obj in promoted:
-            self._pq.append((0, 0), obj)
+            self._pq.add((0, 0), obj)
         self._immediates = len(promoted)
 
     def popleft(self) -> T:
-        pri, obj = self._pq.popleft()
+        pri, obj = self._pq.pop()
         if self._immediates > 0:
             assert pri == (0, 0)
             self._immediates -= 1
