@@ -1,8 +1,10 @@
 import asyncio
+import contextlib
 import weakref
 from abc import ABC, abstractmethod
 from asyncio import Lock, Task
 from typing import (
+    AsyncIterator,
     Callable,
     Generic,
     Iterator,
@@ -36,6 +38,29 @@ class BasePriorityObject(ABC):
         effective priority of any waiting task.
         """
         ...
+
+
+@contextlib.asynccontextmanager
+async def _released(lock: Lock) -> AsyncIterator[None]:
+    """Context manager to release a lock and reacquire it on exit"""
+    lock.release()
+    try:
+        yield
+    finally:
+        err = None
+        # retry as long as the error is CancelledError, then re-raise
+        # the original error
+        while True:
+            try:
+                await lock.acquire()
+                break
+            except asyncio.CancelledError as e:  # pragma: no cover
+                err = e
+        if err is not None:  # pragma: no cover
+            try:
+                raise err
+            finally:
+                err = None
 
 
 class PriorityLock(Lock, BasePriorityObject):
@@ -178,37 +203,29 @@ class PriorityCondition(asyncio.Condition):
         except AttributeError:
             priority = 0
         fut = self._get_loop().create_future()  # type: ignore[attr-defined]
-        self.release()
-        self._waiters.add(priority, fut)
         try:
-            try:
-                await fut
-                return True
-            except BaseException:
-                if fut in self._waiters:
-                    self._waiters.remove(fut)
-                raise
-
-        finally:
-            # Must reacquire lock even if wait is cancelled
-            err = None
-            while True:
+            async with _released(self._lock):  # type: ignore[attr-defined]
+                self._waiters.add(priority, fut)
                 try:
-                    await self.acquire()
-                    break
-                except asyncio.CancelledError as e:
-                    err = e
+                    await fut
+                    return True
+                except BaseException:
+                    if fut in self._waiters:
+                        self._waiters.remove(fut)
+                    raise
 
-            if err is not None:
-                try:
-                    raise err
-                finally:
-                    err = None
+        except BaseException:
+            # must awaken a different waiter to avoid starvation, because
+            # a notify() may have been lost.
+            self._notify(1)
+            raise
 
     def notify(self, n: int = 1) -> None:
         if not self.locked():
             raise RuntimeError("cannot notify on un-acquired lock")
+        self._notify(n)
 
+    def _notify(self, n: int) -> None:
         idx = 0
         while True:
             if idx >= n or not self._waiters:
