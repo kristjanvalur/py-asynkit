@@ -4,7 +4,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from asynkit.experimental.priority import FancyPriorityQueue, PriorityLock, PriorityTask
+from asynkit.experimental.priority import (
+    FancyPriorityQueue,
+    PriorityCondition,
+    PriorityLock,
+    PriorityTask,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -67,6 +72,34 @@ class TestPriorityLock:
             tasks = [PriorityTask(doit(i), priority=i) for i in values]
             await asyncio.sleep(0.001)
             assert results == []
+
+        await asyncio.gather(*tasks)
+        assert results == list(range(20))
+
+
+class TestPriorityCondition:
+    @pytest.mark.parametrize("locktype", [PriorityLock, asyncio.Lock])
+    async def test_lock_scheduling(self, locktype):
+        """Test that tasks acquire lock in order of priority"""
+        lock = locktype()
+        cond = PriorityCondition(lock)
+        results = []
+        wake = False
+
+        async def doit(i):
+            async with cond:
+                await cond.wait_for(lambda: wake)
+                results.append(i)
+                cond.notify(1)
+
+        values = list(range(20))
+        random.shuffle(values)
+        tasks = [PriorityTask(doit(i), priority=i) for i in values]
+        await asyncio.sleep(0.001)
+        assert results == []
+        async with cond:
+            wake = True
+            cond.notify()
 
         await asyncio.gather(*tasks)
         assert results == list(range(20))

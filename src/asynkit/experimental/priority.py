@@ -157,6 +157,68 @@ class PriorityLock(Lock, BasePriorityObject):
         return min(priorities, default=None)
 
 
+class PriorityCondition(asyncio.Condition):
+    """A Condition variable which notifies waiters in priority order."""
+
+    LockType = PriorityLock
+
+    def __init__(self, lock: Optional[asyncio.Lock] = None) -> None:
+        lock = lock or self.LockType()
+        super().__init__(lock=lock)
+        self._waiters: PriorityQueue[float, asyncio.Future[bool]] = PriorityQueue()
+
+    async def wait(self) -> Literal[True]:
+        if not self.locked():
+            raise RuntimeError("cannot wait on un-acquired lock")
+
+        task = asyncio.current_task()
+        assert task is not None
+        try:
+            priority = task.effective_priority()  # type: ignore[attr-defined]
+        except AttributeError:
+            priority = 0
+        fut = self._get_loop().create_future()  # type: ignore[attr-defined]
+        self.release()
+        self._waiters.add(priority, fut)
+        try:
+            try:
+                await fut
+                return True
+            except BaseException:
+                if fut in self._waiters:
+                    self._waiters.remove(fut)
+                raise
+
+        finally:
+            # Must reacquire lock even if wait is cancelled
+            err = None
+            while True:
+                try:
+                    await self.acquire()
+                    break
+                except asyncio.CancelledError as e:
+                    err = e
+
+            if err is not None:
+                try:
+                    raise err
+                finally:
+                    err = None
+
+    def notify(self, n: int = 1) -> None:
+        if not self.locked():
+            raise RuntimeError("cannot notify on un-acquired lock")
+
+        idx = 0
+        while True:
+            if idx >= n or not self._waiters:
+                break
+            fut = self._waiters.pop()
+            if not fut.done():
+                idx += 1
+                fut.set_result(False)
+
+
 class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
     def __init__(  # type: ignore[no-untyped-def]
         self,
