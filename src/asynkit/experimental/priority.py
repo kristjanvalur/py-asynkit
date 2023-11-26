@@ -209,11 +209,9 @@ class PriorityCondition(asyncio.Condition, LockHelper):
                 self._waiters.add(priority, fut)
                 try:
                     await fut
-                    return True
-                except BaseException:
-                    if fut in self._waiters:
-                        self._waiters.remove(fut)
-                    raise
+                finally:
+                    self._waiters.remove(fut)
+                return True
 
         except BaseException:
             # must awaken a different waiter to avoid starvation, because
@@ -227,14 +225,17 @@ class PriorityCondition(asyncio.Condition, LockHelper):
         self._notify(n)
 
     def _notify(self, n: int) -> None:
-        idx = 0
-        while True:
-            if idx >= n or not self._waiters:
-                break
-            fut = self._waiters.pop()
-            if not fut.done():
-                idx += 1
-                fut.set_result(False)
+        count = 0
+        ordereditems = self._waiters.ordereditems()
+        try:
+            for _, fut in ordereditems:
+                if not fut.done():  # pragma: no branch
+                    fut.set_result(True)
+                    count += 1
+                    if count >= n:  # pragma: no branch
+                        break
+        finally:
+            ordereditems.close()
 
 
 class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
