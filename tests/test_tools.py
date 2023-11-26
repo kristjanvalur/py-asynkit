@@ -1,5 +1,6 @@
 import random
 from collections import deque
+from contextlib import closing
 
 import pytest
 
@@ -276,3 +277,55 @@ class TestPriorityQueue:
             assert obj in queue
 
         assert PriorityObject(0) not in queue
+
+    def test_ordered(self):
+        objs = [PriorityObject(random.random()) for i in range(50)]
+        queue = PriorityQueue()
+        assert len(list(queue.ordered())) == 0
+        for obj in objs:
+            queue.add(obj.priority, obj)
+
+        q1 = queue.copy()
+        for j in range(10, 60, 7):
+            q2 = queue.copy()
+
+            itered = []
+            with closing(q1.ordered()) as o:
+                for i in o:
+                    itered.append(i)
+                    if len(itered) == j:
+                        break
+
+            popped = []
+            for _ in range(j):
+                if not q2:
+                    break
+                popped.append(q2.pop())
+
+            assert itered == popped
+
+    def test_ordereditems(self):
+        objs = [PriorityObject(random.random()) for i in range(50)]
+        queue = PriorityQueue()
+        assert len(list(queue.ordereditems())) == 0
+        for obj in objs:
+            queue.add(obj.priority, obj)
+
+        q1 = queue.copy()
+        for j in range(10, 60, 7):
+            q2 = queue.copy()
+
+            itered = []
+            with closing(q1.ordereditems()) as o:
+                for i in o:
+                    itered.append(i)
+                    if len(itered) == j:
+                        break
+
+            popped = []
+            for _ in range(j):
+                if not q2:
+                    break
+                popped.append(q2.popitem())
+
+            assert itered == popped

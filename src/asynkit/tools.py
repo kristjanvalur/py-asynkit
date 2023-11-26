@@ -9,6 +9,7 @@ from typing import (
     Callable,
     Coroutine,
     Deque,
+    Generator,
     Generic,
     Iterable,
     Iterator,
@@ -99,20 +100,21 @@ class PriorityQueue(Generic[P, T]):
 
     def __iter__(self) -> Iterator[T]:
         """
-        Iterate over the queue.  The order is not necessarily priority order,
+        Iterate over the queue.  The order is undefined
         unless sort() has been called.
         """
         for entry in self._pq:
             yield entry.obj
 
     def items(self) -> Iterator[Tuple[P, T]]:
-        """Iterate over the queue, returning (priority, object) tuples"""
+        """Iterate over the queue, returning (priority, object) tuples. The order
+        is undefined unless sort() has been called.
+        """
         for entry in self._pq:
             yield entry.priority, entry.obj
 
     def sort(self) -> None:
-        """
-        Sort the queue in priority order.  Can be used to ensure that
+        """Sort the queue in priority order.  Can be used to ensure that
         iteration is in priority order.
         """
         self._pq.sort()
@@ -122,6 +124,44 @@ class PriorityQueue(Generic[P, T]):
         c = self.copy()
         c.sort()
         return c
+
+    def ordered(self) -> Generator[T, None, None]:
+        """Iterate over the queue in the same order as it would be popped.
+        The generator must be exhausted or closed after use."""
+        items = self.ordereditems()
+        try:
+            for _, obj in items:
+                yield obj
+        finally:
+            items.close()
+
+    def ordereditems(self) -> Generator[Tuple[P, T], None, None]:
+        """Iterate over the queue in the same order as it would be popped,
+        returning (priority, object) tuples.
+        The generator must be exhausted or closed after use."""
+        popped = []
+        try:
+            while self._pq:
+                head = self._pq[0]
+                yield head.priority, head.obj
+                # only pop after the yield, which means that the caller
+                # wants to move to the next object
+                popped.append(heapq.heappop(self._pq))
+        finally:
+            # heuristic for the fastest method to restore the heap
+            lp, lq = len(popped), len(self._pq)
+            if lp >= lq:
+                # we can just merge them and don't need to heapify
+                popped.extend(self._pq)
+                self._pq = popped
+            elif lp >= lq >> 1:
+                popped.extend(self._pq)
+                heapq.heapify(popped)
+                self._pq = popped
+            else:
+                # for relatively few items, it is faster to push them back
+                for entry in popped:
+                    heapq.heappush(self._pq, entry)
 
     def clear(self) -> None:
         self._pq.clear()
