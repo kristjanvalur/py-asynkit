@@ -47,6 +47,30 @@ class BasePriorityObject(ABC):
         """
         ...
 
+    @abstractmethod
+    def propagate_priority(self, from_obj: Any) -> None:
+        """
+        A task has begun waiting for a lock and we are propagating that
+        up the chain of owning objects so that they can recompute their
+        effective priority and reschedule themselves.
+        """
+        ...
+
+
+@contextlib.contextmanager
+def _waiting_on(task: TaskAny, target: Any) -> Iterator[None]:
+    """Context manager to maintain a task's waiting_on attribute"""
+    try:
+        task.set_waiting_on(target)  # type: ignore[attr-defined]
+        have_attr = True
+    except AttributeError:
+        have_attr = False
+    try:
+        yield
+    finally:
+        if have_attr:
+            task.set_waiting_on(None)  # type: ignore[attr-defined]
+
 
 @contextlib.asynccontextmanager
 async def _released(lock: Lock) -> AsyncIterator[None]:
@@ -115,28 +139,24 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
         # tasks 'own' locks, but not the other way round.  Use weakref to make sure we
         # don't create refrerence cycles.
         entry = (fut, weakref.ref(task))
-        self._waiters.add(priority, entry)
+        with _waiting_on(task, self):
+            self._waiters.add(priority, entry)
 
-        # greedily reschedule a runnable owning task
-        # in case its priority has changed
-        owning = self._owning() if self._owning is not None else None
-        if owning is not None:  # pragma: no branch
-            if task_is_runnable(owning):  # pragma: no branch
-                try:
-                    owning.reschedule()  # type: ignore[attr-defined]
-                except AttributeError:
-                    pass
-
-        try:
             try:
+                # Propagate priority to any task owning this lock
+                owning = self._owning() if self._owning is not None else None
+                if owning is not None:  # pragma: no branch
+                    try:
+                        owning.propagate_priority(self)  # type: ignore[attr-defined]
+                    except AttributeError:  # pragma: no cover
+                        pass
                 await fut
+                self._take_lock(task)
+                return True
             finally:
                 self._waiters.remove(entry)
-            self._take_lock(task)
-            return True
-        finally:
-            if not self._locked:
-                self._wake_up_first()
+                if not self._locked:
+                    self._wake_up_first()
 
     def _take_lock(self, task: TaskAny) -> None:
         assert self._owning is None
@@ -188,6 +208,33 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
             except AttributeError:
                 priorities.append(0)
         return min(priorities, default=None)
+
+    def propagate_priority(self, from_obj: Any) -> None:
+        """A Task has started waiting for this lock."""
+        # propagate priority to any task owning this lock
+        weak_owning = self._owning
+        owning = weak_owning if weak_owning is None else weak_owning()
+        if owning is not None:
+            try:
+                owning.propagate_priority(self)  # type: ignore[attr-defined]
+            except AttributeError:
+                pass
+        # Find the task in the waiting queue and reschedule it, since it may have
+        # moved up in priority.
+        try:
+            priority = from_obj.effective_priority()
+        except AttributeError:
+            return
+        else:
+
+            def key(
+                entry: Tuple[asyncio.Future[bool], weakref.ReferenceType[TaskAny]],
+            ) -> bool:
+                fut, _ = entry
+                return fut is from_obj
+
+            if self._waiters:  # pragma: no branch
+                self._waiters.reschedule(key, priority)
 
 
 class PriorityCondition(asyncio.Condition, LockHelper):
@@ -244,6 +291,13 @@ class PriorityCondition(asyncio.Condition, LockHelper):
         finally:
             ordereditems.close()
 
+    def propagate_priority(self, from_obj: Any) -> None:
+        # we don't propagate priority and don't modify the
+        # queue, since priority propagation is a protocol for
+        # tasks/locks.  Condition variables don't participate
+        # in the priority inversion mechanism directly.
+        pass
+
 
 class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
     def __init__(  # type: ignore[no-untyped-def]
@@ -258,6 +312,7 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         # because that will schedule the task.
         self.priority_value = priority
         self._holding_locks: Set[PriorityLock] = set()
+        self._waiting_on: Optional[Any] = None
         super().__init__(coro, loop=loop, name=name)
 
     def add_owned_lock(self, lock: PriorityLock) -> None:
@@ -265,6 +320,13 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
 
     def remove_owned_lock(self, lock: PriorityLock) -> None:
         self._holding_locks.remove(lock)
+
+    def set_waiting_on(self, obj: Optional[Any]) -> None:
+        if obj is not None:
+            assert self._waiting_on is None
+        else:
+            assert self._waiting_on is not None
+        self._waiting_on = obj
 
     def priority(self) -> float:
         return self.priority_value
@@ -282,16 +344,21 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         in case its effective priority has changed.
         """
 
-    def propagate_priority(self) -> None:
+    def propagate_priority(self, from_obj: Any) -> None:
         """Notify that someone has started waiting for this task, having it
         pass that notification onwards or reschedule itself if necessary.
         """
-        # TODO: Have it propagate to any lock it is waiting for
         if task_is_runnable(self):
             loop = asyncio.get_running_loop()
             # if the loop supports it, ask for this task to be rescheduled
             try:
                 loop.task_reschedule(self)  # type: ignore[attr-defined]
+            except AttributeError:  # pragma: no cover
+                pass
+        elif self._waiting_on:
+            # it is waiting for a lock
+            try:
+                self._waiting_on.propagate_priority(self)
             except AttributeError:  # pragma: no cover
                 pass
 

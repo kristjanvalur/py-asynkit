@@ -644,9 +644,9 @@ class TestPriorityScheduling:
 
         # make the first task have lowest priority, and the last task highest
         alltasks[0][0].priority_value = 10
-        alltasks[0][0].propagate_priority()
+        alltasks[0][0].propagate_priority(None)
         alltasks[-1][0].priority_value = -10
-        alltasks[-1][0].propagate_priority()
+        alltasks[-1][0].propagate_priority(None)
 
         await self.await_tasks()
         assert len(finished) == 40
