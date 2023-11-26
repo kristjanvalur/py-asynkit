@@ -210,20 +210,21 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
         return min(priorities, default=None)
 
     def propagate_priority(self, from_obj: Any) -> None:
-        """A Task has started waiting for this lock."""
+        """A Task which is waiting for this lock has potentially had its priority
+        changed.  We need to propagate that change to any other tasks waiting"""
         # propagate priority to any task owning this lock
         weak_owning = self._owning
         owning = weak_owning if weak_owning is None else weak_owning()
-        if owning is not None:
+        if owning is not None:  # pragma: no branch
             try:
                 owning.propagate_priority(self)  # type: ignore[attr-defined]
-            except AttributeError:
+            except AttributeError:  # pragma: no cover
                 pass
         # Find the task in the waiting queue and reschedule it, since it may have
         # moved up in priority.
         try:
             priority = from_obj.effective_priority()
-        except AttributeError:
+        except AttributeError:  # pragma: no cover
             return
         else:
 
@@ -296,7 +297,7 @@ class PriorityCondition(asyncio.Condition, LockHelper):
         # queue, since priority propagation is a protocol for
         # tasks/locks.  Condition variables don't participate
         # in the priority inversion mechanism directly.
-        pass
+        pass  # pragma: no cover
 
 
 class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]

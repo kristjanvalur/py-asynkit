@@ -656,3 +656,125 @@ class TestPriorityScheduling:
         assert last[1] == 0
 
         assert finished == sorted(finished)
+
+    async def test_priority_inversion(self):
+        """Test that a high priority task can run before a low priority task"""
+
+        finished = []
+        priorities = []
+
+        lock = PriorityLock()
+        event = asyncio.Event()
+
+        async def lowpri():
+            # get lock and wait
+            async with lock:
+                await event.wait()
+                finished.append("low")
+                priorities.append(asyncio.current_task().effective_priority())
+
+        async def highpri():
+            # wait for the event and then get the lock
+            await event.wait()
+            async with lock:
+                finished.append("high")
+                priorities.append(asyncio.current_task().effective_priority())
+
+        async def medpri():
+            # just wait for the event
+            await event.wait()
+            finished.append("med")
+            priorities.append(asyncio.current_task().effective_priority())
+
+        # test without the high priority task
+        t1 = PriorityTask(lowpri(), priority=1)
+        t2 = PriorityTask(medpri(), priority=0)
+        await self.await_tasks()
+        event.set()
+        await asyncio.gather(t1, t2)
+        # medium priority task will run first
+        assert finished == ["med", "low"]
+        assert priorities == [0, 1]
+
+        # now the same, but with the high priority task waitint thfor the lock that
+        # "low" awaits:
+        event.clear()
+        finished = []
+        priorities = []
+        t1 = PriorityTask(lowpri(), priority=1)
+        t2 = PriorityTask(highpri(), priority=-1)
+        t3 = PriorityTask(medpri(), priority=0)
+        await self.await_tasks()
+        event.set()
+        await asyncio.gather(t1, t2, t3)
+        # low priority task now runs first (inherits priority of the high pri task)
+        assert finished == ["low", "high", "med"]
+        assert priorities == [-1, -1, 0]
+
+    async def test_priority_inversion2(self):
+        """Test that a high priority task can run before a low priority task.
+        An extra lock is involved."""
+
+        finished = []
+        priorities = []
+
+        lock1 = PriorityLock()
+        lock2 = PriorityLock()
+        event = asyncio.Event()
+
+        async def lowpri1():
+            # get lock and wait
+            async with lock2:
+                await event.wait()
+                finished.append("low1")
+                priorities.append(asyncio.current_task().effective_priority())
+
+        async def lowpri2():
+            # get lock and wait
+            async with lock1:
+                # lock2 is blocked by lowpri1
+                async with lock2:
+                    finished.append("low2")
+                    priorities.append(asyncio.current_task().effective_priority())
+
+        async def highpri():
+            # wait for the event and then get the lock
+            await event.wait()
+            async with lock1:
+                finished.append("high")
+                priorities.append(asyncio.current_task().effective_priority())
+
+        async def medpri():
+            # just wait for the event
+            await event.wait()
+            finished.append("med")
+            priorities.append(asyncio.current_task().effective_priority())
+
+        # test without the high priority task
+        t1 = PriorityTask(lowpri1(), priority=1)
+        t2 = PriorityTask(lowpri2(), priority=1)
+        t3 = PriorityTask(medpri(), priority=0)
+        await self.await_tasks()
+        event.set()
+        await asyncio.gather(t1, t2, t3)
+        # medium priority task will run first
+        assert finished == ["med", "low1", "low2"]
+        assert priorities == [0, 1, 1]
+
+        # now the same, but with the high priority task waitint thfor the lock that
+        # "low2" holds.  "low2" is awaiting al lock held by "low1".  priority propagates
+        # from 'high' to lock1 to low1 to lock2 to low2.
+        event.clear()
+        finished = []
+        priorities = []
+        # test without the high priority task
+        t1 = PriorityTask(lowpri1(), priority=1)
+        t2 = PriorityTask(lowpri2(), priority=1)
+        t3 = PriorityTask(medpri(), priority=0)
+        t4 = PriorityTask(highpri(), priority=-1)
+        await self.await_tasks()
+        event.set()
+        await asyncio.gather(t1, t2, t3, t4)
+        # low priority task now runs first (inherits priority of the high pri task)
+        assert finished == ["low1", "low2", "high", "med"]
+        assert priorities == [-1, -1, -1, 0]
