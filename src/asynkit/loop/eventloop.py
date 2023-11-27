@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import asyncio.base_events
 import contextlib
@@ -12,7 +14,9 @@ from typing import (
     Generator,
     Iterable,
     Optional,
+    Protocol,
     TypeVar,
+    cast,
 )
 
 from . import default
@@ -33,23 +37,28 @@ if TYPE_CHECKING:
     TaskAny = Task[Any]
     FutureAny = Future[Any]
 
-    class _Base(asyncio.base_events.BaseEventLoop):
-        _ready: Deque[Handle]
-
 else:
     TaskAny = Task
     FutureAny = Future
-    _Base = object
 
 T = TypeVar("T")
 
 
-class SchedulingMixin(AbstractSchedulingLoop, _Base):
+class HasReadyQueue(Protocol):
+    @property
+    def _ready(self) -> Deque[Handle]:
+        ...  # pragma: no cover
+
+    def get_ready_queue(self: HasReadyQueue) -> Deque[Handle]:
+        ...  # pragma: no cover
+
+
+class SchedulingMixin(AbstractSchedulingLoop):
     """
     A mixin class adding features to the base event loop.
     """
 
-    def get_ready_queue(self) -> Deque[Handle]:
+    def get_ready_queue(self: HasReadyQueue) -> Deque[Handle]:
         """
         Default implementation to get the Ready Queue of the loop.
         Subclassable by other implementations.
@@ -58,25 +67,25 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
 
     # AbstractSchedulingLoop methods
 
-    def queue_len(self) -> int:
+    def queue_len(self: HasReadyQueue) -> int:
         """Get the length of the runnable queue"""
         return len(self.get_ready_queue())
 
-    def queue_items(self) -> Iterable[Handle]:
+    def queue_items(self: HasReadyQueue) -> Iterable[Handle]:
         return self.get_ready_queue()
 
     def queue_find(
-        self, key: Callable[[Handle], bool], remove: bool = False
+        self: HasReadyQueue, key: Callable[[Handle], bool], remove: bool = False
     ) -> Optional[Handle]:
         return default.queue_find(self.get_ready_queue(), key, remove)
 
-    def queue_insert(self, handle: Handle) -> None:
+    def queue_insert(self: HasReadyQueue, handle: Handle) -> None:
         self.get_ready_queue().append(handle)
 
-    def queue_insert_pos(self, handle: Handle, position: int) -> None:
+    def queue_insert_pos(self: HasReadyQueue, handle: Handle, position: int) -> None:
         self.get_ready_queue().insert(position, handle)
 
-    def queue_remove(self, in_handle: Handle) -> None:
+    def queue_remove(self: HasReadyQueue, in_handle: Handle) -> None:
         return default.queue_remove(self.get_ready_queue(), in_handle)
 
     def call_pos(
@@ -84,9 +93,10 @@ class SchedulingMixin(AbstractSchedulingLoop, _Base):
         position: int,
         callback: Callable[..., Any],
         *args: Any,
-        context: Optional[Context] = None
+        context: Optional[Context] = None,
     ) -> Handle:
-        return default.call_pos(self, position, callback, *args, context=context)
+        loop = cast(AbstractEventLoop, self)
+        return default.call_pos(loop, position, callback, *args, context=context)
 
     def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
         return default.task_from_handle(handle)
