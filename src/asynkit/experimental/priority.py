@@ -372,6 +372,7 @@ class PriorityValue:
     """
 
     base_priority: float  # the base priority, as reported by the object
+    inserted_at: int  # the n_added when the object was added
     priority_boost: float = 0.0  # a boost value
     priority_class: int = 1  # 0 for immediate priority, 1 for regular
 
@@ -399,6 +400,9 @@ class PosPriorityQueue(Generic[T]):
         # the priority-class is 1 for regular priority, 0 for immediate priority.
         self._pq: PriorityQueue[PriorityValue, T] = PriorityQueue()
         self._get_priority = get_priority
+        self.n_maintenances = 0
+        self.n_inserted = 0
+        self.n_removed = 0
 
     def __iter__(self) -> Iterator[T]:
         """
@@ -420,15 +424,47 @@ class PosPriorityQueue(Generic[T]):
         """
         Insert an item into its default place according to priority
         """
-        pv = PriorityValue(base_priority=self._get_priority(obj))
+        pv = PriorityValue(
+            base_priority=self._get_priority(obj),
+            inserted_at=self.n_inserted,
+        )
         self._pq.add(pv, obj)
+        self.update_counters(True)
+
+    def update_counters(self, inserted: bool) -> None:
+        if inserted:
+            self.n_inserted += 1
+
+            # do we need to perform queue maintenance?
+            # compute througput, the lower of items added and
+            # removed since the last time.  if it is equal to the
+            # queue length, we can do a linear queue management which
+            # still is amortized O(1) per entry.
+            througput = min(self.n_inserted, self.n_removed)
+            limit = max(10, len(self._pq))
+            if througput > limit:
+                self.n_maintenances += 1
+                self.do_maintenance()
+                self.n_inserted = self.n_removed = 0
+        else:
+            if len(self._pq) > 0:
+                self.n_removed += 1
+            else:
+                self.n_inserted = self.n_removed = 0
+
+    def do_maintenance(self) -> None:
+        pass
 
     def append_pri(self, obj: T, priority: float) -> None:
         """
         Insert an item at a specific priority
         """
-        pv = PriorityValue(base_priority=priority)
+        pv = PriorityValue(
+            base_priority=priority,
+            inserted_at=self.n_inserted,
+        )
         self._pq.add(pv, obj)
+        self.update_counters(True)
 
     def insert(self, position: int, obj: T) -> None:
         """
@@ -454,18 +490,26 @@ class PosPriorityQueue(Generic[T]):
         except IndexError:
             pass
         promoted.append(obj)
-        pv = PriorityValue(priority_class=0, base_priority=priority_val)
+        pv = PriorityValue(
+            priority_class=0,
+            base_priority=priority_val,
+            inserted_at=self.n_inserted,
+        )
         for obj in promoted:
             self._pq.add(pv, obj)
+        self.update_counters(True)
 
     def popleft(self) -> T:
-        return self._pq.pop()
+        result = self._pq.pop()
+        self.update_counters(False)
+        return result
 
     def remove(self, obj: T) -> None:
         """
         Remove an object from the queue.
         """
         self._pq.remove(obj)
+        self.update_counters(False)
 
     def find(
         self,
@@ -486,7 +530,10 @@ class PosPriorityQueue(Generic[T]):
         """
         Reschedule an object which is already in the queue.
         """
-        pv = PriorityValue(base_priority=new_priority)
+        pv = PriorityValue(
+            base_priority=new_priority,
+            inserted_at=self.n_inserted,
+        )
         return self._pq.reschedule(key, pv)
 
     def reschedule_all(self) -> None:
