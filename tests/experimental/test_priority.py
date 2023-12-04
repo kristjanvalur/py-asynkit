@@ -561,6 +561,33 @@ class TestPosPriorityQueue:
         pris2 = [o.priority for o in objs]
         assert pris2 == [100] + (sorted(pris))
 
+    def test_maintenance(self):
+        """Verify that mainenance kicks in and is roughly O(1)"""
+
+        nm = 0
+        tm = 0
+
+        def mock_maintenance():
+            nonlocal nm, tm
+            nm += 1
+            tm += len(q._pq)
+
+        q = PosPriorityQueue(priority_key)
+        q.do_maintenance = mock_maintenance
+        total = 0
+        maxlen = 0
+        for i in range(1000):
+            for i in range(random.randrange(1, 20)):
+                q.append(PriorityObject(random.random()))
+                total += 1
+                maxlen = max(maxlen, len(q))
+            for i in range(random.randrange(1, 20)):
+                if len(q):
+                    q.popleft()
+        while len(q):
+            q.popleft()
+        print(f"maxlen: {maxlen}, total: {total}, nm: {nm}, tm: {tm}")
+
 
 # loop policy for pytest-anyio plugin
 class PriorityEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
