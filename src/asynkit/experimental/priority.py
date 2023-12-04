@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import random
 import weakref
 from abc import ABC, abstractmethod
 from asyncio import Handle, Lock, Task
@@ -400,9 +401,10 @@ class PosPriorityQueue(Generic[T]):
         # the priority-class is 1 for regular priority, 0 for immediate priority.
         self._pq: PriorityQueue[PriorityValue, T] = PriorityQueue()
         self._get_priority = get_priority
-        self.n_maintenances = 0
+        self.last_maintenance = 0
         self.n_inserted = 0
         self.n_removed = 0
+        self.priority_boost_factor = 1.2
 
     def __iter__(self) -> Iterator[T]:
         """
@@ -441,11 +443,10 @@ class PosPriorityQueue(Generic[T]):
             # queue length, we can do a linear queue management which
             # still is amortized O(1) per entry.
             througput = min(self.n_inserted, self.n_removed)
-            limit = max(10, len(self._pq))
+            limit = max(10, len(self._pq)) + self.last_maintenance
             if througput > limit:
-                self.n_maintenances += 1
                 self.do_maintenance()
-                self.n_inserted = self.n_removed = 0
+                self.last_maintenance = througput
         else:
             if len(self._pq) > 0:
                 self.n_removed += 1
@@ -453,7 +454,51 @@ class PosPriorityQueue(Generic[T]):
                 self.n_inserted = self.n_removed = 0
 
     def do_maintenance(self) -> None:
-        pass
+        """Iterate over the queue, gather priority information and boost
+        priority of objects which have been waiting for a long time."""
+        if not self.priority_boost_factor:
+            return  # pragma: no cover
+        pri, _ = self._pq.peekitem()
+        min_pri = max_pri = pri.priority()
+        stragglers = []
+        limit = self.n_inserted - len(self._pq)
+        for pri, obj in self._pq.items():
+            if pri.priority_class == 0:
+                continue
+            base_pri = pri.priority()
+            min_pri = min(min_pri, base_pri)
+            max_pri = max(max_pri, base_pri)
+            # we dermine long-waiting objects to be those inserted more than
+            # queue len ago.
+            if pri.inserted_at < limit:
+                stragglers.append((pri, obj))
+
+        if stragglers:
+            self.boost_stragglers(stragglers, min_pri, max_pri)
+
+    def boost_stragglers(
+        self, stragglers: List[Tuple[PriorityValue, T]], min_pri: float, max_pri: float
+    ) -> None:
+        n_boosted = 0
+        for pri, _ in stragglers:
+            # we boost the priority of long waiting objects by a random
+            # factor to bring it below the min_pri.
+            if pri.base_priority > min_pri:  # pragma: no branch
+                pb = self.compute_priority_boost(pri.base_priority, min_pri, max_pri)
+                if pb:  # pragma: no branch
+                    pri.priority_boost = pb
+                    n_boosted += 1
+        if n_boosted > 0:  # pragma: no branch
+            self._pq.refresh()
+
+    def compute_priority_boost(
+        self, priority: float, min_pri: float, max_pri: float
+    ) -> float:
+        # boost into a range scaled by the factor.  This gives it a chance of
+        # being scheduled even before the currently highest priority object.
+        range = (min_pri - priority) * self.priority_boost_factor
+        r = random.random() * range
+        return r
 
     def append_pri(self, obj: T, priority: float) -> None:
         """

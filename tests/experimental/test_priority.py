@@ -561,9 +561,9 @@ class TestPosPriorityQueue:
         pris2 = [o.priority for o in objs]
         assert pris2 == [100] + (sorted(pris))
 
-    def test_maintenance(self):
+    def test_maintenance_rate(self):
         """Verify that mainenance kicks in and is roughly O(1)"""
-
+        random.seed(0)
         nm = 0
         tm = 0
 
@@ -586,7 +586,32 @@ class TestPosPriorityQueue:
                     q.popleft()
         while len(q):
             q.popleft()
+
         print(f"maxlen: {maxlen}, total: {total}, nm: {nm}, tm: {tm}")
+        # assert that it is roughly O(1)
+        assert total * 0.5 < tm < total * 1.5
+
+    def test_priority_boost(self):
+        """Test that priority boost works"""
+        # We have a queue of 100 random priority items.  We pop and insert
+        # items until we have seen all items.abs
+        # without priority boost, we would always see the same item.  Priority
+        # boost shoudl ensure that all items eventually pass through the queue.
+        pris = set(PriorityObject(random.random()) for i in range(100))
+        q = PosPriorityQueue(priority_key)
+        for p in pris:
+            q.append(p)
+
+        found = set()
+        for i in range(100000):
+            popped = q.popleft()
+            found.add(popped)
+            if len(found) == len(pris):
+                break
+            q.append(popped)
+
+        assert i < 100000
+        assert found == pris
 
 
 # loop policy for pytest-anyio plugin
@@ -626,7 +651,6 @@ class TestPriorityScheduling:
         assert await task == 1
 
     async def test_priority_tasks(self):
-
         finished = []
 
         async def taskfunc(pri):
