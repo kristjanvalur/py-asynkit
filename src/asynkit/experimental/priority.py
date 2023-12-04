@@ -4,6 +4,7 @@ import weakref
 from abc import ABC, abstractmethod
 from asyncio import Handle, Lock, Task
 from contextvars import Context
+from dataclasses import dataclass
 from typing import (
     Any,
     AsyncIterator,
@@ -364,6 +365,25 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
                 pass
 
 
+@dataclass
+class PriorityValue:
+    """A priority value class, which allows
+    for adding a priority boost value to the base priority.
+    """
+
+    base_priority: float  # the base priority, as reported by the object
+    priority_boost: float = 0.0  # a boost value
+    priority_class: int = 1  # 0 for immediate priority, 1 for regular
+
+    def priority(self) -> float:
+        return self.base_priority + self.priority_boost
+
+    def __lt__(self, other: "PriorityValue") -> bool:
+        if self.priority_class != other.priority_class:
+            return self.priority_class < other.priority_class
+        return self.priority() < other.priority()
+
+
 class PosPriorityQueue(Generic[T]):
     """
     A simple priority queue for objects, which also allows scheduling
@@ -377,7 +397,7 @@ class PosPriorityQueue(Generic[T]):
     def __init__(self, get_priority: Callable[[T], float]) -> None:
         # the queues are stored in a dictionary, keyed by (priority-class, priority)
         # the priority-class is 1 for regular priority, 0 for immediate priority.
-        self._pq: PriorityQueue[Tuple[int, float], T] = PriorityQueue()
+        self._pq: PriorityQueue[PriorityValue, T] = PriorityQueue()
         self._get_priority = get_priority
 
     def __iter__(self) -> Iterator[T]:
@@ -400,13 +420,15 @@ class PosPriorityQueue(Generic[T]):
         """
         Insert an item into its default place according to priority
         """
-        self._pq.add((1, self._get_priority(obj)), obj)
+        pv = PriorityValue(base_priority=self._get_priority(obj))
+        self._pq.add(pv, obj)
 
     def append_pri(self, obj: T, priority: float) -> None:
         """
         Insert an item at a specific priority
         """
-        self._pq.add((1, priority), obj)
+        pv = PriorityValue(base_priority=priority)
+        self._pq.add(pv, obj)
 
     def insert(self, position: int, obj: T) -> None:
         """
@@ -426,15 +448,15 @@ class PosPriorityQueue(Generic[T]):
             # are there other immediate objects in the queue?
             # if so, we select a one lower priority value for our
             # inserted objects.
-            (priority_cls, val), _ = self._pq.peekitem()
-            if priority_cls == 0:
-                priority_val = val - 1
+            pv, _ = self._pq.peekitem()
+            if pv.priority_class == 0:
+                priority_val = pv.base_priority - 1
         except IndexError:
             pass
         promoted.append(obj)
-        pri = (0, priority_val)
+        pv = PriorityValue(priority_class=0, base_priority=priority_val)
         for obj in promoted:
-            self._pq.add(pri, obj)
+            self._pq.add(pv, obj)
 
     def popleft(self) -> T:
         return self._pq.pop()
@@ -464,7 +486,8 @@ class PosPriorityQueue(Generic[T]):
         """
         Reschedule an object which is already in the queue.
         """
-        return self._pq.reschedule(key, (1, new_priority))
+        pv = PriorityValue(base_priority=new_priority)
+        return self._pq.reschedule(key, pv)
 
     def reschedule_all(self) -> None:
         """
@@ -474,8 +497,8 @@ class PosPriorityQueue(Generic[T]):
         """
         newpri = []
         for pri, obj in self._pq.items():
-            if pri != (0, 0):
-                pri = (1, self._get_priority(obj))
+            if pri.priority_class != 0:
+                pri.base_priority = self._get_priority(obj)
             newpri.append((pri, obj))
         self._pq.clear()
         self._pq.extend(newpri)
