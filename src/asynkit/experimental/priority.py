@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import random
+import sys
 import weakref
 from abc import ABC, abstractmethod
 from asyncio import Handle, Lock, Task
@@ -688,3 +689,17 @@ class PrioritySelectorEventLoop(asyncio.SelectorEventLoop, PrioritySchedulingMix
         super().__init__(arg)
         self.init()
         self._ready = self.ready_queue
+
+
+DefaultPriorityEventLoop = PrioritySelectorEventLoop
+
+if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
+
+    class PriorityProactorEventLoop(asyncio.ProactorEventLoop, PrioritySchedulingMixin):
+        def __init__(self, arg: Any = None) -> None:
+            super().__init__(arg)
+            self.init()
+            self._ready = self.ready_queue
+
+    if sys.platform == "win32":  # pragma: no coverage
+        DefaultPriorityEventLoop = PriorityProactorEventLoop  # type: ignore

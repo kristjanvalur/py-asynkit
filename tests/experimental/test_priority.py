@@ -8,7 +8,7 @@ from asynkit.experimental.priority import (
     PosPriorityQueue,
     PriorityCondition,
     PriorityLock,
-    PrioritySelectorEventLoop,
+    DefaultPriorityEventLoop,
     PriorityTask,
 )
 
@@ -621,7 +621,7 @@ class PriorityEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
         self.request = request
 
     def new_event_loop(self):
-        return PrioritySelectorEventLoop()
+        return DefaultPriorityEventLoop()
 
 
 class TestPriorityScheduling:
@@ -638,7 +638,7 @@ class TestPriorityScheduling:
 
     async def test_create_event_loop(self):
         loop = asyncio.get_running_loop()
-        assert isinstance(loop, PrioritySelectorEventLoop)
+        assert isinstance(loop, DefaultPriorityEventLoop)
         assert loop._ready is loop.ready_queue
 
     async def test_simple_task(self):
