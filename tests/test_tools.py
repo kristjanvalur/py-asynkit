@@ -329,3 +329,17 @@ class TestPriorityQueue:
                 popped.append(q2.popitem())
 
             assert itered == popped
+
+    def test_refresh(self):
+        objs = [PriorityObject(random.random()) for i in range(50)]
+        queue = PriorityQueue()
+        for obj in objs:
+            queue.add(obj.priority, obj)
+
+        q1 = queue.copy()
+        q2 = queue.copy()
+
+        q1._pq[0], q1._pq[-1] = q1._pq[-1], q1._pq[0]
+        q1.refresh()
+
+        assert list(q1.ordereditems()) == list(q2.ordereditems())

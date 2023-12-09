@@ -113,6 +113,12 @@ class PriorityQueue(Generic[P, T]):
         for entry in self._pq:
             yield entry.priority, entry.obj
 
+    def refresh(self) -> None:
+        """Refresh the queue state.  Can be used if any of the objects
+        have had their priority changed.
+        """
+        heapq.heapify(self._pq)
+
     def sort(self) -> None:
         """Sort the queue in priority order.  Can be used to ensure that
         iteration is in priority order.
