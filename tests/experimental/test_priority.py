@@ -5,10 +5,10 @@ from unittest.mock import Mock
 import pytest
 
 from asynkit.experimental.priority import (
+    DefaultPriorityEventLoop,
     PosPriorityQueue,
     PriorityCondition,
     PriorityLock,
-    DefaultPriorityEventLoop,
     PriorityTask,
 )
 

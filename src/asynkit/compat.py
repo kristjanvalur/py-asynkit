@@ -4,6 +4,7 @@ import threading
 from asyncio import AbstractEventLoop, Handle, events
 from contextvars import Context
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, TypeVar
+from weakref import ReferenceType
 
 """Compatibility routines for earlier asyncio versions"""
 
@@ -13,10 +14,16 @@ PYTHON_39 = sys.version_info[:2] <= (3, 9)
 
 T = TypeVar("T")
 
+# The following is needed for mypy to work with Python 3.8
+# which doesn't allow subscripting many types
 if TYPE_CHECKING:
     _TaskAny = asyncio.Task[Any]
+    FutureBool = asyncio.Future[bool]
+    ReferenceTypeTaskAny = ReferenceType[_TaskAny]
 else:
     _TaskAny = asyncio.Task
+    FutureBool = asyncio.Future
+    ReferenceTypeTaskAny = ReferenceType
 
 # create_task() got the name argument in 3.8
 
@@ -56,7 +63,7 @@ else:  # pragma: no cover
 
 
 if not PYTHON_39:  # pragma: no cover
-    from asyncio.mixins import _LoopBoundMixin
+    from asyncio.mixins import _LoopBoundMixin  # type: ignore[import]
 
     LoopBoundMixin = _LoopBoundMixin
 

@@ -25,7 +25,7 @@ from typing import (
 
 from typing_extensions import Literal
 
-from asynkit.compat import LockHelper
+from asynkit.compat import PYTHON_38, FutureBool, LockHelper, ReferenceTypeTaskAny
 from asynkit.loop.default import task_from_handle
 from asynkit.loop.schedulingloop import AbstractSchedulingLoop
 from asynkit.loop.types import TaskAny
@@ -105,17 +105,13 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
     of all waiting Tasks.
     """
 
-    _waiters: Optional[
-        PriorityQueue[
-            float, Tuple[asyncio.Future[bool], weakref.ReferenceType[TaskAny]]
-        ]
-    ]
+    _waiters: Optional[PriorityQueue[float, Tuple[FutureBool, ReferenceTypeTaskAny]]]
 
     def __init__(self) -> None:
         # we use weakrefs to avoid reference cycles.  Tasks _own_ locks,
         # but locks don't own tasks. These are _backrefs_.
         super().__init__()
-        self._owning: Optional[weakref.ReferenceType[TaskAny]] = None
+        self._owning: Optional[ReferenceTypeTaskAny] = None
 
     async def acquire(self) -> Literal[True]:
         """Acquire a lock.
@@ -232,7 +228,7 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
         else:
 
             def key(
-                entry: Tuple[asyncio.Future[bool], weakref.ReferenceType[TaskAny]],
+                entry: Tuple[FutureBool, ReferenceTypeTaskAny],
             ) -> bool:
                 fut, _ = entry
                 return fut is from_obj
@@ -249,7 +245,7 @@ class PriorityCondition(asyncio.Condition, LockHelper):
     def __init__(self, lock: Optional[asyncio.Lock] = None) -> None:
         lock = lock or self.LockType()
         super().__init__(lock=lock)
-        self._waiters: PriorityQueue[float, asyncio.Future[bool]] = PriorityQueue()
+        self._waiters: PriorityQueue[float, FutureBool] = PriorityQueue()
 
     async def wait(self) -> Literal[True]:
         if not self.locked():  # pragma: no cover
@@ -597,14 +593,25 @@ class PosPriorityQueue(Generic[T]):
         self._pq.extend(newpri)
 
 
-class EventLoopLike(Protocol):
-    def call_soon(
-        self,
-        callback: Callable[..., Any],
-        *args: Any,
-        context: Optional[Context] = None,
-    ) -> Handle:
-        ...  # pragma: no cover
+class EventLoopLike(Protocol):  # pragma: no cover
+    if not PYTHON_38:
+
+        def call_soon(
+            self,
+            callback: Callable[..., Any],
+            *args: Any,
+            context: Optional[Context] = None,
+        ) -> Handle:
+            ...  # pragma: no cover
+
+    else:
+
+        def call_soon(  # type: ignore[misc]
+            self,
+            callback: Callable[..., Any],
+            *args: Any,
+        ) -> Handle:
+            ...  # pragma: no cover
 
 
 class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
@@ -653,7 +660,10 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
         This is effectively the same as calling
         `call_soon()`, `queue_remove()` and `queue_insert_pos()` in turn.
         """
-        handle = self.call_soon(callback, *args, context=context)
+        if not PYTHON_38:  # pragma: no cover
+            handle = self.call_soon(callback, *args, context=context)
+        else:  # pragma: no cover
+            handle = self.call_soon(callback, *args)
         self.queue_remove(handle)
         self.queue_insert_pos(handle, position)
         return handle
@@ -684,7 +694,10 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
         self.ready_queue.reschedule(key, priority)
 
 
-class PrioritySelectorEventLoop(asyncio.SelectorEventLoop, PrioritySchedulingMixin):
+class PrioritySelectorEventLoop(  # type: ignore[misc]
+    asyncio.SelectorEventLoop,
+    PrioritySchedulingMixin,
+):
     def __init__(self, arg: Any = None) -> None:
         super().__init__(arg)
         self.init()
@@ -695,7 +708,7 @@ DefaultPriorityEventLoop = PrioritySelectorEventLoop
 
 if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
 
-    class PriorityProactorEventLoop(asyncio.ProactorEventLoop, PrioritySchedulingMixin):
+    class PriorityProactorEventLoop(asyncio.ProactorEventLoop, PrioritySchedulingMixin):  # type: ignore
         def __init__(self, arg: Any = None) -> None:
             super().__init__(arg)
             self.init()

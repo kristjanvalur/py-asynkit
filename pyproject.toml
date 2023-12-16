@@ -85,6 +85,7 @@ allow_untyped_calls = true
 module = [
     "asynkit.compat",
     "asynkit.experimental.interrupt",
+    "asynkit.experimental.priority",
     "asynkit.loop.eventloop",
     "asynkit.tools",
     "tests.test_coro",
