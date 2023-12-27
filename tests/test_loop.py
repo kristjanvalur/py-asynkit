@@ -18,14 +18,17 @@ from asynkit.loop.extensions import (
 from asynkit.scheduling import task_is_runnable
 
 from .conftest import SchedulingEventLoopPolicy
+from .experimental.test_priority import PriorityEventLoopPolicy
 
 pytestmark = pytest.mark.anyio
 
 
-@pytest.fixture(params=["regular", "custom"])
+@pytest.fixture(params=["regular", "custom", "priority"])
 def anyio_backend(request):
     if request.param == "custom":
         return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
+    elif request.param == "priority":
+        return ("asyncio", {"policy": PriorityEventLoopPolicy(request)})
     else:
         return ("asyncio", {"policy": DefaultEventLoopPolicy()})
 
