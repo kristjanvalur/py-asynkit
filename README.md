@@ -665,9 +665,11 @@ a `float` will get priority treatment in the following areas:
 - When awaiting a `PriorityLock` or `PriorityCondition`
 - When waiting in to be executed by a `PrioritySelectorEventLoop` or a `PriorityProactorEventLoop`.
 
-The priority value `effective_priority()` is used to determine the task's priority, with low values having higher
-priority than high values.  If this method is missing, the default priority of `0.0` is assumed.  The `Priority` enum class can be
-used for some basic priority values, defining "high" as -10.0 and "low" as 10.0.  In case of identical priority values, FIFO order is respected.]
+The floating point _priority value_ returned by `effective_priority()` is used to determine the task's priority, with _lower
+values_ giving _higher priority_ (in the same way that low values are _sorted before_ high values).
+If this method is missing, the default priority of `0.0` is assumed.  The `Priority` enum class can be
+used for some basic priority values, defining `Priority.HIGH` as -10.0 and `Priority.LOW` as 10.0.
+In case of identical priority values, FIFO order is respected.
 
 The locking primitives provided are fully compatible with the standard
 locks in `asyncio` and also fully support the experimental [task interruption](#task-interruption) feature.
