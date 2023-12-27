@@ -10,6 +10,7 @@ from asynkit.experimental import (
     task_throw,
     task_timeout,
 )
+from asynkit.experimental.priority import PriorityCondition, PriorityLock
 from asynkit.loop.default import PyTask
 from asynkit.scheduling import task_is_blocked, task_is_runnable
 
@@ -19,6 +20,18 @@ pytestmark = pytest.mark.anyio
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(params=[asyncio.Lock, PriorityLock])
+def locktype(request):
+    """A fixture returning a lock class"""
+    return request.param
+
+
+@pytest.fixture(params=[InterruptCondition, PriorityCondition])
+def icondtype(request):
+    """A fixture returning a an interruptable class"""
+    return request.param
 
 
 def create_task(ctask, coro, name=None):
@@ -441,13 +454,13 @@ class TestInterrupt:
         with pytest.raises(asyncio.CancelledError):
             await task
 
-    async def test_cancelled_lock_acquire(self, ctask):
+    async def test_cancelled_lock_acquire(self, ctask, locktype):
         """
         Test that we can interrupt a lock acquire at a critical phase
         where the lock has been freed.
         """
 
-        lock = asyncio.Lock()
+        lock = locktype()
 
         async def func():
             try:
@@ -516,8 +529,8 @@ class TestInterrupt:
     async def test_cancelled_condition_wait_acquire_regular(self, ctask):
         await self._cancelled_condition_wait_acquire(ctask, asyncio.Condition())
 
-    async def test_cancelled_condition_wait_acquire_interrupt(self, ctask):
-        await self._cancelled_condition_wait_acquire(ctask, InterruptCondition())
+    async def test_cancelled_condition_wait_acquire_interrupt(self, ctask, icondtype):
+        await self._cancelled_condition_wait_acquire(ctask, icondtype())
 
     async def _cancelled_condition_wait_acquire(self, ctask, cond):
         """
