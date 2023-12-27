@@ -11,8 +11,9 @@ way Python's `asyncio` module does things.
 - Helpers to run _async_ code from _non-async_ code, such as `await_sync()` and `aiter_sync()`
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - _eager_ execution of Tasks
+- Exprerimental support for [Priority Scheduling](#priority-scheduling) of Tasks
+- Other experimental features such as [`task_interrupt()`](#task_interrupt)
 - Limited support for `anyio` and `trio`.
-- Experimental features such as [`task_interrupt()`](#task_interrupt)
 
 ## Installation
 
@@ -635,6 +636,102 @@ or with a context manager:
 with asynkit.event_loop_policy():
     asyncio.run(myprogram())
 ```
+
+## Priority Scheduling
+
+### FIFO scheduling
+
+Since the beginning, _scheduling_ of Tasks in `asyncio` has always been _FIFO_, meaning "first-in, first-out".  This is a design principle which provides a certain _fairness_ to tasks, ensuring that all tasks run and a certain predictability is achieved with execution.  FIFO is maintained in the following places:
+
+- In the _Event Loop_, where tasks are executed in the order in which they become _runnable_
+- In locking primitives (such as `asyncio.Lock` or `asyncio.Condition`) where tasks are able to _acquire_ the lock or get notified in the order
+  in which they arrive.
+
+All tasks are treated equally.
+
+### The `asynkit.experimental.priority` module
+
+- __Note__:  This is currently an __experimental__ feature.
+
+In pre-emptive system, such as scheduling of `threads` or `processes` there is usually some sort of `priority` involved too,
+to allow designating some tasks as more important than others, thus requiring more rapid servicing, and others as having
+lower priority and thus be relegated to background tasks where other more important work is not pending.
+
+The `asynkit.experimental.priority` module now allows us to do something similar.
+
+You can define the `priority` of Task objects.  A task defining the `effective_priority()` method returning
+a `float` will get priority treatment in the following areas:
+
+- When awaiting a `PriorityLock` or `PriorityCondition`
+- When waiting in to be executed by a `PrioritySelectorEventLoop` or a `PriorityProactorEventLoop`.
+
+The priority value `effective_priority()` is used to determine the task's priority, with low values having higher
+priority than high values.  If this method is missing, the default priority of `0.0` is assumed.  The `Priority` enum class can be
+used for some basic priority values, defining "high" as -10.0 and "low" as 10.0.  In case of identical priority values, FIFO order is respected.]
+
+The locking primitives provided are fully compatible with the standard
+locks in `asyncio` and also fully support the experimental [task interruption](#task-interruption) feature.
+
+#### `PriorityTask`
+
+This is an `asyncio.Task` subclass which implements the `effective_priority()` method.  It can be constructed with a `priority` keyword
+or a `priority_value` attribute.  It also participates in [Priority Inheritance](#priority-inheritance).
+
+#### `PriorityLock`
+
+This is a `asyncio.Lock` subclass which respects the priorities of any `Task` objects attempting to acquire it.  It also participates in [Priority Inheritance](#priority-inheritance).
+
+#### `PriorityCondition`
+
+This is an `asyncio.Condition` subclass which respects the priorities of any `Task` objects awaiting to be woken up.  Its default
+`lock` is of type `PriorityLock`.
+
+#### `DefaultPriorityEventLoop`
+
+This is an `asyncio.AbstractEventLoop` subclass which respects the priorities of any Task objects waiting to be executed.  It also
+provides all the scheduling extensions from `AbstractSchedulingLoop`.  It also participates in [Priority Inheritance](#priority-inheritance).
+
+This is either a `PrioritySelectorEventLoop` or a `PriorityProactorEventLoop`, both instances of the `PrioritySchedulingMixin` class.
+
+### Priority Inversion
+
+A well known problem with priority scheduling is the so-called [Priority Inversion](https://en.wikipedia.org/wiki/Priority_inversion)
+problem.  This implementation addresses that by two different means:
+
+#### Priority Inheritance
+
+A `PriorityTask` keeps track of all the `PriorityLock` objects it has acquired, and a `PriorityLock` keeps track of all the `asyncio.Task` objects waiting to acquire it.  A `PriorityTask`'s `effective_priority()` method will be the highest _effective_priority_ of any
+task waiting to acquire a lock held by it.  Thus, a high priority-task which starts waiting for a lock which is held by a
+low-priority task, will temporarily _propagate_ its priority to that task, so that ultimately, the `PrioritySchedulingMixin` event
+loop with ensure that the previously low-priority task is now executed with the higher priority.
+
+This mechanism requires the co-operation of both the tasks, locks and the event-loop to properly function.
+
+#### Priority Boosting
+
+The `PrioritySchedulingMixin` will regularly do "queue maintenance" and will identify Tasks that have sat around in the queue for
+many cycles without being executed.  It will randomly "boost" the priority of these tasks in the queue, so that they have a chance
+to run.
+
+This mechanism does not require the co-operation of locks and tasks to work, and is in place as a safety mechanism in applications
+where it is not feasible to replace all instances of `Lock`s and `Task`s with their _priority_inheritance_-aware counterparts.
+
+### How to use Priority Scheduling
+
+To make use of Priority scheduling, you need to use either the priority scheduling event loop (e.g.
+`DefaultPriorityEventLoop`) or a priority-aware synchronization primitive, i.e. `PriorityLock` or `PriorityCondition`.  In addition, you need `Task` objects which support the `effective_priority()`
+method, such as `PriorityTask`
+
+It is possible to get priority behaviour from locks without having a priority event loop, and
+vice versa.  But when using the priority event loop, it is recommended to use the accompanying
+lock and task classes which co-operate to provide _priority inheritance_.
+
+A good first step, in your application, is to identify tasks
+that perform background work, such as housekeeping tasks, and assign to them the `Priority.LOW` priority.
+
+Subsequently you may want to identify areas of your application that require more attention than others.  For a web-application's URL handler may elect to temporarily raise the priority (change `PriorityTask.priority_value`) for certain endpoints to give them better response.
+
+This is new territory and it remains to be seen how having priority scheduling in a `co-operative`` environment such as `asyncio` actually works in practice.
 
 ## Coroutine helpers
 
