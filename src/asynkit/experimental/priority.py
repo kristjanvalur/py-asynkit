@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from asyncio import Handle, Lock, Task
 from contextvars import Context
 from dataclasses import dataclass
+from enum import Enum
 from typing import (
     Any,
     AsyncIterator,
@@ -32,7 +33,26 @@ from asynkit.loop.types import TaskAny
 from asynkit.scheduling import task_is_runnable
 from asynkit.tools import PriorityQueue
 
+__all__ = [
+    "BasePriorityObject",
+    "PriorityCondition",
+    "PriorityLock",
+    "PrioritySelectorEventLoop",
+    "DefaultPriorityEventLoop",
+    "PriorityTask",
+    "PriorityEventLoopPolicy",
+    "PrioritySchedulingMixin",
+]
+
 T = TypeVar("T")
+
+
+class Priority(Enum):
+    """standard prioriy values for tasks"""
+
+    LOW = 10.0
+    NORMAL = 0.0
+    HIGH = -10.0
 
 
 class BasePriorityObject(ABC):
@@ -716,3 +736,10 @@ if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
 
     if sys.platform == "win32":  # pragma: no coverage
         DefaultPriorityEventLoop = PriorityProactorEventLoop  # type: ignore
+
+    __all__.append("PriorityProactorEventLoop")
+
+
+class PriorityEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+    def new_event_loop(self) -> asyncio.AbstractEventLoop:
+        return DefaultPriorityEventLoop()  # type: ignore
