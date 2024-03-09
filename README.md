@@ -286,7 +286,6 @@ implemented using [`CoroStart`](#corostart)
 
 This decorator turns the decorated method into a `Generator` as required for
 `__await__` methods, which must only return `Iterator` objects.
-It does so by invoking the `coro_iter()` helper.
 
 This makes it simple to make a class instance _awaitable_ by decorating an `async`
 `__await__()` method.
