@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import heapq
 import sys
 from typing import (
@@ -17,6 +18,7 @@ from typing import (
     Protocol,
     Tuple,
     TypeVar,
+    Union,
 )
 
 # 3.8 or earlier
@@ -298,3 +300,22 @@ class PriEntry(Generic[P, T]):
         return (self.priority < other.priority) or (
             not (other.priority < self.priority) and self.sequence < other.sequence
         )
+
+
+class cancellable(Protocol):
+    def cancel(self, msg: Optional[str] = None) -> Union[bool, None]:
+        ...
+
+
+@contextlib.contextmanager
+def cancelling(
+    target: cancellable, msg: Optional[str] = None
+) -> Generator[cancellable, None, None]:
+    """Ensure that the target is cancelled"""
+    try:
+        yield target
+    finally:
+        if PYTHON_38:
+            target.cancel()
+        else:
+            target.cancel(msg)

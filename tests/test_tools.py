@@ -1,6 +1,7 @@
 import random
 from collections import deque
 from contextlib import closing
+import asyncio
 
 import pytest
 
@@ -343,3 +344,59 @@ class TestPriorityQueue:
         q1.refresh()
 
         assert list(q1.ordereditems()) == list(q2.ordereditems())
+
+class TestCancelling:
+    async def test_future(self):
+        f = asyncio.Future()
+        assert not f.cancelled()
+        with asynkit.tools.cancelling(f) as c:
+            assert not c.cancelled()
+        assert f.cancelled()
+        
+        f = asyncio.Future()
+        with pytest.raises(ValueError):
+            with asynkit.tools.cancelling(f) as c:
+                assert not c.cancelled()
+                raise ValueError
+        assert f.cancelled()
+        
+        # it is ok to exit cancelling block with a finished future
+        f = asyncio.Future()
+        with asynkit.tools.cancelling(f) as c:
+            assert not c.cancelled()
+            f.set_result(None)
+        assert f.result() is None
+        assert not f.cancelled()
+        
+        
+    async def test_task(self):
+        async def coro():
+            await asyncio.sleep(0.1)
+            
+        # task is cancelled if cancelling block is exited
+        # without awaiting the task
+        t = asyncio.create_task(coro())
+        assert not t.cancelled()
+        with asynkit.tools.cancelling(t) as c:
+            assert not c.cancelled()
+        with pytest.raises(asyncio.CancelledError):
+            await t
+        assert t.cancelled()
+        
+        # task is cancelled if an exception is raised
+        t = asyncio.create_task(coro())
+        with pytest.raises(ValueError):
+            with asynkit.tools.cancelling(t) as c:
+                assert not c.cancelled()
+                raise ValueError
+        with pytest.raises(asyncio.CancelledError):
+            await t
+        assert t.cancelled()
+        
+        # it is ok to exit cancelling block with a finished task
+        t = asyncio.create_task(coro())
+        with asynkit.tools.cancelling(t) as c:
+            assert not c.cancelled()
+            await t
+        assert not t.cancelled()
+        
