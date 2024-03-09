@@ -12,6 +12,10 @@ from weakref import ReferenceType
 PYTHON_38 = sys.version_info[:2] <= (3, 8)
 PYTHON_39 = sys.version_info[:2] <= (3, 9)
 
+# or-later versions
+PY_39 = sys.version_info[:2] >= (3, 9)
+PY_311 = sys.version_info[:2] >= (3, 11)
+
 T = TypeVar("T")
 
 # The following is needed for mypy to work with Python 3.8
