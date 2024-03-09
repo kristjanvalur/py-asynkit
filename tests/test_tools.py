@@ -2,8 +2,10 @@ import random
 from collections import deque
 from contextlib import closing
 import asyncio
+import sys
 
 import pytest
+from asynkit.compat import PYTHON_39
 
 import asynkit.tools
 from asynkit.tools import PriorityQueue
@@ -11,6 +13,9 @@ from asynkit.tools import PriorityQueue
 from .conftest import SchedulingEventLoopPolicy
 
 pytestmark = pytest.mark.anyio
+
+PYTHON_39 = sys.version_info[:2] >= (3, 9)
+PYTHON_311 = sys.version_info[:2] >= (3, 11)
 
 
 @pytest.fixture
@@ -349,9 +354,13 @@ class TestCancelling:
     async def test_future(self):
         f = asyncio.Future()
         assert not f.cancelled()
-        with asynkit.tools.cancelling(f) as c:
+        with asynkit.tools.cancelling(f, "hello") as c:
             assert not c.cancelled()
         assert f.cancelled()
+        with pytest.raises(asyncio.CancelledError) as e:	
+            await f
+        if PYTHON_39:
+            assert e.value.args == ("hello",)
         
         f = asyncio.Future()
         with pytest.raises(ValueError):
@@ -377,12 +386,14 @@ class TestCancelling:
         # without awaiting the task
         t = asyncio.create_task(coro())
         assert not t.cancelled()
-        with asynkit.tools.cancelling(t) as c:
+        with asynkit.tools.cancelling(t, "hello") as c:
             assert not c.cancelled()
-        with pytest.raises(asyncio.CancelledError):
+        with pytest.raises(asyncio.CancelledError) as e:
             await t
+        if PYTHON_311:
+            assert e.match("hello")
         assert t.cancelled()
-        
+            
         # task is cancelled if an exception is raised
         t = asyncio.create_task(coro())
         with pytest.raises(ValueError):
