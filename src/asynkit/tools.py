@@ -17,7 +17,6 @@ from typing import (
     Optional,
     Tuple,
     TypeVar,
-    Union,
 )
 
 from typing_extensions import Protocol
@@ -300,8 +299,15 @@ class PriEntry(Generic[P, T]):
 
 
 class Cancellable(Protocol):
-    def cancel(self, msg: Optional[str] = None) -> Union[bool, None]:
-        ...
+    if sys.version_info >= (3, 9):  # pragma: no cover
+
+        def cancel(self, msg: Optional[str] = None) -> Any:
+            ...
+
+    else:  # pragma: no cover
+
+        def cancel(self) -> Any:
+            ...
 
     def cancelled(self) -> bool:
         ...
