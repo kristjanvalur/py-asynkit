@@ -619,7 +619,7 @@ class PosPriorityQueue(Generic[T]):
 
 
 class EventLoopLike(Protocol):  # pragma: no cover
-    if PY_39:
+    if sys.version_info >= (3, 9):  # pragma: no cover
 
         def call_soon(
             self,
@@ -631,7 +631,7 @@ class EventLoopLike(Protocol):  # pragma: no cover
 
     else:
 
-        def call_soon(  # type: ignore[misc]
+        def call_soon(
             self,
             callback: Callable[..., Any],
             *args: Any,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import heapq
+import sys
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -43,11 +44,11 @@ if TYPE_CHECKING:
 else:
     _TaskAny = asyncio.Task
 
-if PY_39:  # pragma: no cover
+if sys.version_info >= (3, 9):  # pragma: no cover
     create_task = asyncio.create_task
 else:  # pragma: no cover
 
-    def create_task(  # type: ignore
+    def create_task(
         coro: Coroutine[Any, Any, T],
         *,
         name: Optional[str] = None,

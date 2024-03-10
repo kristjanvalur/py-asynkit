@@ -27,12 +27,12 @@ else:
 
 # create_task() got the name argument in 3.8
 
-if PY_39:  # pragma: no cover
+if sys.version_info >= (3, 9):  # pragma: no cover
     create_task = asyncio.create_task
 
 else:  # pragma: no cover
 
-    def create_task(  # type: ignore
+    def create_task(
         coro: Coroutine[Any, Any, T],
         *,
         name: Optional[str] = None,
@@ -41,7 +41,7 @@ else:  # pragma: no cover
 
 
 # loop.call_soon got the context argument in 3.9.10 and 3.10.2
-if PY_39:  # pragma: no cover
+if sys.version_info >= (3, 9):  # pragma: no cover
 
     def call_soon(
         loop: AbstractEventLoop,
@@ -62,7 +62,7 @@ else:  # pragma: no cover
         return loop.call_soon(callback, *args)
 
 
-if PY_39:  # pragma: no cover
+if sys.version_info >= (3, 9):  # pragma: no cover
     from asyncio.mixins import _LoopBoundMixin  # type: ignore[import]
 
     LoopBoundMixin = _LoopBoundMixin
