@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import heapq
 import sys
 from typing import (
@@ -14,13 +15,11 @@ from typing import (
     Iterable,
     Iterator,
     Optional,
-    Protocol,
     Tuple,
     TypeVar,
 )
 
-# 3.8 or earlier
-PYTHON_38 = sys.version_info[:2] <= (3, 8)
+from typing_extensions import Protocol
 
 T = TypeVar("T")
 
@@ -40,7 +39,9 @@ if TYPE_CHECKING:
 else:
     _TaskAny = asyncio.Task
 
-if PYTHON_38:  # pragma: no cover
+if sys.version_info >= (3, 9):  # pragma: no cover
+    create_task = asyncio.create_task
+else:  # pragma: no cover
 
     def create_task(
         coro: Coroutine[Any, Any, T],
@@ -48,9 +49,6 @@ if PYTHON_38:  # pragma: no cover
         name: Optional[str] = None,
     ) -> _TaskAny:
         return asyncio.create_task(coro)
-
-else:  # pragma: no cover
-    create_task = asyncio.create_task  # type: ignore
 
 
 def deque_pop(d: Deque[T], pos: int = -1) -> T:
@@ -298,3 +296,33 @@ class PriEntry(Generic[P, T]):
         return (self.priority < other.priority) or (
             not (other.priority < self.priority) and self.sequence < other.sequence
         )
+
+
+class Cancellable(Protocol):
+    if sys.version_info >= (3, 9):  # pragma: no cover
+
+        def cancel(self, msg: Optional[str] = None) -> Any:
+            ...
+
+    else:  # pragma: no cover
+
+        def cancel(self) -> Any:
+            ...
+
+    def cancelled(self) -> bool:
+        ...
+
+
+CA = TypeVar("CA", bound=Cancellable)
+
+
+@contextlib.contextmanager
+def cancelling(target: CA, msg: Optional[str] = None) -> Generator[CA, None, None]:
+    """Ensure that the target is cancelled"""
+    try:
+        yield target
+    finally:  # pragma: no cover
+        if sys.version_info >= (3, 9):
+            target.cancel(msg)
+        else:
+            target.cancel()

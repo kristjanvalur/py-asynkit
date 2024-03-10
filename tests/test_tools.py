@@ -1,3 +1,4 @@
+import asyncio
 import random
 from collections import deque
 from contextlib import closing
@@ -5,6 +6,7 @@ from contextlib import closing
 import pytest
 
 import asynkit.tools
+from asynkit.compat import PY_39, PY_311
 from asynkit.tools import PriorityQueue
 
 from .conftest import SchedulingEventLoopPolicy
@@ -343,3 +345,64 @@ class TestPriorityQueue:
         q1.refresh()
 
         assert list(q1.ordereditems()) == list(q2.ordereditems())
+
+
+class TestCancelling:
+    async def test_future(self):
+        f = asyncio.Future()
+        assert not f.cancelled()
+        with asynkit.tools.cancelling(f, "hello") as c:
+            assert not c.cancelled()
+        assert f.cancelled()
+        with pytest.raises(asyncio.CancelledError) as e:
+            await f
+        if PY_39:
+            assert e.value.args == ("hello",)
+
+        f = asyncio.Future()
+        with pytest.raises(ValueError):
+            with asynkit.cancelling(f) as c:
+                assert not c.cancelled()
+                raise ValueError
+        assert f.cancelled()
+
+        # it is ok to exit cancelling block with a finished future
+        f = asyncio.Future()
+        with asynkit.tools.cancelling(f) as c:
+            assert not c.cancelled()
+            f.set_result(None)
+        assert f.result() is None
+        assert not f.cancelled()
+
+    async def test_task(self):
+        async def coro():
+            await asyncio.sleep(0.1)
+
+        # task is cancelled if cancelling block is exited
+        # without awaiting the task
+        t = asyncio.create_task(coro())
+        assert not t.cancelled()
+        with asynkit.tools.cancelling(t, "hello") as c:
+            assert not c.cancelled()
+        with pytest.raises(asyncio.CancelledError) as e:
+            await t
+        if PY_311:
+            assert e.match("hello")
+        assert t.cancelled()
+
+        # task is cancelled if an exception is raised
+        t = asyncio.create_task(coro())
+        with pytest.raises(ValueError):
+            with asynkit.cancelling(t) as c:
+                assert not c.cancelled()
+                raise ValueError
+        with pytest.raises(asyncio.CancelledError):
+            await t
+        assert t.cancelled()
+
+        # it is ok to exit cancelling block with a finished task
+        t = asyncio.create_task(coro())
+        with asynkit.tools.cancelling(t) as c:
+            assert not c.cancelled()
+            await t
+        assert not t.cancelled()
