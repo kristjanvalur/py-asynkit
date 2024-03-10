@@ -306,6 +306,9 @@ class Cancellable(Protocol):
     def cancel(self, msg: Optional[str] = None) -> Union[bool, None]:
         ...
 
+    def cancelled(self) -> bool:
+        ...
+
 
 CA = TypeVar("CA", bound=Cancellable)
 

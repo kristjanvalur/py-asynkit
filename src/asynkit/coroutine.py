@@ -36,6 +36,7 @@ __all__ = [
     "coro_eager",
     "func_eager",
     "eager",
+    "eager_ctx",
     "coro_get_frame",
     "coro_is_new",
     "coro_is_suspended",
@@ -460,6 +461,17 @@ def eager(
     if isinstance(arg, types.FunctionType):
         return func_eager(arg, task_factory=task_factory)
     raise TypeError("need coroutine or function")
+
+
+def eager_ctx(
+    coro: Coroutine[Any, Any, T],
+    *,
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+    msg: Optional[str] = None,
+) -> ContextManager[CAwaitable[T]]:
+    """Create an eager task and return a context manager that will cancel it on exit."""
+    e = coro_eager(coro, task_factory=task_factory)
+    return cancelling(e, msg=msg)
 
 
 def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:

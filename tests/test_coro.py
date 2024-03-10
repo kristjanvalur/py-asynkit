@@ -3,7 +3,7 @@ import inspect
 import types
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, copy_context
-from typing import Any
+from typing import Any, List
 from unittest.mock import Mock
 
 import pytest
@@ -164,6 +164,28 @@ class TestEager:
     def test_eager_invalid(self, block):
         with pytest.raises(TypeError):
             asynkit.eager(self)
+
+    async def test_eager_ctx(self, block):
+        log = []
+        coro, expect = self.get_coro1(block)
+        with asynkit.eager_ctx(coro(log)) as c:
+            log.append("a")
+            await c
+
+        assert log == expect
+
+    async def test_eager_ctx_noawait(self, block: bool) -> None:
+        log: List[Any] = []
+        coro, expect = self.get_coro1(block)
+        with asynkit.eager_ctx(coro(log)) as c:
+            log.append("a")
+
+        if block:
+            with pytest.raises(asyncio.CancelledError):
+                await c
+            assert c.cancelled()
+        else:
+            assert log == expect
 
 
 @pytest.mark.parametrize("block", [True, False], ids=["block", "noblock"])
