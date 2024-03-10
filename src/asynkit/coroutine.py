@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import inspect
+import sys
 import types
 from asyncio import Future
 from contextvars import Context, copy_context
@@ -24,7 +25,7 @@ from typing import (
     overload,
 )
 
-from typing_extensions import ParamSpec, Protocol
+from typing_extensions import ParamSpec, Protocol, TypeAlias
 
 from .tools import Cancellable, cancelling, create_task
 
@@ -59,6 +60,13 @@ Suspendable = Union[Coroutine, Generator, AsyncGenerator]
 
 class CAwaitable(Awaitable[T_co], Cancellable, Protocol):
     pass
+
+
+# must use explicit sys.version_info check because of mypy
+if sys.version_info >= (3, 9):  # pragma: no cover
+    Future_Type: TypeAlias = Future
+else:  # pragma: no cover
+    Future_Type: TypeAlias = CAwaitable
 
 
 """
@@ -342,7 +350,7 @@ class CoroStart(Awaitable[T_co]):
         """
         return await self
 
-    def as_future(self) -> Future[T_co]:
+    def as_future(self) -> Future_Type[T_co]:
         """
         if `done()` convert the result of the coroutine into a `Future`
         and return it.  Otherwise raise a `RuntimeError`
