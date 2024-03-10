@@ -98,6 +98,24 @@ Decorating your function makes sense if you __always__ intend
 To _await_ its result at some later point. Otherwise, just apply it at the point
 of invocation in each such case.
 
+It may be prudent to ensure that the result of `eager()` does not continue running
+if it will never be awaited, such as in the case of an error.  You can use the `cancelling()`
+context manager for this:
+
+```python
+with cancelling(eager(my_method())) as v:
+    await some_method_which_may_raise()
+    await v
+```
+
+As a convenience, `eager_ctx()` will perform the above:
+
+```python
+with eager_ctx(my_method()) as v:
+    await some_method_which_may_raise()
+    await v
+```
+
 ### `coro_eager()`, `func_eager()`
 
 `coro_eager()` is the magic coroutine wrapper providing the __eager__ behaviour:
@@ -342,6 +360,18 @@ is provided for completeness.
 
 This helper function turns a coroutine function into an iterator.  It is primarily
 intended to be used by the [`awaitmethod_iter()`](#awaitmethod_iter) function decorator.
+
+### `cancelling()`
+
+This context manager automatically calls the `cancel()`method on its target when the scope
+exits.  This is convenient to make sure that a task is not left running if it never to
+be awaited:
+
+```python
+with cancelling(asyncio.Task(foo())) as t:
+    function_which_may_fail()
+    return await t
+```
 
 ### Monitors and Generators
 
