@@ -2,6 +2,7 @@ import asyncio
 import functools
 import inspect
 import types
+from asyncio import Future
 from contextvars import Context, copy_context
 from types import FrameType
 from typing import (
@@ -10,6 +11,7 @@ from typing import (
     AsyncIterable,
     Awaitable,
     Callable,
+    ContextManager,
     Coroutine,
     Generator,
     Iterator,
@@ -22,9 +24,9 @@ from typing import (
     overload,
 )
 
-from typing_extensions import ParamSpec
+from typing_extensions import ParamSpec, Protocol
 
-from .tools import create_task
+from .tools import Cancellable, cancelling, create_task
 
 __all__ = [
     "CoroStart",
@@ -52,6 +54,11 @@ S = TypeVar("S")
 P = ParamSpec("P")
 T_co = TypeVar("T_co", covariant=True)
 Suspendable = Union[Coroutine, Generator, AsyncGenerator]
+
+
+class CAwaitable(Awaitable[T_co], Cancellable, Protocol):
+    pass
+
 
 """
 Tools and utilities for advanced management of coroutines
@@ -334,7 +341,7 @@ class CoroStart(Awaitable[T_co]):
         """
         return await self
 
-    def as_future(self) -> Awaitable[T_co]:
+    def as_future(self) -> Future[T_co]:
         """
         if `done()` convert the result of the coroutine into a `Future`
         and return it.  Otherwise raise a `RuntimeError`
@@ -353,7 +360,7 @@ class CoroStart(Awaitable[T_co]):
 
     def as_awaitable(self) -> Awaitable[T_co]:
         """
-        If `done()`, return `as_future()`, else `as_coroutine()`.
+        If `done()`, return `as_future()`, else return self.
         This is a convenience function for use when the instance
         is to be passed directly to methods such as `asyncio.gather()`.
         In such cases, we want to avoid a `done()` instance to cause
@@ -381,8 +388,8 @@ async def coro_await(
 def coro_eager(
     coro: Coroutine[Any, Any, T],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
-) -> Awaitable[T]:
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+) -> CAwaitable[T]:
     """
     Make the coroutine "eager":
     Start the coroutine. If it blocks, create a task to continue
@@ -405,7 +412,7 @@ def coro_eager(
 def func_eager(
     func: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
 ) -> Callable[P, Awaitable[T]]:
     """
     Decorator to automatically apply the `coro_eager` to the
@@ -413,7 +420,7 @@ def func_eager(
     """
 
     @functools.wraps(func)
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> Awaitable[T]:
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> CAwaitable[T]:
         return coro_eager(func(*args, **kwargs), task_factory=task_factory)
 
     return wrapper
@@ -423,8 +430,8 @@ def func_eager(
 def eager(
     arg: Coroutine[Any, Any, T],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
-) -> Awaitable[T]:
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+) -> CAwaitable[T]:
     ...
 
 
@@ -432,16 +439,16 @@ def eager(
 def eager(
     arg: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
-) -> Callable[P, Awaitable[T]]:
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+) -> Callable[P, CAwaitable[T]]:
     ...
 
 
 def eager(
     arg: Union[Coroutine[Any, Any, T], Callable[P, Coroutine[Any, Any, T]]],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], Awaitable[T]]] = None,
-) -> Union[Awaitable[T], Callable[P, Awaitable[T]]]:
+    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+) -> Union[CAwaitable[T], Callable[P, CAwaitable[T]]]:
     """
     Convenience function invoking either `coro_eager` or `func_eager`
     to either decorate an async function or convert a coroutine returned by
