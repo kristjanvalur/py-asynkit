@@ -22,10 +22,6 @@ from typing import (
 
 from typing_extensions import Protocol
 
-from .compat import PY_39
-
-# 3.8 or earlier
-
 T = TypeVar("T")
 
 
@@ -320,7 +316,7 @@ def cancelling(target: CA, msg: Optional[str] = None) -> Generator[CA, None, Non
     try:
         yield target
     finally:  # pragma: no cover
-        if PY_39:
+        if sys.version_info >= (3, 9):
             target.cancel(msg)
         else:
             target.cancel()

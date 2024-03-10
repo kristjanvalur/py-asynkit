@@ -9,8 +9,8 @@ from weakref import ReferenceType
 """Compatibility routines for earlier asyncio versions"""
 
 # Pyton version checks
-PY_39 = sys.version_info[:2] >= (3, 9)
-PY_311 = sys.version_info[:2] >= (3, 11)
+PY_39 = sys.version_info >= (3, 9)
+PY_311 = sys.version_info >= (3, 11)
 
 T = TypeVar("T")
 
@@ -62,7 +62,7 @@ else:  # pragma: no cover
         return loop.call_soon(callback, *args)
 
 
-if sys.version_info >= (3, 9):  # pragma: no cover
+if sys.version_info >= (3, 10):  # pragma: no cover
     from asyncio.mixins import _LoopBoundMixin  # type: ignore[import]
 
     LoopBoundMixin = _LoopBoundMixin

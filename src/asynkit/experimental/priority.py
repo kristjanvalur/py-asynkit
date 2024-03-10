@@ -27,7 +27,6 @@ from typing import (
 from typing_extensions import Literal
 
 from asynkit.compat import (
-    PY_39,
     FutureBool,
     LockHelper,
     ReferenceTypeTaskAny,
@@ -685,7 +684,7 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
         This is effectively the same as calling
         `call_soon()`, `queue_remove()` and `queue_insert_pos()` in turn.
         """
-        if PY_39:  # pragma: no cover
+        if sys.version_info >= (3, 9):  # pragma: no cover
             handle = self.call_soon(callback, *args, context=context)
         else:  # pragma: no cover
             handle = self.call_soon(callback, *args)
