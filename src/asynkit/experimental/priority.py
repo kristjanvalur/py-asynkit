@@ -26,7 +26,12 @@ from typing import (
 
 from typing_extensions import Literal
 
-from asynkit.compat import PYTHON_38, FutureBool, LockHelper, ReferenceTypeTaskAny
+from asynkit.compat import (
+    PY_39,
+    FutureBool,
+    LockHelper,
+    ReferenceTypeTaskAny,
+)
 from asynkit.loop.default import task_from_handle
 from asynkit.loop.schedulingloop import AbstractSchedulingLoop
 from asynkit.loop.types import TaskAny
@@ -614,7 +619,7 @@ class PosPriorityQueue(Generic[T]):
 
 
 class EventLoopLike(Protocol):  # pragma: no cover
-    if not PYTHON_38:
+    if PY_39:
 
         def call_soon(
             self,
@@ -680,7 +685,7 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
         This is effectively the same as calling
         `call_soon()`, `queue_remove()` and `queue_insert_pos()` in turn.
         """
-        if not PYTHON_38:  # pragma: no cover
+        if PY_39:  # pragma: no cover
             handle = self.call_soon(callback, *args, context=context)
         else:  # pragma: no cover
             handle = self.call_soon(callback, *args)
