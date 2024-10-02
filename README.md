@@ -849,7 +849,7 @@ in various ways.   For `asyncio`, the event loop never sees the `Future` object 
 
 ## Experimental features
 
-Some features are currently available experimentally.  They may work only on some platforms or be experimental in nature, not stable or mature enough to be officially part of the library
+Some features are currently available experimentally.  They may work only on some platforms or be experimental in nature, not stable or mature enough to be officially part of the library.
 
 ### Task Interruption
 
@@ -857,8 +857,8 @@ Methods are provided to raise exceptions on a `Task`.  This is somewhat similar 
 `task.cancel()` but different:
 
 - The caller specifies the exception instance to be raised on the task.
-- The target task made to run immediately, precluding interference with other operations.
-- The exception does not propagate into awaited objects.  In particular, if the task
+- The target task is made to run *immediately*, precluding interference with other operations.
+- The exception does not propagate into awaited objects.  In particular, if the target task
   is _awaiting_ another task, the wait is interrupted, but that other task is not otherwise
   affected.
   
@@ -868,7 +868,7 @@ the task hasn't become active yet, it is still awoken with an exception.
 
 Please note the following cases:
 
-1. The Python library in places assumes that the only exception that can be
+1. The Python `asyncio` library in places assumes that the only exception that can be
    raised out of awaitables is `CancelledError`.  In particular, there are edge cases
    in `asyncio.Lock`, `asyncio.Semaphore` and `asyncio.Condition` where raising something
    else when acquiring these primitives will leave them in an incorrect state.
@@ -877,7 +877,7 @@ Please note the following cases:
    should be used for interrupts in general.
 
    However, currently `asyncio.Condition` will not correctly pass on such a subclass
-   for `wait()` in all cases, so  a safer version, `InterruptCondition` is provided.
+   for `wait()` in all cases, so  a safer version, `InterruptCondition` class, is provided.
 
 2. Even subclasses of `CancelledError` will be converted to a new `CancelledError`
    instance when not handled in a task, and awaited.
