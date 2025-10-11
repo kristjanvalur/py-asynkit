@@ -1,18 +1,48 @@
-[tool.poetry]
+[project]
 name = "asynkit"
 version = "0.12.0"
 description = "A toolkit for Python coroutines"
-authors = ["Kristján Valur Jónsson <sweskman@gmail.com>"]
-repository = "https://github.com/kristjanvalur/py-asynkit"
+authors = [
+    {name = "Kristján Valur Jónsson", email = "sweskman@gmail.com"}
+]
 readme = "README.md"
 keywords = ["asyncio", "eventloop"]
-license = "MIT"
+license = {text = "MIT"}
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Framework :: AsyncIO"
+    "Framework :: AsyncIO",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
-include=["src/asynkit/py.typed"]
+requires-python = ">=3.8"
+dependencies = [
+    "typing-extensions>=4.4.0",
+]
+
+[project.urls]
+Repository = "https://github.com/kristjanvalur/py-asynkit"
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=0.991",
+    "black>=22.3.0",
+    "pytest>=7.1.1",
+    "pytest-cov>=3.0.0",
+    "poethepoet>=0.29.0",
+    "ruff~=0.0.190",
+    "anyio[trio]>=3.6.0,<3.7.0",
+    "blacken-docs>=1.13.0",
+]
+
+[tool.poe]
+# Use simple executor instead of Poetry
+executor = {type = "simple"}
 
 [tool.poe.tasks]
 lint = "ruff ."
@@ -28,23 +58,22 @@ check = ["style", "lint", "typing", "cov"]
 help = "Validate black code style"
 cmd  = "black . --check --diff"
 
-[tool.poetry.dependencies]
-python = "^3.8"
-typing-extensions = "^4.4.0"
-
-[tool.poetry.group.dev.dependencies]
-mypy = "^0.991"
-black = "^22.3.0"
-pytest = "^7.1.1"
-pytest-cov = "^3.0.0"
-poethepoet = "^0.13.1"
-ruff = "~0.0.190"
-anyio = {extras = ["trio"], version = ">=3.6.0 <3.7.0"}  # typing introduced in 3.7
-blacken-docs = "^1.13.0"
-
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asynkit"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/asynkit",
+    "tests",
+    "examples",
+    "README.md",
+    "LICENSE",
+    "CHANGES",
+]
 
 [tool.pytest.ini_options]
 #addopts = "-ra -q"

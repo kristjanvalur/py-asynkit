@@ -23,22 +23,22 @@ jobs:
     name: Run linting on Python ${{ matrix.python-version }} on ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      - name: Install Python
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install poetry
-        uses: abatilo/actions-poetry@v2
+          enable-cache: true
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
       - name: Install dependencies
-        run: poetry install
+        run: uv sync --all-extras
       - name: Coverage
-        run: poetry run poe cov
+        run: uv run poe cov
       - name: Run Lint
-        run: poetry run poe lint
+        run: uv run poe lint
       - name: Run Black
-        run: poetry run poe black --check
+        run: uv run poe black --check
       - name: Run typechecks
-        run: poetry run poe typing
+        run: uv run poe typing
 
   tests:
     runs-on: ${{ matrix.os }}
@@ -53,22 +53,21 @@ jobs:
     name: Run unittests on Python ${{ matrix.python-version }} on ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
-    - uses: actions/setup-python@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
       with:
-        python-version: ${{ matrix.python-version }}
-        # cache: 'poetry' # cache is causing problems
-    
-    - name: Install poetry
-      uses: abatilo/actions-poetry@v2
+        enable-cache: true
+    - name: Set up Python ${{ matrix.python-version }}
+      run: uv python install ${{ matrix.python-version }}
     - name: Install dev dependencies
-      run: poetry install
+      run: uv sync --all-extras
 
     - name: Run the tests for selector loop
-      run: poetry run pytest
+      run: uv run pytest
     
     - name: Run the tests for proactor loop
       if: ${{ matrix.os == 'windows-latest' }}
-      run: poetry run pytest --proactor
+      run: uv run pytest --proactor
     
   testall:
     if: ${{ always() }}
@@ -93,11 +92,11 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: 3.9
-    - name: Install poetry
-      uses: abatilo/actions-poetry@v2
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
 
     - name: Build a binary wheel and a source tarball
-      run: poetry build
+      run: uv build
 
     - name: Publish distribution to Test PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
