@@ -19,7 +19,6 @@ class HybridMiddleWare:
     def get_processed_data(self):
         raw_data = self.data_getter()
         if isawaitable(raw_data):
-
             # Create async helper method to be returned
             async def async_helper():
                 raw_data2 = await raw_data

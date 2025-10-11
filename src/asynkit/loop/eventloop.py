@@ -5,15 +5,12 @@ import asyncio.base_events
 import contextlib
 import sys
 from asyncio import AbstractEventLoop, AbstractEventLoopPolicy, Future, Handle, Task
+from collections import deque
+from collections.abc import Callable, Generator, Iterable
 from contextvars import Context
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Deque,
-    Generator,
-    Iterable,
-    Optional,
     Protocol,
     TypeVar,
     cast,
@@ -46,11 +43,9 @@ T = TypeVar("T")
 
 class HasReadyQueue(Protocol):
     @property
-    def _ready(self) -> Deque[Handle]:
-        ...  # pragma: no cover
+    def _ready(self) -> deque[Handle]: ...  # pragma: no cover
 
-    def get_ready_queue(self: HasReadyQueue) -> Deque[Handle]:
-        ...  # pragma: no cover
+    def get_ready_queue(self: HasReadyQueue) -> deque[Handle]: ...  # pragma: no cover
 
 
 class SchedulingMixin(AbstractSchedulingLoop):
@@ -58,7 +53,7 @@ class SchedulingMixin(AbstractSchedulingLoop):
     A mixin class adding features to the base event loop.
     """
 
-    def get_ready_queue(self: HasReadyQueue) -> Deque[Handle]:
+    def get_ready_queue(self: HasReadyQueue) -> deque[Handle]:
         """
         Default implementation to get the Ready Queue of the loop.
         Subclassable by other implementations.
@@ -76,7 +71,7 @@ class SchedulingMixin(AbstractSchedulingLoop):
 
     def queue_find(
         self: HasReadyQueue, key: Callable[[Handle], bool], remove: bool = False
-    ) -> Optional[Handle]:
+    ) -> Handle | None:
         return default.queue_find(self.get_ready_queue(), key, remove)
 
     def queue_insert(self: HasReadyQueue, handle: Handle) -> None:
@@ -93,12 +88,12 @@ class SchedulingMixin(AbstractSchedulingLoop):
         position: int,
         callback: Callable[..., Any],
         *args: Any,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ) -> Handle:
         loop = cast(AbstractEventLoop, self)
         return default.call_pos(loop, position, callback, *args, context=context)
 
-    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+    def task_from_handle(self, handle: Handle) -> TaskAny | None:
         return default.task_from_handle(handle)
 
 
@@ -113,7 +108,8 @@ DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
 if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
 
     class SchedulingProactorEventLoop(
-        asyncio.ProactorEventLoop, SchedulingMixin  # type: ignore
+        asyncio.ProactorEventLoop,  # type: ignore[name-defined,misc]
+        SchedulingMixin,
     ):
         pass
 
@@ -130,7 +126,7 @@ class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 
 @contextlib.contextmanager
 def event_loop_policy(
-    policy: Optional[AbstractEventLoopPolicy] = None,
+    policy: AbstractEventLoopPolicy | None = None,
 ) -> Generator[AbstractEventLoopPolicy, Any, None]:
     policy = policy or SchedulingEventLoopPolicy()
     previous = asyncio.get_event_loop_policy()

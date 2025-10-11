@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from asyncio import Handle
+from collections.abc import Callable, Iterable
 from contextvars import Context
-from typing import Any, Callable, Iterable, Optional
+from typing import Any
 
 from .types import TaskAny
 
@@ -38,7 +41,7 @@ class AbstractSchedulingLoop(ABC):
     @abstractmethod
     def queue_find(
         self, key: Callable[[Handle], bool], remove: bool = False
-    ) -> Optional[Handle]:
+    ) -> Handle | None:
         """Find a callback in the queue and return its handle.
         Returns None if not found.  if `remove` is true, it is also
         removed from the queue."""
@@ -69,7 +72,7 @@ class AbstractSchedulingLoop(ABC):
         position: int,
         callback: Callable[..., Any],
         *args: Any,
-        context: Optional[Context] = None
+        context: Context | None = None,
     ) -> Handle:
         """Arrange for a callback to be inserted at position 'pos' near the the head of
         the queue to be called soon.  'position' is typically a low number, 0 or 1.
@@ -81,7 +84,7 @@ class AbstractSchedulingLoop(ABC):
     # helper to find tasks from handles and to find certain handles
     # in the queue
     @abstractmethod
-    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+    def task_from_handle(self, handle: Handle) -> TaskAny | None:
         """
         Extract the runnable Task object
         from its scheduled callback.  Returns None if the

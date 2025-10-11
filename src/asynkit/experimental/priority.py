@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import random
@@ -5,30 +7,21 @@ import sys
 import weakref
 from abc import ABC, abstractmethod
 from asyncio import Handle, Lock, Task
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 from contextvars import Context
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
     Any,
-    AsyncIterator,
-    Callable,
     Generic,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
+    Literal,
     Protocol,
-    Set,
-    Tuple,
     TypeVar,
     cast,
 )
 
-from typing_extensions import Literal
-
 from asynkit.compat import (
     FutureBool,
-    LockHelper,
     ReferenceTypeTaskAny,
 )
 from asynkit.loop.default import task_from_handle
@@ -65,7 +58,7 @@ class BasePriorityObject(ABC):
     """
 
     @abstractmethod
-    def effective_priority(self) -> Optional[float]:
+    def effective_priority(self) -> float | None:
         """
         Return the effective priority of this object.  For a task,
         this is the minimum of the task's priority and the effective
@@ -122,20 +115,21 @@ async def _released(lock: Lock) -> AsyncIterator[None]:
                 err = None
 
 
-class PriorityLock(Lock, BasePriorityObject, LockHelper):
+class PriorityLock(Lock, BasePriorityObject):
     """
     A lock which supports keeping track of the waiting Task
     objects and can compute the highest effective priority
     of all waiting Tasks.
     """
 
-    _waiters: Optional[PriorityQueue[float, Tuple[FutureBool, ReferenceTypeTaskAny]]]
+    # Override base class _waiters to use priority queue instead of deque
+    _waiters: PriorityQueue[float, tuple[FutureBool, ReferenceTypeTaskAny]] | None  # type: ignore[assignment]
 
     def __init__(self) -> None:
         # we use weakrefs to avoid reference cycles.  Tasks _own_ locks,
         # but locks don't own tasks. These are _backrefs_.
         super().__init__()
-        self._owning: Optional[ReferenceTypeTaskAny] = None
+        self._owning: ReferenceTypeTaskAny | None = None
 
     async def acquire(self) -> Literal[True]:
         """Acquire a lock.
@@ -215,7 +209,7 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
         if not fut.done():  # pragma: no branch
             fut.set_result(True)
 
-    def effective_priority(self) -> Optional[float]:
+    def effective_priority(self) -> float | None:
         # waiting tasks are either PriorityTasks or not.
         # regular tasks are given a priority of 0
         if not self._waiters:
@@ -252,7 +246,7 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
         else:
 
             def key(
-                entry: Tuple[FutureBool, ReferenceTypeTaskAny],
+                entry: tuple[FutureBool, ReferenceTypeTaskAny],
             ) -> bool:
                 fut, _ = entry
                 return fut is from_obj
@@ -261,15 +255,16 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
                 self._waiters.reschedule(key, priority)
 
 
-class PriorityCondition(asyncio.Condition, LockHelper):
+class PriorityCondition(asyncio.Condition):
     """A Condition variable which notifies waiters in priority order."""
 
     LockType = PriorityLock
 
-    def __init__(self, lock: Optional[asyncio.Lock] = None) -> None:
+    def __init__(self, lock: asyncio.Lock | None = None) -> None:
         lock = lock or self.LockType()
         super().__init__(lock=lock)
-        self._waiters: PriorityQueue[float, FutureBool] = PriorityQueue()
+        # Override base class _waiters to use priority queue instead of deque
+        self._waiters: PriorityQueue[float, FutureBool] = PriorityQueue()  # type: ignore[assignment]
 
     async def wait(self) -> Literal[True]:
         if not self.locked():  # pragma: no cover
@@ -335,8 +330,8 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         # Must initialize these attributes before calling parent init
         # because that will schedule the task.
         self.priority_value = priority
-        self._holding_locks: Set[PriorityLock] = set()
-        self._waiting_on: Optional[Any] = None
+        self._holding_locks: set[PriorityLock] = set()
+        self._waiting_on: Any | None = None
         super().__init__(coro, loop=loop, name=name)
 
     def add_owned_lock(self, lock: PriorityLock) -> None:
@@ -345,7 +340,7 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
     def remove_owned_lock(self, lock: PriorityLock) -> None:
         self._holding_locks.remove(lock)
 
-    def set_waiting_on(self, obj: Optional[Any]) -> None:
+    def set_waiting_on(self, obj: Any | None) -> None:
         if obj is not None:
             assert self._waiting_on is None
         else:
@@ -401,7 +396,7 @@ class PriorityValue:
     def priority(self) -> float:
         return self.base_priority + self.priority_boost
 
-    def __lt__(self, other: "PriorityValue") -> bool:
+    def __lt__(self, other: PriorityValue) -> bool:
         if self.priority_class != other.priority_class:
             return self.priority_class < other.priority_class
         return self.priority() < other.priority()
@@ -498,7 +493,7 @@ class PosPriorityQueue(Generic[T]):
             self.boost_stragglers(stragglers, min_pri, max_pri)
 
     def boost_stragglers(
-        self, stragglers: List[Tuple[PriorityValue, T]], min_pri: float, max_pri: float
+        self, stragglers: list[tuple[PriorityValue, T]], min_pri: float, max_pri: float
     ) -> None:
         n_boosted = 0
         for pri, _ in stragglers:
@@ -542,7 +537,7 @@ class PosPriorityQueue(Generic[T]):
         # reglar priority queues are (1, priority) and so the
         # immediate queue is always first.
 
-        promoted: List[T] = []
+        promoted: list[T] = []
         priority_val = 0.0
         try:
             while position > len(promoted):
@@ -581,7 +576,7 @@ class PosPriorityQueue(Generic[T]):
         self,
         key: Callable[[T], bool],
         remove: bool = False,
-    ) -> Optional[T]:
+    ) -> T | None:
         found = self._pq.find(key, remove)
         if found is not None:
             pri, obj = found
@@ -592,7 +587,7 @@ class PosPriorityQueue(Generic[T]):
         self,
         key: Callable[[T], bool],
         new_priority: float,
-    ) -> Optional[T]:
+    ) -> T | None:
         """
         Reschedule an object which is already in the queue.
         """
@@ -618,24 +613,12 @@ class PosPriorityQueue(Generic[T]):
 
 
 class EventLoopLike(Protocol):  # pragma: no cover
-    if sys.version_info >= (3, 9):  # pragma: no cover
-
-        def call_soon(
-            self,
-            callback: Callable[..., Any],
-            *args: Any,
-            context: Optional[Context] = None,
-        ) -> Handle:
-            ...  # pragma: no cover
-
-    else:
-
-        def call_soon(
-            self,
-            callback: Callable[..., Any],
-            *args: Any,
-        ) -> Handle:
-            ...  # pragma: no cover
+    def call_soon(
+        self,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Context | None = None,
+    ) -> Handle: ...  # pragma: no cover
 
 
 class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
@@ -660,7 +643,7 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
 
     def queue_find(
         self, key: Callable[[Handle], bool], remove: bool = False
-    ) -> Optional[Handle]:
+    ) -> Handle | None:
         return self.ready_queue.find(key, remove)
 
     def queue_remove(self, handle: Handle) -> None:
@@ -677,24 +660,21 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
         position: int,
         callback: Callable[..., Any],
         *args: Any,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ) -> Handle:
         """Arrange for a callback to be inserted at position 'pos' near the the head of
         the queue to be called soon.  'position' is typically a low number, 0 or 1.
         This is effectively the same as calling
         `call_soon()`, `queue_remove()` and `queue_insert_pos()` in turn.
         """
-        if sys.version_info >= (3, 9):  # pragma: no cover
-            handle = self.call_soon(callback, *args, context=context)
-        else:  # pragma: no cover
-            handle = self.call_soon(callback, *args)
+        handle = self.call_soon(callback, *args, context=context)
         self.queue_remove(handle)
         self.queue_insert_pos(handle, position)
         return handle
 
     # helper to find tasks from handles and to find certain handles
     # in the queue
-    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+    def task_from_handle(self, handle: Handle) -> TaskAny | None:
         """
         Extract the runnable Task object
         from its scheduled callback.  Returns None if the

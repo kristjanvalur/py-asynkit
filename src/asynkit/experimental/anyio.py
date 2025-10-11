@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import contextlib
+from collections.abc import AsyncIterator, Callable, Coroutine
 from types import TracebackType
-from typing import Any, AsyncIterator, Callable, Coroutine, Optional, Type
+from typing import Any
 
 import pytest
 from anyio import create_task_group
@@ -20,7 +23,7 @@ class TaskStatusForwarder(TaskStatus):
     __slots__ = ["forward", "done", "value"]
 
     def __init__(self) -> None:
-        self.forward: Optional[TaskStatus] = None
+        self.forward: TaskStatus | None = None
         self.done: bool = False
         self.value: object = None
 
@@ -60,7 +63,7 @@ class EagerTaskGroup(TaskGroup):
         self,
         func: Callable[..., Coroutine[Any, Any, Any]],
         *args: object,
-        name: Optional[object] = None
+        name: object | None = None,
     ) -> Coroutine[Any, Any, Any]:
         ts = TaskStatusForwarder()
         cs = CoroStart(func(*args, task_status=ts))
@@ -105,7 +108,7 @@ class EagerTaskGroup(TaskGroup):
         self,
         func: Callable[..., Coroutine[Any, Any, Any]],
         *args: object,
-        name: Optional[object] = None
+        name: object | None = None,
     ) -> Any:
         cs = CoroStart(func(*args))
         if cs.done():
@@ -113,17 +116,17 @@ class EagerTaskGroup(TaskGroup):
         else:
             return self._task_group.start_soon(lambda: cs.as_coroutine(), name=name)
 
-    async def __aenter__(self) -> "TaskGroup":
+    async def __aenter__(self) -> TaskGroup:
         """Enter the task group context and allow starting new tasks."""
         await self._task_group.__aenter__()
         return self
 
     async def __aexit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
         """Exit the task group context waiting for all tasks to finish."""
         return await self._task_group.__aexit__(exc_type, exc_val, exc_tb)
 

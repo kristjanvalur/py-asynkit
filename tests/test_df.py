@@ -21,7 +21,6 @@ def anyio_backend(request):
 
 @pytest.mark.parametrize("method", ["nostart", "start", "descend", "eager"])
 class TestCreateTask:
-
     delay = 0.01
     error = False
 

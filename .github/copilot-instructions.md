@@ -1,5 +1,15 @@
 # GitHub Copilot Instructions for py-asynkit
 
+## Interaction Style
+
+Address the user as "boss" (they are the DI - Detective Chief Inspector). Style responses as a DS (Detective Sergeant) reporting findings:
+- Professional and respectful
+- Clear, direct updates on investigation progress
+- "Right, boss" or "Yes, boss" acknowledgments
+- Report findings methodically
+- Ask clarifying questions when needed
+- Summarize what's been accomplished
+
 ## Project Overview
 
 **asynkit** is a toolkit for Python coroutines that provides advanced control over Python's `asyncio` module. It offers low-level coroutine manipulation, custom event loop implementations, and scheduling helpers.
@@ -40,29 +50,48 @@ py-asynkit/
 ## Development Setup
 
 ### Prerequisites
-- Python 3.8+
-- Poetry for dependency management
+- Python 3.10+
+- uv for dependency management
 
 ### Installation
 ```bash
-poetry install
+uv sync
 ```
 
 ### Common Tasks (using poethepoet)
-- `poetry run poe test` - Run tests
-- `poetry run poe cov` - Run tests with coverage
-- `poetry run poe lint` - Run ruff linter
-- `poetry run poe black` - Format code with black
-- `poetry run poe typing` - Run mypy type checking
-- `poetry run poe check` - Run all checks (style, lint, typing, coverage)
+- `uv run poe test` - Run tests
+- `uv run poe cov` - Run tests with coverage
+- `uv run poe lint` - Run ruff linter
+- `uv run poe format` - Format code with ruff
+- `uv run poe typing` - Run mypy type checking
+- `uv run poe check` - Run all checks (style, lint, typing, coverage)
+
+## Important: Low-Level Implementation Details
+
+**asynkit fundamentally works by accessing internal, undocumented implementation details of Python's asyncio module.** This includes:
+
+- Direct manipulation of coroutine internals (`cr_frame`, `cr_await`, `gi_frame`)
+- Calling low-level coroutine methods like `throw()`, `send()`, `close()`
+- Manipulating event loop internals and the ready queue
+- Accessing private asyncio attributes and methods
+- Working with frame objects and execution state
+
+**Implications for Type Checking:**
+- Strict mypy type checking is **not always possible** for this codebase
+- The Python type system doesn't expose these internal APIs properly
+- `type: ignore` comments are sometimes **necessary and acceptable** when working with these low-level details
+- Some type errors cannot be resolved without sacrificing functionality
+- Focus on type safety for public APIs; internal implementation may need type bypasses
+
+When adding type ignores for low-level operations, add a comment explaining why the bypass is necessary (e.g., "accessing internal asyncio implementation detail").
 
 ## Coding Conventions
 
 ### Style Guide
-- **Formatting**: Black (line length 88)
+- **Formatting**: Ruff format (line length 88)
 - **Imports**: Organized with ruff (isort-style)
 - **Linting**: Ruff with E, F, I rules enabled
-- **Type Checking**: Strict mypy for `asynkit.*` modules
+- **Type Checking**: Mypy for `asynkit.*` modules (strict where possible, pragmatic type ignores when needed for low-level operations)
 - **Docstrings**: Triple-quoted strings for public APIs
 
 ### Type Annotations
@@ -82,6 +111,77 @@ poetry install
 1. Standard library imports
 2. Third-party imports (asyncio, typing_extensions)
 3. Local imports (relative from `.`)
+
+## Prose Style Guidelines
+
+When writing documentation, changelog entries, docstrings, or comments, follow this style:
+
+### General Principles
+- **Clear and technical**: Write in a clear, direct style that assumes technical competence
+- **Conversational yet precise**: Use a friendly, approachable tone while maintaining technical accuracy
+- **Explain motivation**: Don't just state what something does—explain why it's useful or what problem it solves
+- **Use examples liberally**: Concrete code examples clarify abstract concepts
+- **Emphasize with formatting**: Use **bold** for emphasis, _italics_ for terms, and `backticks` for code
+
+### Documentation Style (README, Guides)
+- **Lead with the problem**: Start sections by describing the pain point or use case
+  - Example: "Did you ever wish that your _coroutines_ started right away...?"
+- **Use rhetorical questions**: Engage readers by posing questions they might have
+  - Example: "Now they can. Just decorate or convert them with..."
+- **Show before-and-after**: When introducing improvements, contrast old approaches with new ones
+- **Casual connectives**: Use phrases like "Notice how...", "Needless to say...", "In effect..."
+- **Code speaks**: Let code examples carry the narrative, with brief explanatory text
+- **Highlight key points**: Use phrases like "__right away__", "__directly__", "__as soon as possible__"
+
+### Changelog Style (CHANGES.md)
+- **Structured and scannable**: Use clear section headers (Breaking Changes, Build System, Code Modernization)
+- **Lead with impact**: State user-facing changes first, then technical details
+- **Bullet hierarchy**: Use sub-bullets to provide context and rationale under main points
+- **Specific and concrete**: Name exact tools, versions, and what changed
+  - Example: "Migrated from Poetry to uv (0.14.0)" not just "Changed build system"
+- **Explain reasoning**: Add brief context for why changes were made
+  - Example: "Python 3.8 reached end-of-life in October 2024"
+- **Quantify when relevant**: Include numbers that show impact
+  - Example: "10-100x speedup", "Removed 79 lines of redundant code"
+
+### Code Comments Style
+- **Lowercase, conversational**: Comments are lowercase and read naturally
+  - Example: `# we can just merge them and don't need to heapify`
+- **Explain algorithms**: Describe the reasoning behind implementation choices
+  - Example: `# reversed is a heuristic because we are more likely to be looking for`
+- **Note tradeoffs**: Mention alternative approaches and why they weren't chosen
+  - Example: `# could mark the old entry as removed and re-add a new entry, that will be O(logn) instead of O(n) but lets not worry.`
+- **Implementation rationale**: Explain why code is structured a particular way
+  - Example: `# use only the __lt__ operator to determine if priority has changed since that is the one used to define priority for the heap`
+
+### Docstrings Style
+- **Start with action**: Begin with what the function/class does
+  - Example: "Returns True if the coroutine has finished execution"
+- **Brief first line**: First line is a concise summary (no "This function..." or "This method...")
+- **Add context when needed**: Follow with detailed explanation if the behavior is subtle
+- **Keep it minimal**: Don't over-document obvious behavior
+
+### Technical Writing Patterns
+- Use "Now they can" rather than "This can now be done"
+- Prefer "allows you to" over "enables" or "permits"
+- Say "right away" rather than "immediately" for emphasis
+- Use "just" to make things sound simple: "just decorate", "just apply it"
+- Employ contrast words: "Instead", "Unlike", "Needless to say"
+- Phrase improvements as discoveries: "Did you ever wish...", "Now they can"
+
+### Formatting Conventions
+- **Bold**: For emphasis and key concepts
+- _Italics_: For technical terms on first use, or for subtle emphasis
+- `Backticks`: For all code elements (functions, classes, variables, types)
+- __Double underscores__: For strong emphasis in Markdown
+- Capitalize proper nouns: Python, C#, asyncio (lowercase), Task (when referring to asyncio.Task)
+
+### What to Avoid
+- Passive voice: Not "can be done" but "you can do"
+- Overly formal: Not "utilizes" but "uses"
+- Redundancy: Don't say "mypy type checking" (just "mypy")
+- Qualification overkill: Trust the reader's intelligence
+- Apologetic tone: Be confident about design decisions
 
 ## Key Concepts and Patterns
 
@@ -184,10 +284,11 @@ Use `@types.coroutine` decorator for generator-based coroutines that can be awai
 ## Compatibility Notes
 
 ### Python Version Support
-- Minimum: Python 3.8
-- Tested on: 3.8, 3.9, 3.10, 3.11, 3.12, PyPy 3.9, PyPy 3.10
-- Type aliases: Use `typing_extensions.TypeAlias` for 3.8 compatibility
-- Generic syntax: Use old-style `Generic[T]` base class, not PEP 695 syntax
+- Minimum: Python 3.10
+- Tested on: 3.10, 3.11, 3.12, PyPy 3.10
+- Type hints: Use built-in generics (`list[int]`, `dict[str, int]`)
+- Union syntax: Can use `X | Y` and `X | None` (Python 3.10+ feature)
+- Generic syntax: Use old-style `Generic[T]` base class, not PEP 695 syntax (requires 3.12+)
 
 ### Platform Support
 - Primary: Linux (Ubuntu)
@@ -277,8 +378,8 @@ When adding new features:
 2. Update `__all__` exports
 3. Add tests mirroring the module structure
 4. Update README.md with examples
-5. Run full check: `poetry run poe check`
-6. Consider backward compatibility (Python 3.8+)
+5. Run full check: `uv run poe check`
+6. Consider backward compatibility (Python 3.10+)
 7. Mark experimental features clearly
 
 ## Related Documentation

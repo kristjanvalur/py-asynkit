@@ -10,6 +10,8 @@ from asynkit import BoundMonitor, GeneratorObject, Monitor, OOBData
 PYPY = sys.implementation.name == "pypy"
 
 pytestmark = pytest.mark.anyio
+
+
 # Most tests here are just testing coroutine behaviour.
 # some need to explicitly start tasks
 @pytest.fixture
@@ -809,7 +811,6 @@ class TestGenerator:
                 return g(gf(g))
 
         for op, args in [("asend", ["A"]), ("athrow", [EOFError]), ("aclose", [])]:
-
             agenerator = consumer()
             await agenerator.asend(None)  # start it
             # fa will hit sleep and then fb will run
@@ -826,7 +827,6 @@ class TestGenerator:
     @pytest.mark.parametrize("anyio_backend", ["asyncio"])
     @pytest.mark.parametrize("gentype", ["std", "oob"], ids=["async gen", "Generator"])
     async def test_loop_cleanup(self, gentype, anyio_backend):
-
         closed = False
         if gentype == "std":
 
@@ -885,7 +885,6 @@ class TestGenerator:
         state = 0
 
         if gentype == "std":
-
             if PYPY:
                 pytest.skip("pypy does not implemente ag_running correctly")
 

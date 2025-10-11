@@ -92,7 +92,6 @@ async def test_error_start_soon():
 
 
 async def test_cancel_scope_corruption(anyio_backend_name):
-
     if anyio_backend_name == "trio":
         pytest.xfail("cancel weirness for a task")
 
@@ -127,7 +126,6 @@ class TestStartSoon:
         assert result == ["a", "b"]
 
     def get_coro(self, block):
-
         event = Event()
 
         async def coro(result, val):
@@ -152,7 +150,6 @@ class TestStartSoon:
                 event.set()
 
     def get_coro_err1(self, block):
-
         event = Event()
 
         async def coro(result, val):
@@ -174,15 +171,14 @@ class TestStartSoon:
 
         with pytest.raises(EOFError) if not (eager and not block) else nullcontext():
             async with group() as tg:
-                with pytest.raises(EOFError) if (
-                    eager and not block
-                ) else nullcontext():
+                with (
+                    pytest.raises(EOFError) if (eager and not block) else nullcontext()
+                ):
                     tg.start_soon(coro, result, "b", name="myname")
                     assert result == (["a"] if eager else [])
                 event.set()
 
     def get_coro_err2(self, block):
-
         event = Event()
 
         async def coro(result, val):
@@ -208,7 +204,6 @@ async def test_task_status_forwarder(block, anyio_backend):
         result = "bar"
 
     async with create_task_group() as tg:
-
         sf = TaskStatusForwarder()
         cs = CoroStart(coro(sf))
 
@@ -265,7 +260,6 @@ class TestStart:
         assert result == ["a", "b"]
 
     def get_coro(self, block):
-
         event = Event()
 
         async def coro(result, val, *, task_status):
@@ -328,7 +322,6 @@ class TestStart:
                 assert await coro2 == "b"
 
     def get_coro_err2(self, block):
-
         event = Event()
 
         async def coro(result, val, *, task_status):
@@ -368,7 +361,6 @@ class TestStart:
         assert got_start
 
     def get_coro_err3(self, block):
-
         event = Event()
 
         async def coro(result, val, *, task_status):
@@ -406,7 +398,6 @@ class TestStart:
         assert result == ["a", "b"]
 
     def get_coro_err4(self, block):
-
         event = Event()
 
         async def coro(result, val, *, task_status):

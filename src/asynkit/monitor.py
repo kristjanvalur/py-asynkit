@@ -1,20 +1,21 @@
+from __future__ import annotations
+
+import builtins
 import sys
 import types
-from types import TracebackType
-from typing import (
-    Any,
+from collections.abc import (
     AsyncGenerator,
     AsyncIterator,
     Awaitable,
     Callable,
     Coroutine,
     Generator,
+)
+from types import TracebackType
+from typing import (
+    Any,
     Generic,
-    Optional,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
     cast,
     overload,
 )
@@ -43,7 +44,7 @@ class OOBData(Exception):
 
     __slots__ = ["data"]
 
-    def __init__(self, data: Optional[Any] = None):
+    def __init__(self, data: Any | None = None):
         self.data = data
 
 
@@ -66,7 +67,7 @@ class Monitor(Generic[T]):
         self,
         coro: Coroutine[Any, Any, T],
         callable: Callable[..., Any],
-        args: Tuple[Any, ...],
+        args: tuple[Any, ...],
     ) -> Generator[Any, Any, T]:
         """
         Await a coroutine after an initial "send" call which is either
@@ -110,7 +111,7 @@ class Monitor(Generic[T]):
     async def aawait(
         self,
         coro: Coroutine[Any, Any, T],
-        data: Optional[Any] = None,
+        data: Any | None = None,
     ) -> T:
         """
         Asynchronously await the coroutine result.  If the coroutine calls `oob()`
@@ -135,11 +136,10 @@ class Monitor(Generic[T]):
     async def athrow(
         self,
         coro: Coroutine[Any, Any, T],
-        type: Type[BaseException],
-        value: Union[BaseException, object] = ...,
-        traceback: Optional[TracebackType] = ...,
-    ) -> T:
-        ...
+        type: type[BaseException],
+        value: BaseException | object = ...,
+        traceback: TracebackType | None = ...,
+    ) -> T: ...
 
     @overload
     async def athrow(
@@ -147,16 +147,15 @@ class Monitor(Generic[T]):
         coro: Coroutine[Any, Any, T],
         type: BaseException,
         value: None = ...,
-        traceback: Optional[TracebackType] = ...,
-    ) -> T:
-        ...
+        traceback: TracebackType | None = ...,
+    ) -> T: ...
 
     async def athrow(
         self,
         coro: Coroutine[Any, Any, T],
-        type: Union[BaseException, Type[BaseException]],
-        value: Union[BaseException, object] = None,
-        traceback: Optional[TracebackType] = None,
+        type: BaseException | type[BaseException],
+        value: BaseException | object = None,
+        traceback: TracebackType | None = None,
     ) -> T:
         """
         Similar to `aawait()` but throws an exception into the coroutine at the
@@ -165,7 +164,7 @@ class Monitor(Generic[T]):
         return await self._asend(coro, coro.throw, (type, value, traceback))
 
     @types.coroutine
-    def oob(self, data: Optional[Any] = None) -> Generator[Any, Any, Any]:
+    def oob(self, data: Any | None = None) -> Generator[Any, Any, Any]:
         """
         Send Out Of Band data to a higher up caller which is awaiting `aawait()` or
         `athrow()`.  It will cause a `OOBData` exception to be generated for the caller
@@ -183,7 +182,7 @@ class Monitor(Generic[T]):
         coro: Coroutine[Any, Any, T],
     ) -> None:
         """Close the coroutine, by sending a GeneratorExit exception into it."""
-        if coro.cr_frame is None:
+        if coro_is_finished(coro):
             return  # already closed
         try:
             await self.athrow(coro, GeneratorExit)
@@ -207,7 +206,7 @@ class Monitor(Generic[T]):
     async def try_await(
         self,
         coro: Coroutine[Any, Any, T],
-        data: Optional[Any] = None,
+        data: Any | None = None,
         sentinel: Any = None,
     ) -> Any:
         """
@@ -235,39 +234,40 @@ class BoundMonitor(Generic[T]):
     def __await__(self) -> Generator[Any, Any, T]:
         return self.monitor.aawait(self.coro, None).__await__()
 
-    async def aawait(self, data: Optional[Any] = None) -> T:
+    async def aawait(self, data: Any | None = None) -> T:
         return await self.monitor.aawait(self.coro, data)
 
     @overload
     async def athrow(
         self,
-        type: Type[BaseException],
-        value: Union[BaseException, object] = ...,
-        traceback: Optional[TracebackType] = ...,
-    ) -> T:
-        ...
+        type: type[BaseException],
+        value: BaseException | object = ...,
+        traceback: TracebackType | None = ...,
+    ) -> T: ...
 
     @overload
     async def athrow(
         self,
         type: BaseException,
         value: None = ...,
-        traceback: Optional[TracebackType] = ...,
-    ) -> T:
-        ...
+        traceback: TracebackType | None = ...,
+    ) -> T: ...
 
     async def athrow(
         self,
-        type: Union[BaseException, Type[BaseException]],
-        value: Union[BaseException, object] = None,
-        traceback: Optional[TracebackType] = None,
+        type: BaseException | type[BaseException],
+        value: BaseException | object = None,
+        traceback: TracebackType | None = None,
     ) -> T:
         """
         Similar to `aawait()` but throws an exception into the coroutine at the
         point where it is suspended.
         """
         return await self.monitor.athrow(
-            self.coro, type, value, traceback  # type: ignore [arg-type]
+            self.coro,
+            type,  # type: ignore[arg-type]
+            value,
+            traceback,
         )
 
     async def aclose(self) -> None:
@@ -276,7 +276,7 @@ class BoundMonitor(Generic[T]):
     async def start(self) -> Any:
         return await self.monitor.start(self.coro)
 
-    async def try_await(self, data: Optional[Any] = None, sentinel: Any = None) -> Any:
+    async def try_await(self, data: Any | None = None, sentinel: Any = None) -> Any:
         return await self.monitor.try_await(self.coro, data, sentinel)
 
 
@@ -288,9 +288,7 @@ class GeneratorObject(Generic[T, V]):
     ) -> None:
         self.monitor: Monitor[Any] = Monitor()
 
-    def __call__(
-        self, coro: Coroutine[Any, Any, Any]
-    ) -> "GeneratorObjectIterator[T, V]":
+    def __call__(self, coro: Coroutine[Any, Any, Any]) -> GeneratorObjectIterator[T, V]:
         return GeneratorObjectIterator(self.monitor, coro)
 
     async def ayield(self, value: T) -> Any:
@@ -307,8 +305,8 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         self.monitor = monitor
         self.coro = coro
         # Mypy thinks ag_running is read-only
-        self.ag_running = False  # type: ignore[misc]
-        self.finalizer: Optional[Callable[[Any], None]] = None
+        self.ag_running = False
+        self.finalizer: Callable[[Any], None] | None = None
 
     def __aiter__(self) -> AsyncIterator[T_co]:
         return self
@@ -324,16 +322,16 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         hooks = sys.get_asyncgen_hooks()
         if hooks.firstiter is not None:
             hooks.firstiter(self)
-        self.finalizer = cast(Optional[Callable[[Any], None]], hooks.finalizer)
+        self.finalizer = cast(Callable[[Any], None] | None, hooks.finalizer)
 
-    async def asend(self, value: Optional[T_contra]) -> T_co:
+    async def asend(self, value: T_contra | None) -> T_co:
         if self.ag_running:
             raise RuntimeError("asend(): asynchronous generator is already running")
         if coro_is_finished(self.coro):
             raise StopAsyncIteration()
         elif coro_is_new(self.coro):
             self._first_iter()
-        self.ag_running = True  # type: ignore[misc]
+        self.ag_running = True
         try:
             await self.monitor.aawait(self.coro, value)
         except OOBData as oob:
@@ -346,31 +344,29 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         else:
             raise StopAsyncIteration()
         finally:
-            self.ag_running = False  # type: ignore[misc]
+            self.ag_running = False
 
     @overload
     async def athrow(
         self,
-        type: Type[BaseException],
-        value: Union[BaseException, object] = ...,
-        traceback: Optional[TracebackType] = ...,
-    ) -> T_co:
-        ...
+        type: type[BaseException],
+        value: BaseException | object = ...,
+        traceback: TracebackType | None = ...,
+    ) -> T_co: ...
 
     @overload
     async def athrow(
         self,
         type: BaseException,
         value: None = ...,
-        traceback: Optional[TracebackType] = ...,
-    ) -> T_co:
-        ...
+        traceback: TracebackType | None = ...,
+    ) -> T_co: ...
 
     async def athrow(
         self,
-        type: Union[BaseException, Type[BaseException]],
-        value: Union[BaseException, object] = None,
-        traceback: Optional[TracebackType] = None,
+        type: BaseException | type[BaseException],
+        value: BaseException | object = None,
+        traceback: TracebackType | None = None,
     ) -> T_co:
         return cast(T_co, await self._athrow(type, value, traceback))
 
@@ -380,10 +376,10 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
     # shared implementation for aclose() and athrow()
     async def _athrow(
         self,
-        type: Optional[Union[BaseException, Type[BaseException]]],
-        value: Union[BaseException, object],
-        traceback: Optional[TracebackType],
-    ) -> Optional[T_co]:
+        type: BaseException | type[BaseException] | None,
+        value: BaseException | object,
+        traceback: TracebackType | None,
+    ) -> T_co | None:
         if self.ag_running:
             raise RuntimeError(
                 ("athrow" if type is not None else "aclose")
@@ -393,12 +389,15 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
             return None
         elif coro_is_new(self.coro):
             self._first_iter()
-        self.ag_running = True  # type: ignore[misc]
+        self.ag_running = True
         try:
             if type is not None:
                 # athrow()
                 await self.monitor.athrow(
-                    self.coro, cast(Type[BaseException], type), value, traceback
+                    self.coro,
+                    cast(builtins.type[BaseException], type),
+                    value,
+                    traceback,
                 )
             else:
                 # aclose()
@@ -421,4 +420,4 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
                 return None  # aclose() resulted in coroutine exit
             raise StopAsyncIteration()
         finally:
-            self.ag_running = False  # type: ignore[misc]
+            self.ag_running = False

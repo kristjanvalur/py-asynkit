@@ -26,7 +26,7 @@ pip install asynkit
 ### `eager()` - lower latency IO
 
 Did you ever wish that your _coroutines_ started right away, and only returned control to
-the caller once they become blocked?  Like the way the `async` and `await` keywords work in the __C#__ language?
+the caller once they become blocked? Like the way the `async` and `await` keywords work in the __C#__ language?
 
 Now they can. Just decorate or convert them with `acynkit.eager`:
 
@@ -99,7 +99,7 @@ To _await_ its result at some later point. Otherwise, just apply it at the point
 of invocation in each such case.
 
 It may be prudent to ensure that the result of `eager()` does not continue running
-if it will never be awaited, such as in the case of an error.  You can use the `cancelling()`
+if it will never be awaited, such as in the case of an error. You can use the `cancelling()`
 context manager for this:
 
 ```python
@@ -135,7 +135,7 @@ just as would happen if it were directly turned into a `Task`.
 
 If you are writing code which should work both synchronously and asynchronously,
 you can now write the code fully _async_ and then run it _synchronously_ in the absence
-of an event loop.  As long as the code doesn't _block_ (await unfinished _futures_) and doesn't try to access the event loop, it can successfully be executed.  This helps avoid writing duplicate code.
+of an event loop. As long as the code doesn't _block_ (await unfinished _futures_) and doesn't try to access the event loop, it can successfully be executed. This helps avoid writing duplicate code.
 
 ```python
 async def async_get_processed_data(datagetter):
@@ -179,14 +179,14 @@ def sync_get_processed_data(datagetter):
 
 The above pattern, writing async methods as sync and returning async helpers,
 is common in library code which needs to work both in synchronous and asynchronous
-context.  Needless to say, it is very convoluted, hard to debug and contains a lot
+context. Needless to say, it is very convoluted, hard to debug and contains a lot
 of code duplication where the same logic is repeated inside async helper closures.
 
 Using `await_sync()` it is possible to write the entire logic as `async` methods and
 then simply fail if the code tries to invoke any truly async operations.
 If the invoked coroutine blocks, a `SynchronousError` is raised _from_ a `SynchronousAbort` exception which
-contains a traceback.  This makes it easy to pinpoint the location in the code where the
-async code blocked.  If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.  
+contains a traceback. This makes it easy to pinpoint the location in the code where the
+async code blocked. If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
 
 The `syncfunction()` decorator can be used to automatically wrap an async function
 so that it is executed using `await_sync()`:
@@ -204,7 +204,7 @@ so that it is executed using `await_sync()`:
 ```
 
 the `asyncfunction()` utility can be used when passing synchronous callbacks to async
-code, to make them async.  This, along with `syncfunction()` and `await_sync()`,
+code, to make them async. This, along with `syncfunction()` and `await_sync()`,
 can be used to integrate synchronous code with async middleware:
 
 ```python
@@ -238,7 +238,7 @@ application.
 
 This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` and `await_sync()` functions.
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
-an exception.  It can subsequently be _awaited_ to retrieve the result.
+an exception. It can subsequently be _awaited_ to retrieve the result.
 
 Similarly to a `Future`, it has these methods:
 
@@ -246,7 +246,7 @@ Similarly to a `Future`, it has these methods:
 - `result()` - Returns the _return value_ of the coroutine or __raises__ any _exception_ that it produced.
 - `exception()` - Returns any _exception_ raised, or `None` otherwise.
 
- But more importantly it has these:
+But more importantly it has these:
 
 - `__await__()` - A magic method making it directly _awaitable_. If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it awaits the original coroutine's continued execution
 - `as_coroutine()` - A helper which returns a proper _coroutine_ object to await the `CoroStart`
@@ -257,7 +257,7 @@ Similarly to a `Future`, it has these methods:
 
 In addition it has:
 
-- `aclose()` - If `not done()`, will throw a `GeneratorError` into the coroutine and wait for it to finish.  Otherwise does nothing.
+- `aclose()` - If `not done()`, will throw a `GeneratorError` into the coroutine and wait for it to finish. Otherwise does nothing.
 - `athrow(exc)` - If `not done()`, will throw the given error into the coroutine and wait for it to raise or return a value.
 - `close()` and `throw(exc)` - Synchronous versions of the above, will raise `RuntimeError` if the coroutine does not immediately exit.
 
@@ -297,7 +297,7 @@ async def main():
     assert context.get(var1) == "foo"
 ```
 
-This is similar to `contextvars.Context.run()` but works for async functions.  This function is
+This is similar to `contextvars.Context.run()` but works for async functions. This function is
 implemented using [`CoroStart`](#corostart)
 
 ### `awaitmethod()`
@@ -353,18 +353,18 @@ async def construct():
 ### `awaitmethod_iter()`
 
 An alternative way of creating an __await__ method, it uses
-the `coro_iter()` method to to create a coroutine iterator.  It
+the `coro_iter()` method to to create a coroutine iterator. It
 is provided for completeness.
 
 ### `coro_iter()`
 
-This helper function turns a coroutine function into an iterator.  It is primarily
+This helper function turns a coroutine function into an iterator. It is primarily
 intended to be used by the [`awaitmethod_iter()`](#awaitmethod_iter) function decorator.
 
 ### `cancelling()`
 
 This context manager automatically calls the `cancel()`method on its target when the scope
-exits.  This is convenient to make sure that a task is not left running if it never to
+exits. This is convenient to make sure that a task is not left running if it never to
 be awaited:
 
 ```python
@@ -378,7 +378,7 @@ with cancelling(asyncio.Task(foo())) as t:
 #### Monitor
 
 A `Monitor` object can be used to await a coroutine, while listening for _out of band_ messages
-from the coroutine.  As the coroutine sends messages, it is suspended, until the caller resumes
+from the coroutine. As the coroutine sends messages, it is suspended, until the caller resumes
 awaiting for it.
 
 ```python
@@ -409,7 +409,7 @@ done
 ```
 
 For convenience, the `Monitor` can be _bound_ so that the caller does not have
-to keep the coroutine around.  Calling the monitor with the coroutine returns a `BoundMonitor`:
+to keep the coroutine around. Calling the monitor with the coroutine returns a `BoundMonitor`:
 
 ```python
 async def coro(m):
@@ -437,7 +437,7 @@ only as a response to a previous `OOBData` exception.
 
 A `Monitor` can be used when a coroutine wants to suspend itself, maybe waiting for some external
 condition, without resorting to the relatively heavy mechanism of creating, managing and synchronizing
-`Task` objects.  This can be useful if the coroutine needs to maintain state.  Additionally,
+`Task` objects. This can be useful if the coroutine needs to maintain state. Additionally,
 this kind of messaging does not require an _event loop_ to be present and can can be driven
 using `await_sync()` (see below.)
 
@@ -469,8 +469,8 @@ async def manager(buffer, io):
 In this example, `readline()` is trivial, but if it were a stateful parser with hierarchical
 invocation structure, then this pattern allows the decoupling of IO and the parsing of buffered data, maintaining the state of the parser while _the caller_ fills up the buffer.
 
-Any IO exception is sent to the coroutine in this example.  This ensures that it cleans
-up properly.  Alternatively, `aclose()` could have been used:
+Any IO exception is sent to the coroutine in this example. This ensures that it cleans
+up properly. Alternatively, `aclose()` could have been used:
 
 ```python
 m = Monitor()
@@ -511,7 +511,7 @@ For a more complete example, have a look at [example_resp.py](examples/example_r
 
 #### GeneratorObject
 
-A `GeneratorObject` builds on top of the `Monitor` to create an `AsyncGenerator`.  It is in many ways
+A `GeneratorObject` builds on top of the `Monitor` to create an `AsyncGenerator`. It is in many ways
 similar to an _asynchronous generator_ constructed using the _generator function_ syntax.
 But whereas those return values using the `yield` _keyword_,
 a GeneratorObject has an `ayield()` _method_, which means that data can be sent to the generator
@@ -523,6 +523,7 @@ The `GeneratorObject` leverages the `Monitor.oob()` method to deliver the _ayiel
 async def generator(gen_obj):
     # yield directly to the generator
     await gen_obj.ayield(1)
+
     # have someone else yield to it
     async def helper():
         await gen_obj.ayield(2)
@@ -537,11 +538,11 @@ async def runner():
 ```
 
 The `GeneratorObject`, when called, returns a `GeneratorObjectIterator` which behaves in
-the same way as an `AsyncGenerator` object.  It can be iterated over and supports the
+the same way as an `AsyncGenerator` object. It can be iterated over and supports the
 `asend()`, `athrow()` and `aclose()` methods.
 
 A `GeneratorObject` is a flexible way to asynchronously generate results without
-resorting to `Task` and `Queue` objects.  What is more, it allows this sort
+resorting to `Task` and `Queue` objects. What is more, it allows this sort
 of generating pattern to be used in non-async programs, via `aiter_sync()`:
 
 ```python
@@ -554,7 +555,7 @@ def sync_runner():
 ## Scheduling tools
 
 A set of functions are provided to perform advanced scheduling of `Task` objects
-with `asyncio`.  They work with the built-in event loop, and also with any event loop
+with `asyncio`. They work with the built-in event loop, and also with any event loop
 implementing the `AbstractSchedulingLoop` abstract base class, such as the `SchedulingMixin`
 class which can be used to extend the built-in event loops.
 
@@ -579,8 +580,8 @@ certain scheduling goals.
 Immediately moves the given task to the head of the ready queue and switches to it, assuming it is runnable.
 If `insert_pos is not None`, the current task will be
 put to sleep at that position, using `sleep_insert()`. Otherwise the current task is put at the end
-of the ready queue.  If `insert_pos == 1` the current task will be inserted directly after the target
-task, making it the next to be run.  If `insert_pos == 0`, the current task will execute _before_ the target.
+of the ready queue. If `insert_pos == 1` the current task will be inserted directly after the target
+task, making it the next to be run. If `insert_pos == 0`, the current task will execute _before_ the target.
 
 #### `task_is_blocked(task)`
 
@@ -608,7 +609,7 @@ A few functions are added to help working with tasks.
 The following identity applies:
 
 ```python
-asyncio.all_tasks() = (
+asyncio.all_tasks() == (
     asynkit.runnable_tasks() | asynkit.blocked_tasks() | asyncio.current_task()
 )
 ```
@@ -623,7 +624,7 @@ Returns a set of the tasks that are currently blocked on some future in the give
 
 ### Event Loop tools
 
-Also provided is a mixin for the built-in event loop implementations in python, providing some primitives for advanced scheduling of tasks.  These primitives are what is used by the
+Also provided is a mixin for the built-in event loop implementations in python, providing some primitives for advanced scheduling of tasks. These primitives are what is used by the
 scheduling functions above, and so custom event loop implementations can provide custom
 implementations of these methods.
 
@@ -631,7 +632,7 @@ implementations of these methods.
 
 This class adds some handy scheduling functions to the event loop. The are intended
 to facilitate some scheduling tricks, particularly switching to tasks, which require
-finding items in the queue and re-inserting them at an _early_ position.  Nothing
+finding items in the queue and re-inserting them at an _early_ position. Nothing
 is assumed about the underlying implementation of the queue.
 
 - `queue_len()` - returns the length of the ready queue
@@ -670,7 +671,7 @@ with asynkit.event_loop_policy():
 
 ### FIFO scheduling
 
-Since the beginning, _scheduling_ of Tasks in `asyncio` has always been _FIFO_, meaning "first-in, first-out".  This is a design principle which provides a certain _fairness_ to tasks, ensuring that all tasks run and a certain predictability is achieved with execution.  FIFO is maintained in the following places:
+Since the beginning, _scheduling_ of Tasks in `asyncio` has always been _FIFO_, meaning "first-in, first-out". This is a design principle which provides a certain _fairness_ to tasks, ensuring that all tasks run and a certain predictability is achieved with execution. FIFO is maintained in the following places:
 
 - In the _Event Loop_, where tasks are executed in the order in which they become _runnable_
 - In locking primitives (such as `asyncio.Lock` or `asyncio.Condition`) where tasks are able to _acquire_ the lock or get notified in the order
@@ -680,7 +681,7 @@ All tasks are treated equally.
 
 ### The `asynkit.experimental.priority` module
 
-- __Note__:  This is currently an __experimental__ feature.
+- __Note__: This is currently an __experimental__ feature.
 
 In pre-emptive system, such as scheduling of `threads` or `processes` there is usually some sort of `priority` involved too,
 to allow designating some tasks as more important than others, thus requiring more rapid servicing, and others as having
@@ -688,7 +689,7 @@ lower priority and thus be relegated to background tasks where other more import
 
 The `asynkit.experimental.priority` module now allows us to do something similar.
 
-You can define the `priority` of Task objects.  A task defining the `effective_priority()` method returning
+You can define the `priority` of Task objects. A task defining the `effective_priority()` method returning
 a `float` will get priority treatment in the following areas:
 
 - When awaiting a `PriorityLock` or `PriorityCondition`
@@ -696,7 +697,7 @@ a `float` will get priority treatment in the following areas:
 
 The floating point _priority value_ returned by `effective_priority()` is used to determine the task's priority, with _lower
 values_ giving _higher priority_ (in the same way that low values are _sorted before_ high values).
-If this method is missing, the default priority of `0.0` is assumed.  The `Priority` enum class can be
+If this method is missing, the default priority of `0.0` is assumed. The `Priority` enum class can be
 used for some basic priority values, defining `Priority.HIGH` as -10.0 and `Priority.LOW` as 10.0.
 In case of identical priority values, FIFO order is respected.
 
@@ -705,34 +706,34 @@ locks in `asyncio` and also fully support the experimental [task interruption](#
 
 #### `PriorityTask`
 
-This is an `asyncio.Task` subclass which implements the `effective_priority()` method.  It can be constructed with a `priority` keyword
-or a `priority_value` attribute.  It also participates in [Priority Inheritance](#priority-inheritance).
+This is an `asyncio.Task` subclass which implements the `effective_priority()` method. It can be constructed with a `priority` keyword
+or a `priority_value` attribute. It also participates in [Priority Inheritance](#priority-inheritance).
 
 #### `PriorityLock`
 
-This is a `asyncio.Lock` subclass which respects the priorities of any `Task` objects attempting to acquire it.  It also participates in [Priority Inheritance](#priority-inheritance).
+This is a `asyncio.Lock` subclass which respects the priorities of any `Task` objects attempting to acquire it. It also participates in [Priority Inheritance](#priority-inheritance).
 
 #### `PriorityCondition`
 
-This is an `asyncio.Condition` subclass which respects the priorities of any `Task` objects awaiting to be woken up.  Its default
+This is an `asyncio.Condition` subclass which respects the priorities of any `Task` objects awaiting to be woken up. Its default
 `lock` is of type `PriorityLock`.
 
 #### `DefaultPriorityEventLoop`
 
-This is an `asyncio.AbstractEventLoop` subclass which respects the priorities of any Task objects waiting to be executed.  It also
-provides all the scheduling extensions from `AbstractSchedulingLoop`.  It also participates in [Priority Inheritance](#priority-inheritance).
+This is an `asyncio.AbstractEventLoop` subclass which respects the priorities of any Task objects waiting to be executed. It also
+provides all the scheduling extensions from `AbstractSchedulingLoop`. It also participates in [Priority Inheritance](#priority-inheritance).
 
 This is either a `PrioritySelectorEventLoop` or a `PriorityProactorEventLoop`, both instances of the `PrioritySchedulingMixin` class.
 
 ### Priority Inversion
 
 A well known problem with priority scheduling is the so-called [Priority Inversion](https://en.wikipedia.org/wiki/Priority_inversion)
-problem.  This implementation addresses that by two different means:
+problem. This implementation addresses that by two different means:
 
 #### Priority Inheritance
 
-A `PriorityTask` keeps track of all the `PriorityLock` objects it has acquired, and a `PriorityLock` keeps track of all the `asyncio.Task` objects waiting to acquire it.  A `PriorityTask`'s `effective_priority()` method will be the highest _effective_priority_ of any
-task waiting to acquire a lock held by it.  Thus, a high priority-task which starts waiting for a lock which is held by a
+A `PriorityTask` keeps track of all the `PriorityLock` objects it has acquired, and a `PriorityLock` keeps track of all the `asyncio.Task` objects waiting to acquire it. A `PriorityTask`'s `effective_priority()` method will be the highest _effective_priority_ of any
+task waiting to acquire a lock held by it. Thus, a high priority-task which starts waiting for a lock which is held by a
 low-priority task, will temporarily _propagate_ its priority to that task, so that ultimately, the `PrioritySchedulingMixin` event
 loop with ensure that the previously low-priority task is now executed with the higher priority.
 
@@ -741,7 +742,7 @@ This mechanism requires the co-operation of both the tasks, locks and the event-
 #### Priority Boosting
 
 The `PrioritySchedulingMixin` will regularly do "queue maintenance" and will identify Tasks that have sat around in the queue for
-many cycles without being executed.  It will randomly "boost" the priority of these tasks in the queue, so that they have a chance
+many cycles without being executed. It will randomly "boost" the priority of these tasks in the queue, so that they have a chance
 to run.
 
 This mechanism does not require the co-operation of locks and tasks to work, and is in place as a safety mechanism in applications
@@ -750,19 +751,19 @@ where it is not feasible to replace all instances of `Lock`s and `Task`s with th
 ### How to use Priority Scheduling
 
 To make use of Priority scheduling, you need to use either the priority scheduling event loop (e.g.
-`DefaultPriorityEventLoop`) or a priority-aware synchronization primitive, i.e. `PriorityLock` or `PriorityCondition`.  In addition, you need `Task` objects which support the `effective_priority()`
+`DefaultPriorityEventLoop`) or a priority-aware synchronization primitive, i.e. `PriorityLock` or `PriorityCondition`. In addition, you need `Task` objects which support the `effective_priority()`
 method, such as `PriorityTask`
 
 It is possible to get priority behaviour from locks without having a priority event loop, and
-vice versa.  But when using the priority event loop, it is recommended to use the accompanying
+vice versa. But when using the priority event loop, it is recommended to use the accompanying
 lock and task classes which co-operate to provide _priority inheritance_.
 
 A good first step, in your application, is to identify tasks
 that perform background work, such as housekeeping tasks, and assign to them the `Priority.LOW` priority.
 
-Subsequently you may want to identify areas of your application that require more attention than others.  For a web-application's URL handler may elect to temporarily raise the priority (change `PriorityTask.priority_value`) for certain endpoints to give them better response.
+Subsequently you may want to identify areas of your application that require more attention than others. For a web-application's URL handler may elect to temporarily raise the priority (change `PriorityTask.priority_value`) for certain endpoints to give them better response.
 
-This is new territory and it remains to be seen how having priority scheduling in a `co-operative`` environment such as `asyncio` actually works in practice.
+This is new territory and it remains to be seen how having priority scheduling in a ``` co-operative`` environment such as  ```asyncio\` actually works in practice.
 
 ## Coroutine helpers
 
@@ -781,11 +782,11 @@ __async generators__.
 
 ## `anyio` support
 
-The library has been tested to work with the `anyio`.  However, not everything is supported on the `trio` backend.
+The library has been tested to work with the `anyio`. However, not everything is supported on the `trio` backend.
 Currently only the `asyncio` backend can be assumed to work reliably.
 
 When using the asyncio backend, the module `asynkit.experimental.anyio` can be used, to provide "eager"-like
-behaviour to task creation.  It will return an `EagerTaskGroup` context manager:
+behaviour to task creation. It will return an `EagerTaskGroup` context manager:
 
 ```python
 from asynkit.experimental.anyio import create_eager_task_group
@@ -800,7 +801,6 @@ async def func(task_status):
 
 
 async def main():
-
     async with create_eager_task_group() as tg:
         start = tg.start(func)
         print("fine")
@@ -837,31 +837,31 @@ returning.
   does not work reliably with `trio`.
   This is because the synchronization primitives
   are not based on `Future` objects but rather perform `Task`-based actions both before going to sleep
-  and upon waking up.  If a `CoroStart` initially blocks on a primitive such as `Event.wait()` or
+  and upon waking up. If a `CoroStart` initially blocks on a primitive such as `Event.wait()` or
   `sleep(x)` it will be surprised and throw an error when it wakes up on in a different
   `Task` than when it was in when it fell asleep.
 
 `CoroStart` works by intercepting a `Future` being passed up via the `await` protocol to
-the event loop to perform the task scheduling.  If any part of the task scheduling has happened
+the event loop to perform the task scheduling. If any part of the task scheduling has happened
 before this, and the _continuation_ happens on a different `Task` then things may break
-in various ways.   For `asyncio`, the event loop never sees the `Future` object until
+in various ways. For `asyncio`, the event loop never sees the `Future` object until
 `as_coroutine()` has been called and awaited, and so if this happens in a new task, all is good.
 
 ## Experimental features
 
-Some features are currently available experimentally.  They may work only on some platforms or be experimental in nature, not stable or mature enough to be officially part of the library.
+Some features are currently available experimentally. They may work only on some platforms or be experimental in nature, not stable or mature enough to be officially part of the library.
 
 ### Task Interruption
 
-Methods are provided to raise exceptions on a `Task`.  This is somewhat similar to
+Methods are provided to raise exceptions on a `Task`. This is somewhat similar to
 `task.cancel()` but different:
 
 - The caller specifies the exception instance to be raised on the task.
 - The target task is made to run *immediately*, precluding interference with other operations.
-- The exception does not propagate into awaited objects.  In particular, if the target task
+- The exception does not propagate into awaited objects. In particular, if the target task
   is _awaiting_ another task, the wait is interrupted, but that other task is not otherwise
   affected.
-  
+
 A task which is blocked, waiting for a future, is immediately freed and scheduled to run.
 If the task is already scheduled to run, i.e. it is _new_, or the future has triggered but
 the task hasn't become active yet, it is still awoken with an exception.
@@ -869,7 +869,7 @@ the task hasn't become active yet, it is still awoken with an exception.
 Please note the following cases:
 
 1. The Python `asyncio` library in places assumes that the only exception that can be
-   raised out of awaitables is `CancelledError`.  In particular, there are edge cases
+   raised out of awaitables is `CancelledError`. In particular, there are edge cases
    in `asyncio.Lock`, `asyncio.Semaphore` and `asyncio.Condition` where raising something
    else when acquiring these primitives will leave them in an incorrect state.
 
@@ -877,26 +877,27 @@ Please note the following cases:
    should be used for interrupts in general.
 
    However, currently `asyncio.Condition` will not correctly pass on such a subclass
-   for `wait()` in all cases, so  a safer version, `InterruptCondition` class, is provided.
+   for `wait()` in all cases, so a safer version, `InterruptCondition` class, is provided.
 
 2. Even subclasses of `CancelledError` will be converted to a new `CancelledError`
    instance when not handled in a task, and awaited.
 
 3. These functions currently are only work __reliably__ with `Task` object implemented in Python.
-   Modern implementation often have a native "C" implementation of `Task` objects and they contain inaccessible code which cannot be used by the library.  In particular, the
-   `Task.__step` method cannot be explicitly scheduled to the event loop.  For that reason,
+   Modern implementation often have a native "C" implementation of `Task` objects and they contain inaccessible code which cannot be used by the library. In particular, the
+   `Task.__step` method cannot be explicitly scheduled to the event loop. For that reason,
    a special `create_pytask()` helper is provided to create a suitable python `Task` instance.
+
 4. __However:__ This library does go through extra hoops to make it usable with C Tasks.
    It almost works, but with two caveats:
 
    - CTasks which have plain `TaskStepMethWrapper` callbacks scheduled cannot be interrupted.
-    These are typically tasks executing `await asyncio.sleep(0)` or freshly created
-    tasks that haven't started executing.
+     These are typically tasks executing `await asyncio.sleep(0)` or freshly created
+     tasks that haven't started executing.
    - The CTask's `_fut_waiting` member _cannot_ be cleared from our code, so there exists a time
-    where it can point to a valid, not-done, Future, even though the Task is about
-    to wake up.  This will make methods such as `task_is_blocked()` return incorrect
-    values.  It __will__ get cleared when the interrupted task starts executing, however. All the more reason to use `task_interrupt()` over `task_throw()` since
-    the former allows no space for code to see the task in such an intermediate state.
+     where it can point to a valid, not-done, Future, even though the Task is about
+     to wake up. This will make methods such as `task_is_blocked()` return incorrect
+     values. It __will__ get cleared when the interrupted task starts executing, however. All the more reason to use `task_interrupt()` over `task_throw()` since
+     the former allows no space for code to see the task in such an intermediate state.
 
 #### `task_throw()`
 
@@ -911,13 +912,13 @@ pending.
 - If the Task was runnable due to a _previous_ call to `task_throw()`, this will override
   that call and its exception.
 
-- Because of that, this method should probably not be used directly.  It is better to ensure that the
+- Because of that, this method should probably not be used directly. It is better to ensure that the
   target _takes delivery_ of the exception right away, because there is no way to
   queue pending exceptions and they do not add up in any meaningful way.
   Prefer to use `task_interrupt()` below.
 
 - This method will __fail__ if the target task has a pending _cancellation_, that is,
-  it is in the process of waking up with a pending `CancelledError`.  Cancellation is
+  it is in the process of waking up with a pending `CancelledError`. Cancellation is
   currently asynchronous, while throwing exceptions is intended to be synchronous.
 
 #### `task_interrupt()`
@@ -927,13 +928,13 @@ async def task_interrupt(task: Task, exc: BaseException):
     pass
 ```
 
-An `async` version of `task_throw()`.  When awaited, `task_interrupt()` is called,
-followed by a `task_switch()` to the target.  Once awaited, the exception
+An `async` version of `task_throw()`. When awaited, `task_interrupt()` is called,
+followed by a `task_switch()` to the target. Once awaited, the exception
 **has been raised** on the target task.
 
 By ensuring that the target task runs immediately, it is possible to reason about task
 execution without having to rely on external synchronization primitives and the cooperation
-of the target task.  An interrupt is never _pending_ on the task (as a _cancellation_ can
+of the target task. An interrupt is never _pending_ on the task (as a _cancellation_ can
 be) and therefore it cannot cause collisions with other interrupts.
 
 ```python
@@ -957,7 +958,7 @@ async def test():
 #### `create_pytask()`
 
 Similar to `asyncio.create_task()` but will create a pure __Python__ `Task` which can safely
-be used as the target for `task_throw()`and `task_interrupt()`.  Because of implementation
+be used as the target for `task_throw()`and `task_interrupt()`. Because of implementation
 issues, regular __C__ `Task` objects, as returned by `asyncio.create_task()`, cannot
 be interrupted in all cases, in particular when doing an `await asyncio.sleep(0)` or
 directly after having been created.

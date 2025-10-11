@@ -3,7 +3,7 @@ import inspect
 import types
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, copy_context
-from typing import Any, List
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -175,7 +175,7 @@ class TestEager:
         assert log == expect
 
     async def test_eager_ctx_noawait(self, block: bool) -> None:
-        log: List[Any] = []
+        log: list[Any] = []
         coro, expect = self.get_coro1(block)
         with asynkit.eager_ctx(coro(log)) as c:
             log.append("a")
@@ -255,7 +255,6 @@ class TestCoroStart:
         assert err.match("cannot reuse already awaited")
 
     async def test_close(self, block):
-
         # first test regular coroutine
         async def normal():
             await sleep(0)
@@ -708,21 +707,22 @@ class TestContext:
 
 @pytest.mark.parametrize("kind", ["cr", "gi", "ag"])
 class TestCoroState:
-    def get_coro(self, kind):
+    def get_coro(self, kind):  # type: ignore[misc]
+        # Intentionally defines different coroutine types based on kind
         if kind == "cr":
 
-            async def coro(f):
+            async def coro(f):  # type: ignore[misc]
                 await f
 
         elif kind == "gi":
 
             @types.coroutine
-            def coro(f):
+            def coro(f):  # type: ignore[misc]
                 yield from f
 
         else:
 
-            async def coro(f):
+            async def coro(f):  # type: ignore[misc]
                 await f
                 yield f
 

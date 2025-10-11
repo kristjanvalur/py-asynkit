@@ -1,10 +1,61 @@
 import asyncio
+import sys
+
+import pytest
 
 import asynkit
 
 DefaultLoop = asynkit.DefaultSchedulingEventLoop
 SelectorLoop = asynkit.SchedulingSelectorEventLoop
 ProactorLoop = getattr(asynkit, "SchedulingProactorEventLoop", None)
+
+# Check if trio is available and compatible
+try:
+    import trio  # noqa: F401  # type: ignore[import-untyped]
+
+    TRIO_AVAILABLE = True
+except (ImportError, TypeError):
+    # TypeError can occur on Python 3.13+ with old trio versions
+    TRIO_AVAILABLE = False
+
+# Skip trio tests on Python 3.13+ where old trio doesn't work
+SKIP_TRIO = not TRIO_AVAILABLE or sys.version_info >= (3, 13)
+
+
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line(
+        "markers",
+        "trio: marks tests that require trio backend "
+        "(automatically skipped when trio is unavailable or incompatible)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Mark and skip trio tests when trio is not available or incompatible."""
+    skip_trio = pytest.mark.skip(
+        reason="trio not available or incompatible with this Python version"
+    )
+    for item in items:
+        # Mark and potentially skip tests that use trio backend
+        if "anyio_backend" in item.fixturenames:
+            # Check if this test is parameterized with trio
+            if hasattr(item, "callspec"):
+                backend = item.callspec.params.get("anyio_backend")
+                if backend == "trio" or (
+                    isinstance(backend, tuple) and backend[0] == "trio"
+                ):
+                    item.add_marker(pytest.mark.trio)
+                    if SKIP_TRIO:
+                        item.add_marker(skip_trio)
+        # Also mark if anyio_backend_name fixture indicates trio
+        if "anyio_backend_name" in item.fixturenames:
+            if hasattr(item, "callspec"):
+                backend_name = item.callspec.params.get("anyio_backend_name")
+                if backend_name == "trio":
+                    item.add_marker(pytest.mark.trio)
+                    if SKIP_TRIO:
+                        item.add_marker(skip_trio)
 
 
 def pytest_addoption(parser):

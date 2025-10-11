@@ -1,50 +1,88 @@
-[tool.poetry]
+[project]
 name = "asynkit"
-version = "0.12.0"
+version = "0.13.0"
 description = "A toolkit for Python coroutines"
-authors = ["Kristján Valur Jónsson <sweskman@gmail.com>"]
-repository = "https://github.com/kristjanvalur/py-asynkit"
+authors = [
+    {name = "Kristján Valur Jónsson", email = "sweskman@gmail.com"}
+]
 readme = "README.md"
 keywords = ["asyncio", "eventloop"]
-license = "MIT"
+license = {text = "MIT"}
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Framework :: AsyncIO"
+    "Framework :: AsyncIO",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
 ]
-include=["src/asynkit/py.typed"]
+requires-python = ">=3.10"
+dependencies = [
+    "typing-extensions>=4.4.0",
+]
+
+[project.urls]
+Repository = "https://github.com/kristjanvalur/py-asynkit"
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=0.991",
+    "pytest>=7.1.1",
+    "pytest-cov>=3.0.0",
+    "poethepoet>=0.29.0",
+    "ruff>=0.4.0",
+    "anyio>=3.6.0,<3.7.0",
+    "mdformat>=0.7.0",
+    "mdformat-ruff>=0.1.0",
+]
+# trio 0.21.0 doesn't support Python 3.13+, will upgrade in future
+trio = [
+    "trio>=0.21.0,<0.22.0; python_version < '3.13'",
+]
+
+[tool.poe]
+# Use simple executor instead of Poetry
+executor = {type = "simple"}
 
 [tool.poe.tasks]
-lint = "ruff ."
-black = "black ."
+lint = "ruff check ."
+format = "ruff format ."
 test = "pytest tests examples"
 cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 typing = "mypy -p asynkit -p tests -p examples"
-blacken-docs = "blacken-docs README.md"
-blackall = ["black", "blacken-docs"]
-check = ["style", "lint", "typing", "cov"]
+format-docs = "mdformat --number README.md"
+formatall = ["format", "format-docs"]
+check = ["style", "style-docs", "lint", "typing", "cov"]
 
 [tool.poe.tasks.style]
-help = "Validate black code style"
-cmd  = "black . --check --diff"
+help = "Validate code style"
+cmd  = "ruff format . --check --diff"
 
-[tool.poetry.dependencies]
-python = "^3.8"
-typing-extensions = "^4.4.0"
-
-[tool.poetry.group.dev.dependencies]
-mypy = "^0.991"
-black = "^22.3.0"
-pytest = "^7.1.1"
-pytest-cov = "^3.0.0"
-poethepoet = "^0.13.1"
-ruff = "~0.0.190"
-anyio = {extras = ["trio"], version = ">=3.6.0 <3.7.0"}  # typing introduced in 3.7
-blacken-docs = "^1.13.0"
+[tool.poe.tasks.style-docs]
+help = "Validate documentation style"
+cmd  = "mdformat --check --number README.md"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asynkit"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/asynkit",
+    "tests",
+    "examples",
+    "README.md",
+    "LICENSE",
+    "CHANGES.md",
+]
 
 [tool.pytest.ini_options]
 #addopts = "-ra -q"
@@ -58,18 +96,29 @@ testpaths = [
 filterwarnings = [
     'ignore:You seem to already have a custom sys.excepthook:RuntimeWarning'
 ]
+markers = [
+    "trio: marks tests that require trio backend (skipped on Python 3.13+ where trio 0.21.0 is incompatible)",
+]
 
 [tool.ruff]
+src = ["src"]
+target-version = "py310"  # Enforce Python 3.10+ idioms
+
+[tool.ruff.lint]
 select = [
-    "E", "F", "I",
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade - automatically upgrade syntax for newer Python versions
 ]
-src = ["src", ]
+
 # Ignore `F401` (unused import) in all `__init__.py` files
 # Ignore `F403` (importing *) in all `__init__.py` files
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 
 [tool.mypy]
+python_version = "3.10"  # Enforce Python 3.10+ type semantics
 
 [[tool.mypy.overrides]]
 module = "asynkit.*"
@@ -89,8 +138,13 @@ module = [
     "asynkit.loop.eventloop",
     "asynkit.tools",
     "tests.test_coro",
+    "tests.conftest",
 ]
 warn_unused_ignores=false
+
+[[tool.mypy.overrides]]
+module = "trio"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "asynkit.compat"

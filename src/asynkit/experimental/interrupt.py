@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import asyncio.tasks
 import contextlib
 import sys
-import threading
 from asyncio import AbstractEventLoop
-from typing import Any, AsyncGenerator, Coroutine, Literal, Optional
+from collections.abc import AsyncIterator, Coroutine
+from typing import Any, Literal
 
 from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
 from asynkit.loop.types import FutureAny, TaskAny
@@ -21,8 +23,6 @@ __all__ = [
     "PyTask",
 ]
 
-_have_context = sys.version_info > (3, 8)
-_have_get_loop = sys.version_info >= (3, 10)
 _is_310 = sys.version_info >= (3, 10)
 
 # Crate a python Task.  We need access to the __step method and this is hidden
@@ -39,7 +39,7 @@ def task_factory(loop, coro):  # type: ignore[no-untyped-def]
 
 
 def create_pytask(
-    coro: Coroutine[Any, Any, Any], *, name: Optional[str] = None
+    coro: Coroutine[Any, Any, Any], *, name: str | None = None
 ) -> TaskAny:
     """Create a Python-implemented task for the given coroutine."""
     loop = asyncio.get_running_loop()
@@ -138,7 +138,7 @@ def task_throw(task: TaskAny, exception: BaseException) -> None:
                 raise RuntimeError("cannot interrupt self")
 
         callback, arg = step_method, exception
-        ctx = task._context if _have_context else None  # type: ignore[attr-defined]
+        ctx = task._context  # type: ignore[attr-defined]
 
     # clear the future waiter, and re-insert it.  fut_waiter is not necessarily
     # done.
@@ -150,17 +150,11 @@ def task_throw(task: TaskAny, exception: BaseException) -> None:
         # while the task is blocked, no longer holds!  so we should really make
         # sure this task is switched to immediately!
         task._fut_waiter = None  # type: ignore[attr-defined]
-    if _have_context:
-        task_loop.call_soon(  # type: ignore[call-arg]
-            callback,
-            arg,
-            context=ctx,
-        )
-    else:  # pragma: no cover
-        task_loop.call_soon(
-            callback,
-            arg,
-        )
+    task_loop.call_soon(  # type: ignore[call-arg]
+        callback,
+        arg,
+        context=ctx,
+    )
 
 
 def c_task_reschedule(
@@ -200,7 +194,7 @@ def c_task_reschedule(
             assert task is asyncio.current_task()
             raise RuntimeError("cannot interrupt self")
         callback = handle._callback  # type: ignore[attr-defined]
-        ctx = handle._context if _have_context else None  # type: ignore[attr-defined]
+        ctx = handle._context  # type: ignore[attr-defined]
 
     # we now have a callback, a bound method.  We must re-use this method
     # because we have no way to create a new bound method for the internal
@@ -243,24 +237,14 @@ def future_find_task_callback(fut_waiter: FutureAny, task: TaskAny) -> Any:
     Look for the correct callback on the future to remove, by finding the
     one associated with a task.
     """
-    if _have_context:
-        found = [
-            (f, ctx)
-            for (f, ctx) in fut_waiter._callbacks  # type: ignore[attr-defined]
-            if getattr(f, "__self__", None) is task
-        ]
-    else:  # pragma: no cover
-        found = [
-            f
-            for f in fut_waiter._callbacks  # type: ignore[attr-defined]
-            if getattr(f, "__self__", None) is task
-        ]
+    found = [
+        (f, ctx)
+        for (f, ctx) in fut_waiter._callbacks  # type: ignore[attr-defined]
+        if getattr(f, "__self__", None) is task
+    ]
     assert len(found) == 1
     cb = found[0]
-    if _have_context:
-        callback, ctx = cb
-    else:  # pragma: no cover
-        callback, ctx = cb, None  # type: ignore[assignment]
+    callback, ctx = cb
     return callback, ctx
 
 
@@ -293,7 +277,7 @@ class TimeoutInterrupt(InterruptException):
 
 
 @contextlib.asynccontextmanager
-async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
+async def task_timeout(timeout: float | None) -> AsyncIterator[None]:
     """Context manager to interrupt a task after a timeout."""
     if timeout is None:
         yield
@@ -351,24 +335,7 @@ async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
         timeout_handle.cancel()
 
 
-class LoopBoundMixin:
-    if not _have_get_loop:  # pragma: no cover
-        _global_lock = threading.Lock()
-        _loop = None
-
-        def _get_loop(self) -> AbstractEventLoop:
-            loop = asyncio.get_running_loop()
-
-            if self._loop is None:
-                with self._global_lock:
-                    if self._loop is None:
-                        self._loop = loop
-            if loop is not self._loop:
-                raise RuntimeError(f"{self!r} is bound to a different event loop")
-            return loop
-
-
-class InterruptCondition(asyncio.Condition, LoopBoundMixin):
+class InterruptCondition(asyncio.Condition):
     """
     A class which fixes the lack of support in asyncio.Condition for arbitrary
     exceptions being raised during the lock.acquire() call in wait().
@@ -397,7 +364,8 @@ class InterruptCondition(asyncio.Condition, LoopBoundMixin):
 
         self.release()
         try:
-            fut = self._get_loop().create_future()
+            # _get_loop() is available from asyncio.Condition's _LoopBoundMixin base
+            fut = self._get_loop().create_future()  # type: ignore[attr-defined]
             self._waiters.append(fut)  # type: ignore[attr-defined]
             try:
                 await fut
