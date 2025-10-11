@@ -74,7 +74,7 @@ include = [
     "examples",
     "README.md",
     "LICENSE",
-    "CHANGES",
+    "CHANGES.md",
 ]
 
 [tool.pytest.ini_options]
