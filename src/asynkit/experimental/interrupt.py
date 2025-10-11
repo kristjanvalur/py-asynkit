@@ -4,7 +4,7 @@ import contextlib
 import sys
 import threading
 from asyncio import AbstractEventLoop
-from typing import Any, AsyncGenerator, Coroutine, Literal, Optional
+from typing import Any, AsyncIterator, Coroutine, Literal, Optional
 
 from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
 from asynkit.loop.types import FutureAny, TaskAny
@@ -277,7 +277,7 @@ class TimeoutInterrupt(InterruptException):
 
 
 @contextlib.asynccontextmanager
-async def task_timeout(timeout: Optional[float]) -> AsyncGenerator[None, None]:
+async def task_timeout(timeout: Optional[float]) -> AsyncIterator[None]:
     """Context manager to interrupt a task after a timeout."""
     if timeout is None:
         yield
