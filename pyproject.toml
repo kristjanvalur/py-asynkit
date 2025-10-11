@@ -36,9 +36,13 @@ dev = [
     "pytest-cov>=3.0.0",
     "poethepoet>=0.29.0",
     "ruff>=0.4.0",
-    "anyio[trio]>=3.6.0,<3.7.0",
+    "anyio>=3.6.0,<3.7.0",
     "mdformat>=0.7.0",
     "mdformat-ruff>=0.1.0",
+]
+# trio 0.21.0 doesn't support Python 3.13+, will upgrade in future
+trio = [
+    "trio>=0.21.0,<0.22.0; python_version < '3.13'",
 ]
 
 [tool.poe]
@@ -91,6 +95,9 @@ testpaths = [
 ]
 filterwarnings = [
     'ignore:You seem to already have a custom sys.excepthook:RuntimeWarning'
+]
+markers = [
+    "trio: marks tests that require trio backend (skipped on Python 3.13+ where trio 0.21.0 is incompatible)",
 ]
 
 [tool.ruff]

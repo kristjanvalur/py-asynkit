@@ -8,9 +8,11 @@ All notable changes to this project will be documented in this file.
 
 - **Dropped Python 3.8 and 3.9 support**: Minimum Python version is now 3.10
   - Python 3.8 reached end-of-life in October 2024
-  - Python 3.9 reaches end-of-life in October 2025
+  - Python 3.9 reaches end-of-life in October 2.025
   - Modern Python 3.10+ syntax and features are now available throughout
 - **Added Python 3.13 support**: Tested and working on Python 3.13
+  - Note: trio backend tests are automatically skipped on Python 3.13+ (trio 0.21.0 incompatible)
+  - trio is now a separate optional dependency, only installed on Python < 3.13
 - **Added PyPy 3.11 support**: Upgraded PyPy testing from 3.10 to 3.11
 
 ### Build System & Tooling

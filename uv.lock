@@ -15,11 +15,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/77/2b/b4c0b7a3f3d61adb1a1e0b78f90a94e2b6162a043880704b7437ef297cad/anyio-3.6.2-py3-none-any.whl", hash = "sha256:fbbe32bd270d2a2ef3ed1c5d45041250284e31fc0a4df4a5a6071842051a51e3", size = 80622, upload-time = "2022-10-19T10:08:32.354Z" },
 ]
 
-[package.optional-dependencies]
-trio = [
-    { name = "trio" },
-]
-
 [[package]]
 name = "async-generator"
 version = "1.10"
@@ -39,7 +34,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "anyio", extra = ["trio"] },
+    { name = "anyio" },
     { name = "mdformat" },
     { name = "mdformat-ruff" },
     { name = "mypy" },
@@ -48,10 +43,13 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
+trio = [
+    { name = "trio", marker = "python_full_version < '3.13'" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "anyio", extras = ["trio"], marker = "extra == 'dev'", specifier = ">=3.6.0,<3.7.0" },
+    { name = "anyio", marker = "extra == 'dev'", specifier = ">=3.6.0,<3.7.0" },
     { name = "mdformat", marker = "extra == 'dev'", specifier = ">=0.7.0" },
     { name = "mdformat-ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=0.991" },
@@ -59,9 +57,10 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.1.1" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
+    { name = "trio", marker = "python_full_version < '3.13' and extra == 'trio'", specifier = ">=0.21.0,<0.22.0" },
     { name = "typing-extensions", specifier = ">=4.4.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "trio"]
 
 [[package]]
 name = "attrs"
