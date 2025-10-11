@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
   - Python 3.8 reached end-of-life in October 2024
   - Python 3.9 reaches end-of-life in October 2025
   - Modern Python 3.10+ syntax and features are now available throughout
+- **Added Python 3.13 support**: Tested and working on Python 3.13
+- **Added PyPy 3.11 support**: Upgraded PyPy testing from 3.10 to 3.11
 
 ### Build System & Tooling
 
