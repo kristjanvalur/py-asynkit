@@ -3,19 +3,18 @@ import sys
 import threading
 from asyncio import AbstractEventLoop, Handle, events
 from contextvars import Context
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 from weakref import ReferenceType
 
 """Compatibility routines for earlier asyncio versions"""
 
-# Pyton version checks
-PY_39 = sys.version_info >= (3, 9)
+# Python version checks
 PY_311 = sys.version_info >= (3, 11)
 
 T = TypeVar("T")
 
 # The following is needed because some generic types (like asyncio.Task and
-# weakref.ReferenceType) cannot be subscripted at runtime, even in Python 3.9+.
+# weakref.ReferenceType) cannot be subscripted at runtime, even in Python 3.10+.
 # We use TYPE_CHECKING to provide subscripted types for mypy while using
 # unsubscripted types at runtime to avoid TypeError.
 if TYPE_CHECKING:
@@ -27,41 +26,17 @@ else:
     FutureBool = asyncio.Future
     ReferenceTypeTaskAny = ReferenceType
 
-# create_task() got the name argument in 3.8
-
-if sys.version_info >= (3, 9):  # pragma: no cover
-    create_task = asyncio.create_task
-
-else:  # pragma: no cover
-
-    def create_task(
-        coro: Coroutine[Any, Any, T],
-        *,
-        name: Optional[str] = None,
-    ) -> _TaskAny:
-        return asyncio.create_task(coro)
+# create_task() and loop.call_soon() have all features in Python 3.10+
+create_task = asyncio.create_task
 
 
-# loop.call_soon got the context argument in 3.9.10 and 3.10.2
-if sys.version_info >= (3, 9):  # pragma: no cover
-
-    def call_soon(
-        loop: AbstractEventLoop,
-        callback: Callable[..., Any],
-        *args: Any,
-        context: Optional[Context] = None,
-    ) -> Handle:
-        return loop.call_soon(callback, *args, context=context)
-
-else:  # pragma: no cover
-
-    def call_soon(
-        loop: AbstractEventLoop,
-        callback: Callable[..., Any],
-        *args: Any,
-        context: Optional[Context] = None,
-    ) -> Handle:
-        return loop.call_soon(callback, *args)
+def call_soon(
+    loop: AbstractEventLoop,
+    callback: Callable[..., Any],
+    *args: Any,
+    context: Context | None = None,
+) -> Handle:
+    return loop.call_soon(callback, *args, context=context)
 
 
 if sys.version_info >= (3, 10):  # pragma: no cover

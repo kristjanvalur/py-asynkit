@@ -1,7 +1,6 @@
 import asyncio
 import functools
 import inspect
-import sys
 import types
 from asyncio import Future
 from contextvars import Context, copy_context
@@ -17,10 +16,7 @@ from typing import (
     Generator,
     Iterator,
     Optional,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
     cast,
     overload,
 )
@@ -55,20 +51,17 @@ T = TypeVar("T")
 S = TypeVar("S")
 P = ParamSpec("P")
 T_co = TypeVar("T_co", covariant=True)
-Suspendable = Union[
-    Coroutine[Any, Any, Any], Generator[Any, Any, Any], AsyncGenerator[Any, Any]
-]
+Suspendable = (
+    Coroutine[Any, Any, Any] | Generator[Any, Any, Any] | AsyncGenerator[Any, Any]
+)
 
 
 class CAwaitable(Awaitable[T_co], Cancellable, Protocol):
     pass
 
 
-# must use explicit sys.version_info check because of mypy
-if sys.version_info >= (3, 9):  # pragma: no cover
-    Future_Type: TypeAlias = Future
-else:  # pragma: no cover
-    Future_Type: TypeAlias = CAwaitable
+# Python 3.10+ has full Future support
+Future_Type: TypeAlias = Future
 
 
 """
@@ -183,9 +176,9 @@ class CoroStart(Awaitable[T_co]):
     ):
         self.coro = coro
         self.context = context
-        self.start_result: Optional[Tuple[Any, Optional[BaseException]]] = self._start()
+        self.start_result: Optional[tuple[Any, Optional[BaseException]]] = self._start()
 
-    def _start(self) -> Tuple[Any, Optional[BaseException]]:
+    def _start(self) -> tuple[Any, Optional[BaseException]]:
         """
         Start the coroutine execution. It runs the coroutine to its first suspension
         point or until it raises an exception or returns a value, whichever comes
@@ -248,12 +241,12 @@ class CoroStart(Awaitable[T_co]):
                     return cast(T_co, exc.value)
 
     @overload
-    async def athrow(self, exc: Type[BaseException]) -> T_co: ...
+    async def athrow(self, exc: type[BaseException]) -> T_co: ...
 
     @overload
     async def athrow(self, exc: BaseException) -> T_co: ...
 
-    async def athrow(self, exc: Union[Type[BaseException], BaseException]) -> T_co:
+    async def athrow(self, exc: type[BaseException] | BaseException) -> T_co:
         """
         Throw an exception into a started coroutine if it is not done, instead
         of continuing it.
@@ -274,14 +267,12 @@ class CoroStart(Awaitable[T_co]):
         return await self
 
     @overload
-    def throw(self, exc: Type[BaseException]) -> T_co: ...
+    def throw(self, exc: type[BaseException]) -> T_co: ...
 
     @overload
     def throw(self, exc: BaseException) -> T_co: ...
 
-    def throw(
-        self, exc: Union[Type[BaseException], BaseException], tries: int = 1
-    ) -> T_co:
+    def throw(self, exc: type[BaseException] | BaseException, tries: int = 1) -> T_co:
         """
         Throw an exception into the started coroutine. If the coroutine fails to
         exit, the exception will be re-thrown, up to 'tries' times.  If the coroutine
@@ -453,10 +444,10 @@ def eager(
 
 
 def eager(
-    arg: Union[Coroutine[Any, Any, T], Callable[P, Coroutine[Any, Any, T]]],
+    arg: Coroutine[Any, Any, T] | Callable[P, Coroutine[Any, Any, T]],
     *,
     task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
-) -> Union[CAwaitable[T], Callable[P, CAwaitable[T]]]:
+) -> CAwaitable[T] | Callable[P, CAwaitable[T]]:
     """
     Convenience function invoking either `coro_eager` or `func_eager`
     to either decorate an async function or convert a coroutine returned by

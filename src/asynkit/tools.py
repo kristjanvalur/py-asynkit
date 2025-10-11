@@ -3,19 +3,16 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import heapq
-import sys
+from collections import deque
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Coroutine,
-    Deque,
     Generator,
     Generic,
     Iterable,
     Iterator,
     Optional,
-    Tuple,
     TypeVar,
 )
 
@@ -38,19 +35,11 @@ if TYPE_CHECKING:
 else:
     _TaskAny = asyncio.Task
 
-if sys.version_info >= (3, 9):  # pragma: no cover
-    create_task = asyncio.create_task
-else:  # pragma: no cover
-
-    def create_task(
-        coro: Coroutine[Any, Any, T],
-        *,
-        name: Optional[str] = None,
-    ) -> _TaskAny:
-        return asyncio.create_task(coro)
+# create_task has all features in Python 3.10+
+create_task = asyncio.create_task
 
 
-def deque_pop(d: Deque[T], pos: int = -1) -> T:
+def deque_pop(d: deque[T], pos: int = -1) -> T:
     """
     Allows popping from an arbitrary position in a deque.
     The `pos` argument has the same meaning as for
@@ -103,7 +92,7 @@ class PriorityQueue(Generic[P, T]):
         for entry in self._pq:
             yield entry.obj
 
-    def items(self) -> Iterator[Tuple[P, T]]:
+    def items(self) -> Iterator[tuple[P, T]]:
         """Iterate over the queue, returning (priority, object) tuples. The order
         is undefined unless sort() has been called.
         """
@@ -138,7 +127,7 @@ class PriorityQueue(Generic[P, T]):
         finally:
             items.close()
 
-    def ordereditems(self) -> Generator[Tuple[P, T], None, None]:
+    def ordereditems(self) -> Generator[tuple[P, T], None, None]:
         """Iterate over the queue in the same order as it would be popped,
         returning (priority, object) tuples.
         The generator must be exhausted or closed after use."""
@@ -180,13 +169,13 @@ class PriorityQueue(Generic[P, T]):
             self._sequence = 0
         return entry.obj
 
-    def popitem(self) -> Tuple[P, T]:
+    def popitem(self) -> tuple[P, T]:
         entry = heapq.heappop(self._pq)
         if not self._pq:
             self._sequence = 0
         return entry.priority, entry.obj
 
-    def extend(self, entries: Iterable[Tuple[P, T]]) -> None:
+    def extend(self, entries: Iterable[tuple[P, T]]) -> None:
         # use this to add a lot of entries at once, since heapify is O(n)
         for pri, obj in entries:
             self._pq.append(PriEntry(pri, self._sequence, obj))
@@ -197,7 +186,7 @@ class PriorityQueue(Generic[P, T]):
         entry = self._pq[0]
         return entry.obj
 
-    def peekitem(self) -> Tuple[P, T]:
+    def peekitem(self) -> tuple[P, T]:
         entry = self._pq[0]
         return entry.priority, entry.obj
 
@@ -234,7 +223,7 @@ class PriorityQueue(Generic[P, T]):
         self,
         key: Callable[[T], bool],
         remove: bool = False,
-    ) -> Optional[Tuple[P, T]]:
+    ) -> Optional[tuple[P, T]]:
         # reversed is a heuristic because we are more likely to be looking for
         # more recently added items
         for i, entry in enumerate(reversed(self._pq)):
@@ -298,13 +287,7 @@ class PriEntry(Generic[P, T]):
 
 
 class Cancellable(Protocol):
-    if sys.version_info >= (3, 9):  # pragma: no cover
-
-        def cancel(self, msg: Optional[str] = None) -> Any: ...
-
-    else:  # pragma: no cover
-
-        def cancel(self) -> Any: ...
+    def cancel(self, msg: str | None = None) -> Any: ...
 
     def cancelled(self) -> bool: ...
 
@@ -318,7 +301,4 @@ def cancelling(target: CA, msg: Optional[str] = None) -> Generator[CA, None, Non
     try:
         yield target
     finally:  # pragma: no cover
-        if sys.version_info >= (3, 9):
-            target.cancel(msg)
-        else:
-            target.cancel()
+        target.cancel(msg)

@@ -1,3 +1,4 @@
+import builtins
 import sys
 import types
 from types import TracebackType
@@ -11,10 +12,7 @@ from typing import (
     Generator,
     Generic,
     Optional,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
     cast,
     overload,
 )
@@ -66,7 +64,7 @@ class Monitor(Generic[T]):
         self,
         coro: Coroutine[Any, Any, T],
         callable: Callable[..., Any],
-        args: Tuple[Any, ...],
+        args: tuple[Any, ...],
     ) -> Generator[Any, Any, T]:
         """
         Await a coroutine after an initial "send" call which is either
@@ -135,8 +133,8 @@ class Monitor(Generic[T]):
     async def athrow(
         self,
         coro: Coroutine[Any, Any, T],
-        type: Type[BaseException],
-        value: Union[BaseException, object] = ...,
+        type: type[BaseException],
+        value: BaseException | object = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T: ...
 
@@ -152,8 +150,8 @@ class Monitor(Generic[T]):
     async def athrow(
         self,
         coro: Coroutine[Any, Any, T],
-        type: Union[BaseException, Type[BaseException]],
-        value: Union[BaseException, object] = None,
+        type: BaseException | type[BaseException],
+        value: BaseException | object = None,
         traceback: Optional[TracebackType] = None,
     ) -> T:
         """
@@ -239,8 +237,8 @@ class BoundMonitor(Generic[T]):
     @overload
     async def athrow(
         self,
-        type: Type[BaseException],
-        value: Union[BaseException, object] = ...,
+        type: type[BaseException],
+        value: BaseException | object = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T: ...
 
@@ -254,8 +252,8 @@ class BoundMonitor(Generic[T]):
 
     async def athrow(
         self,
-        type: Union[BaseException, Type[BaseException]],
-        value: Union[BaseException, object] = None,
+        type: BaseException | type[BaseException],
+        value: BaseException | object = None,
         traceback: Optional[TracebackType] = None,
     ) -> T:
         """
@@ -350,8 +348,8 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
     @overload
     async def athrow(
         self,
-        type: Type[BaseException],
-        value: Union[BaseException, object] = ...,
+        type: type[BaseException],
+        value: BaseException | object = ...,
         traceback: Optional[TracebackType] = ...,
     ) -> T_co: ...
 
@@ -365,8 +363,8 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
 
     async def athrow(
         self,
-        type: Union[BaseException, Type[BaseException]],
-        value: Union[BaseException, object] = None,
+        type: BaseException | type[BaseException],
+        value: BaseException | object = None,
         traceback: Optional[TracebackType] = None,
     ) -> T_co:
         return cast(T_co, await self._athrow(type, value, traceback))
@@ -377,8 +375,8 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
     # shared implementation for aclose() and athrow()
     async def _athrow(
         self,
-        type: Optional[Union[BaseException, Type[BaseException]]],
-        value: Union[BaseException, object],
+        type: Optional[BaseException | type[BaseException]],
+        value: BaseException | object,
         traceback: Optional[TracebackType],
     ) -> Optional[T_co]:
         if self.ag_running:
@@ -395,7 +393,10 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
             if type is not None:
                 # athrow()
                 await self.monitor.athrow(
-                    self.coro, cast(Type[BaseException], type), value, traceback
+                    self.coro,
+                    cast(builtins.type[BaseException], type),
+                    value,
+                    traceback,
                 )
             else:
                 # aclose()

@@ -1,5 +1,6 @@
 from asyncio import AbstractEventLoop, Future, Handle, Task
-from typing import TYPE_CHECKING, Any, Deque
+from collections import deque
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     TaskAny = Task[Any]
@@ -9,4 +10,4 @@ else:
     FutureAny = Future
 
 LoopType = AbstractEventLoop
-QueueType = Deque[Handle]
+QueueType = deque[Handle]

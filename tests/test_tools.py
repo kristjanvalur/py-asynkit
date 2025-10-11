@@ -6,7 +6,7 @@ from contextlib import closing
 import pytest
 
 import asynkit.tools
-from asynkit.compat import PY_39, PY_311
+from asynkit.compat import PY_311
 from asynkit.tools import PriorityQueue
 
 from .conftest import SchedulingEventLoopPolicy
@@ -356,8 +356,8 @@ class TestCancelling:
         assert f.cancelled()
         with pytest.raises(asyncio.CancelledError) as e:
             await f
-        if PY_39:
-            assert e.value.args == ("hello",)
+        # Python 3.10+ always includes cancellation message
+        assert e.value.args == ("hello",)
 
         f = asyncio.Future()
         with pytest.raises(ValueError):

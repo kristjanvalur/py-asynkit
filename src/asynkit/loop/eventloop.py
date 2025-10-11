@@ -5,12 +5,12 @@ import asyncio.base_events
 import contextlib
 import sys
 from asyncio import AbstractEventLoop, AbstractEventLoopPolicy, Future, Handle, Task
+from collections import deque
 from contextvars import Context
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Deque,
     Generator,
     Iterable,
     Optional,
@@ -46,9 +46,9 @@ T = TypeVar("T")
 
 class HasReadyQueue(Protocol):
     @property
-    def _ready(self) -> Deque[Handle]: ...  # pragma: no cover
+    def _ready(self) -> deque[Handle]: ...  # pragma: no cover
 
-    def get_ready_queue(self: HasReadyQueue) -> Deque[Handle]: ...  # pragma: no cover
+    def get_ready_queue(self: HasReadyQueue) -> deque[Handle]: ...  # pragma: no cover
 
 
 class SchedulingMixin(AbstractSchedulingLoop):
@@ -56,7 +56,7 @@ class SchedulingMixin(AbstractSchedulingLoop):
     A mixin class adding features to the base event loop.
     """
 
-    def get_ready_queue(self: HasReadyQueue) -> Deque[Handle]:
+    def get_ready_queue(self: HasReadyQueue) -> deque[Handle]:
         """
         Default implementation to get the Ready Queue of the loop.
         Subclassable by other implementations.

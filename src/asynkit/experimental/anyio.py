@@ -1,6 +1,6 @@
 import contextlib
 from types import TracebackType
-from typing import Any, AsyncIterator, Callable, Coroutine, Optional, Type
+from typing import Any, AsyncIterator, Callable, Coroutine, Optional
 
 import pytest
 from anyio import create_task_group
@@ -120,7 +120,7 @@ class EagerTaskGroup(TaskGroup):
 
     async def __aexit__(
         self,
-        exc_type: Optional[Type[BaseException]],
+        exc_type: Optional[type[BaseException]],
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:

@@ -15,11 +15,8 @@ from typing import (
     Generic,
     Iterable,
     Iterator,
-    List,
     Optional,
     Protocol,
-    Set,
-    Tuple,
     TypeVar,
     cast,
 )
@@ -131,7 +128,7 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
 
     # Override base class _waiters to use priority queue instead of deque
     _waiters: Optional[  # type: ignore[assignment]
-        PriorityQueue[float, Tuple[FutureBool, ReferenceTypeTaskAny]]
+        PriorityQueue[float, tuple[FutureBool, ReferenceTypeTaskAny]]
     ]
 
     def __init__(self) -> None:
@@ -255,7 +252,7 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
         else:
 
             def key(
-                entry: Tuple[FutureBool, ReferenceTypeTaskAny],
+                entry: tuple[FutureBool, ReferenceTypeTaskAny],
             ) -> bool:
                 fut, _ = entry
                 return fut is from_obj
@@ -339,7 +336,7 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         # Must initialize these attributes before calling parent init
         # because that will schedule the task.
         self.priority_value = priority
-        self._holding_locks: Set[PriorityLock] = set()
+        self._holding_locks: set[PriorityLock] = set()
         self._waiting_on: Optional[Any] = None
         super().__init__(coro, loop=loop, name=name)
 
@@ -502,7 +499,7 @@ class PosPriorityQueue(Generic[T]):
             self.boost_stragglers(stragglers, min_pri, max_pri)
 
     def boost_stragglers(
-        self, stragglers: List[Tuple[PriorityValue, T]], min_pri: float, max_pri: float
+        self, stragglers: list[tuple[PriorityValue, T]], min_pri: float, max_pri: float
     ) -> None:
         n_boosted = 0
         for pri, _ in stragglers:
@@ -546,7 +543,7 @@ class PosPriorityQueue(Generic[T]):
         # reglar priority queues are (1, priority) and so the
         # immediate queue is always first.
 
-        promoted: List[T] = []
+        promoted: list[T] = []
         priority_val = 0.0
         try:
             while position > len(promoted):
@@ -622,22 +619,12 @@ class PosPriorityQueue(Generic[T]):
 
 
 class EventLoopLike(Protocol):  # pragma: no cover
-    if sys.version_info >= (3, 9):  # pragma: no cover
-
-        def call_soon(
-            self,
-            callback: Callable[..., Any],
-            *args: Any,
-            context: Optional[Context] = None,
-        ) -> Handle: ...  # pragma: no cover
-
-    else:
-
-        def call_soon(
-            self,
-            callback: Callable[..., Any],
-            *args: Any,
-        ) -> Handle: ...  # pragma: no cover
+    def call_soon(
+        self,
+        callback: Callable[..., Any],
+        *args: Any,
+        context: Context | None = None,
+    ) -> Handle: ...  # pragma: no cover
 
 
 class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
@@ -686,10 +673,7 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
         This is effectively the same as calling
         `call_soon()`, `queue_remove()` and `queue_insert_pos()` in turn.
         """
-        if sys.version_info >= (3, 9):  # pragma: no cover
-            handle = self.call_soon(callback, *args, context=context)
-        else:  # pragma: no cover
-            handle = self.call_soon(callback, *args)
+        handle = self.call_soon(callback, *args, context=context)
         self.queue_remove(handle)
         self.queue_insert_pos(handle, position)
         return handle
