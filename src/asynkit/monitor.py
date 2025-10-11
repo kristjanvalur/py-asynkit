@@ -181,7 +181,7 @@ class Monitor(Generic[T]):
         coro: Coroutine[Any, Any, T],
     ) -> None:
         """Close the coroutine, by sending a GeneratorExit exception into it."""
-        if coro.cr_frame is None:
+        if coro_is_finished(coro):
             return  # already closed
         try:
             await self.athrow(coro, GeneratorExit)
@@ -264,9 +264,9 @@ class BoundMonitor(Generic[T]):
         """
         return await self.monitor.athrow(
             self.coro,
-            type,
+            type,  # type: ignore[arg-type]
             value,
-            traceback,  # type: ignore [arg-type]
+            traceback,
         )
 
     async def aclose(self) -> None:
@@ -306,7 +306,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         self.monitor = monitor
         self.coro = coro
         # Mypy thinks ag_running is read-only
-        self.ag_running = False  # type: ignore[misc]
+        self.ag_running = False
         self.finalizer: Optional[Callable[[Any], None]] = None
 
     def __aiter__(self) -> AsyncIterator[T_co]:
@@ -332,7 +332,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
             raise StopAsyncIteration()
         elif coro_is_new(self.coro):
             self._first_iter()
-        self.ag_running = True  # type: ignore[misc]
+        self.ag_running = True
         try:
             await self.monitor.aawait(self.coro, value)
         except OOBData as oob:
@@ -345,7 +345,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         else:
             raise StopAsyncIteration()
         finally:
-            self.ag_running = False  # type: ignore[misc]
+            self.ag_running = False
 
     @overload
     async def athrow(
@@ -390,7 +390,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
             return None
         elif coro_is_new(self.coro):
             self._first_iter()
-        self.ag_running = True  # type: ignore[misc]
+        self.ag_running = True
         try:
             if type is not None:
                 # athrow()
@@ -418,4 +418,4 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
                 return None  # aclose() resulted in coroutine exit
             raise StopAsyncIteration()
         finally:
-            self.ag_running = False  # type: ignore[misc]
+            self.ag_running = False

@@ -55,7 +55,9 @@ T = TypeVar("T")
 S = TypeVar("S")
 P = ParamSpec("P")
 T_co = TypeVar("T_co", covariant=True)
-Suspendable = Union[Coroutine, Generator, AsyncGenerator]
+Suspendable = Union[
+    Coroutine[Any, Any, Any], Generator[Any, Any, Any], AsyncGenerator[Any, Any]
+]
 
 
 class CAwaitable(Awaitable[T_co], Cancellable, Protocol):
@@ -229,7 +231,7 @@ class CoroStart(Awaitable[T_co]):
             except BaseException as exc:
                 try:
                     out_value = (
-                        self.context.run(self.coro.throw, exc)  # type: ignore
+                        self.context.run(self.coro.throw, exc)
                         if self.context
                         else self.coro.throw(exc)
                     )
