@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import builtins
 import sys
 import types
@@ -286,9 +288,7 @@ class GeneratorObject(Generic[T, V]):
     ) -> None:
         self.monitor: Monitor[Any] = Monitor()
 
-    def __call__(
-        self, coro: Coroutine[Any, Any, Any]
-    ) -> "GeneratorObjectIterator[T, V]":
+    def __call__(self, coro: Coroutine[Any, Any, Any]) -> GeneratorObjectIterator[T, V]:
         return GeneratorObjectIterator(self.monitor, coro)
 
     async def ayield(self, value: T) -> Any:

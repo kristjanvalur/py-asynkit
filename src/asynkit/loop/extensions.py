@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 from asyncio import AbstractEventLoop, Handle
 from collections.abc import Callable, Iterable

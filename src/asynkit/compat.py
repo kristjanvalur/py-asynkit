@@ -1,9 +1,11 @@
-"""Compatibility routines for earlier asyncio versions"""
+from __future__ import annotations
 
 import asyncio
 import sys
 from typing import TYPE_CHECKING, Any, TypeVar
 from weakref import ReferenceType
+
+"""Compatibility routines for earlier asyncio versions"""
 
 # Python version checks
 PY_311 = sys.version_info >= (3, 11)

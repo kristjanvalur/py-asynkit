@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 from collections.abc import AsyncIterator, Callable, Coroutine
 from types import TracebackType
@@ -114,7 +116,7 @@ class EagerTaskGroup(TaskGroup):
         else:
             return self._task_group.start_soon(lambda: cs.as_coroutine(), name=name)
 
-    async def __aenter__(self) -> "TaskGroup":
+    async def __aenter__(self) -> TaskGroup:
         """Enter the task group context and allow starting new tasks."""
         await self._task_group.__aenter__()
         return self

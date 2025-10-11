@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import random
@@ -394,7 +396,7 @@ class PriorityValue:
     def priority(self) -> float:
         return self.base_priority + self.priority_boost
 
-    def __lt__(self, other: "PriorityValue") -> bool:
+    def __lt__(self, other: PriorityValue) -> bool:
         if self.priority_class != other.priority_class:
             return self.priority_class < other.priority_class
         return self.priority() < other.priority()
