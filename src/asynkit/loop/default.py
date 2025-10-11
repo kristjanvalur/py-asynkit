@@ -6,7 +6,6 @@ from collections.abc import Callable, Iterable
 from contextvars import Context
 from typing import Any, Optional, cast
 
-from ..compat import call_soon
 from ..tools import deque_pop
 from .schedulingloop import AbstractSchedulingLoop
 from .types import QueueType, TaskAny
@@ -141,7 +140,7 @@ def call_pos(
     Arrange for a callback to be inserted at the head of the queue to be
     called later.
     """
-    handle = call_soon(loop, callback, *args, context=context)
+    handle = loop.call_soon(callback, *args, context=context)
     queue = loop._ready  # type: ignore
     handle2 = queue.pop()
     assert handle2 is handle

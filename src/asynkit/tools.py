@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 else:
     _TaskAny = asyncio.Task
 
-# create_task has all features in Python 3.10+
 create_task = asyncio.create_task
 
 

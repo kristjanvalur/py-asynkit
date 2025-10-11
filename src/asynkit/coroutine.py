@@ -60,7 +60,6 @@ class CAwaitable(Awaitable[T_co], Cancellable, Protocol):
     pass
 
 
-# Python 3.10+ has full Future support
 Future_Type: TypeAlias = Future
 
 

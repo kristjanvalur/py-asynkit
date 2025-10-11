@@ -2,7 +2,6 @@ import asyncio
 import asyncio.tasks
 import contextlib
 import sys
-import threading
 from asyncio import AbstractEventLoop
 from typing import Any, AsyncIterator, Coroutine, Literal, Optional
 
@@ -21,8 +20,6 @@ __all__ = [
     "PyTask",
 ]
 
-# Python 3.9+ always has context support
-_have_get_loop = sys.version_info >= (3, 10)
 _is_310 = sys.version_info >= (3, 10)
 
 # Crate a python Task.  We need access to the __step method and this is hidden
@@ -335,24 +332,7 @@ async def task_timeout(timeout: Optional[float]) -> AsyncIterator[None]:
         timeout_handle.cancel()
 
 
-class LoopBoundMixin:
-    if not _have_get_loop:  # pragma: no cover
-        _global_lock = threading.Lock()
-        _loop = None
-
-        def _get_loop(self) -> AbstractEventLoop:
-            loop = asyncio.get_running_loop()
-
-            if self._loop is None:
-                with self._global_lock:
-                    if self._loop is None:
-                        self._loop = loop
-            if loop is not self._loop:
-                raise RuntimeError(f"{self!r} is bound to a different event loop")
-            return loop
-
-
-class InterruptCondition(asyncio.Condition, LoopBoundMixin):
+class InterruptCondition(asyncio.Condition):
     """
     A class which fixes the lack of support in asyncio.Condition for arbitrary
     exceptions being raised during the lock.acquire() call in wait().
@@ -381,7 +361,8 @@ class InterruptCondition(asyncio.Condition, LoopBoundMixin):
 
         self.release()
         try:
-            fut = self._get_loop().create_future()
+            # _get_loop() is available from asyncio.Condition's _LoopBoundMixin base
+            fut = self._get_loop().create_future()  # type: ignore[attr-defined]
             self._waiters.append(fut)  # type: ignore[attr-defined]
             try:
                 await fut

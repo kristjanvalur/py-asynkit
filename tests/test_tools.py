@@ -356,7 +356,6 @@ class TestCancelling:
         assert f.cancelled()
         with pytest.raises(asyncio.CancelledError) as e:
             await f
-        # Python 3.10+ always includes cancellation message
         assert e.value.args == ("hello",)
 
         f = asyncio.Future()
