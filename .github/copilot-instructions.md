@@ -40,7 +40,7 @@ py-asynkit/
 ## Development Setup
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.10+
 - uv for dependency management
 
 ### Installation
@@ -203,11 +203,11 @@ Use `@types.coroutine` decorator for generator-based coroutines that can be awai
 ## Compatibility Notes
 
 ### Python Version Support
-- Minimum: Python 3.9
-- Tested on: 3.9, 3.10, 3.11, 3.12, PyPy 3.9, PyPy 3.10
-- Type hints: Use built-in generics (`list[int]`, `dict[str, int]`) - Python 3.9+ feature
-- Union syntax: Use `Optional[X]` and `Union[X, Y]` (not `X | Y` which requires 3.10+)
-- Generic syntax: Use old-style `Generic[T]` base class, not PEP 695 syntax
+- Minimum: Python 3.10
+- Tested on: 3.10, 3.11, 3.12, PyPy 3.10
+- Type hints: Use built-in generics (`list[int]`, `dict[str, int]`)
+- Union syntax: Can use `X | Y` and `X | None` (Python 3.10+ feature)
+- Generic syntax: Use old-style `Generic[T]` base class, not PEP 695 syntax (requires 3.12+)
 
 ### Platform Support
 - Primary: Linux (Ubuntu)
@@ -298,7 +298,7 @@ When adding new features:
 3. Add tests mirroring the module structure
 4. Update README.md with examples
 5. Run full check: `uv run poe check`
-6. Consider backward compatibility (Python 3.9+)
+6. Consider backward compatibility (Python 3.10+)
 7. Mark experimental features clearly
 
 ## Related Documentation
