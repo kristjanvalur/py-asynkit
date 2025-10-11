@@ -108,8 +108,8 @@ DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
 if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
 
     class SchedulingProactorEventLoop(
-        asyncio.ProactorEventLoop,
-        SchedulingMixin,  # type: ignore
+        asyncio.ProactorEventLoop,  # type: ignore[name-defined,misc]
+        SchedulingMixin,
     ):
         pass
 
