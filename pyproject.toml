@@ -92,10 +92,14 @@ filterwarnings = [
 
 [tool.ruff]
 src = ["src"]
+target-version = "py310"  # Enforce Python 3.10+ idioms
 
 [tool.ruff.lint]
 select = [
-    "E", "F", "I",
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade - automatically upgrade syntax for newer Python versions
 ]
 
 # Ignore `F401` (unused import) in all `__init__.py` files
@@ -104,6 +108,7 @@ select = [
 "__init__.py" = ["F401", "F403"]
 
 [tool.mypy]
+python_version = "3.10"  # Enforce Python 3.10+ type semantics
 
 [[tool.mypy.overrides]]
 module = "asynkit.*"

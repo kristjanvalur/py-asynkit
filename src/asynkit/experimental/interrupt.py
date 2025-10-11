@@ -3,7 +3,8 @@ import asyncio.tasks
 import contextlib
 import sys
 from asyncio import AbstractEventLoop
-from typing import Any, AsyncIterator, Coroutine, Literal, Optional
+from collections.abc import AsyncIterator, Coroutine
+from typing import Any, Literal
 
 from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
 from asynkit.loop.types import FutureAny, TaskAny
@@ -36,7 +37,7 @@ def task_factory(loop, coro):  # type: ignore[no-untyped-def]
 
 
 def create_pytask(
-    coro: Coroutine[Any, Any, Any], *, name: Optional[str] = None
+    coro: Coroutine[Any, Any, Any], *, name: str | None = None
 ) -> TaskAny:
     """Create a Python-implemented task for the given coroutine."""
     loop = asyncio.get_running_loop()
@@ -274,7 +275,7 @@ class TimeoutInterrupt(InterruptException):
 
 
 @contextlib.asynccontextmanager
-async def task_timeout(timeout: Optional[float]) -> AsyncIterator[None]:
+async def task_timeout(timeout: float | None) -> AsyncIterator[None]:
     """Context manager to interrupt a task after a timeout."""
     if timeout is None:
         yield

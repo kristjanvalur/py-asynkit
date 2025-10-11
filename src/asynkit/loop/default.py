@@ -4,7 +4,7 @@ from asyncio import AbstractEventLoop, Handle, Task
 from collections import deque
 from collections.abc import Callable, Iterable
 from contextvars import Context
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from ..tools import deque_pop
 from .schedulingloop import AbstractSchedulingLoop
@@ -30,7 +30,7 @@ class SchedulingLoopHelper(AbstractSchedulingLoop):
     for the default event loop
     """
 
-    def __init__(self, loop: Optional[AbstractEventLoop] = None) -> None:
+    def __init__(self, loop: AbstractEventLoop | None = None) -> None:
         self._loop = loop or asyncio.get_running_loop()
         self._queue: QueueType = loop._ready  # type: ignore
 
@@ -44,7 +44,7 @@ class SchedulingLoopHelper(AbstractSchedulingLoop):
 
     def queue_find(
         self, key: Callable[[Handle], bool], remove: bool = False
-    ) -> Optional[Handle]:
+    ) -> Handle | None:
         return queue_find(self._queue, key, remove)
 
     def queue_insert(self, handle: Handle) -> None:
@@ -61,11 +61,11 @@ class SchedulingLoopHelper(AbstractSchedulingLoop):
         pos: int,
         callback: Callable[..., Any],
         *args: Any,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ) -> Handle:
         return call_pos(self._loop, pos, callback, *args, context=context)
 
-    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+    def task_from_handle(self, handle: Handle) -> TaskAny | None:
         return task_from_handle(handle)
 
 
@@ -86,7 +86,7 @@ class SchedulingLoopHelper(AbstractSchedulingLoop):
 
 def task_from_handle(
     handle: Handle,
-) -> Optional[TaskAny]:
+) -> TaskAny | None:
     """
     Extract the runnable Task object
     from its scheduled __step() callback.  Returns None if the
@@ -107,7 +107,7 @@ def task_from_handle(
 
 def queue_find(
     queue: deque[Handle], key: Callable[[Handle], bool], remove: bool = False
-) -> Optional[Handle]:
+) -> Handle | None:
     # search from the end of the queue since this is commonly
     # done for just-inserted callbacks
     for i, handle in enumerate(reversed(queue)):
@@ -134,7 +134,7 @@ def call_pos(
     pos: int,
     callback: Callable[..., Any],
     *args: Any,
-    context: Optional[Context] = None,
+    context: Context | None = None,
 ) -> Handle:
     """
     Arrange for a callback to be inserted at the head of the queue to be

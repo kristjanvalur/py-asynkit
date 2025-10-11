@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Coroutine, Optional
+from collections.abc import Coroutine
+from typing import Any
 
 from .loop.extensions import (
     get_scheduling_loop,
@@ -55,7 +56,7 @@ def _task_reinsert(loop: AbstractSchedulingLoop, task: TaskAny, pos: int) -> Non
     loop.queue_insert_pos(handle, pos)
 
 
-async def task_switch(task: TaskAny, insert_pos: Optional[int] = None) -> Any:
+async def task_switch(task: TaskAny, insert_pos: int | None = None) -> Any:
     """Switch immediately to the given task.
     The target task is moved to the head of the queue. If 'insert_pos'
     is None, then the current task is scheduled at the end of the
@@ -94,7 +95,7 @@ def task_is_blocked(task: TaskAny) -> bool:
     # generally remains in place from the time the future becomes "done"
     # and until Task.__step() runs as a result of that.
     # So we check the future directly for done-ness.
-    future: Optional[FutureAny] = task._fut_waiter  # type: ignore
+    future: FutureAny | None = task._fut_waiter  # type: ignore
     return future is not None and not future.done()
 
 
@@ -108,7 +109,7 @@ def task_is_runnable(task: TaskAny) -> bool:
 
 
 async def create_task_descend(
-    coro: Coroutine[Any, Any, Any], *, name: Optional[str] = None
+    coro: Coroutine[Any, Any, Any], *, name: str | None = None
 ) -> TaskAny:
     """Creates a task for the coroutine and starts it immediately.
     The current task is paused, to be resumed next when the new task
@@ -121,7 +122,7 @@ async def create_task_descend(
 
 
 async def create_task_start(
-    coro: Coroutine[Any, Any, Any], *, name: Optional[str] = None
+    coro: Coroutine[Any, Any, Any], *, name: str | None = None
 ) -> TaskAny:
     """Creates a task for the coroutine and starts it soon.
     The current task is paused for one round of the event loop, giving the
@@ -133,7 +134,7 @@ async def create_task_start(
     return task
 
 
-def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> set[TaskAny]:
+def runnable_tasks(loop: asyncio.AbstractEventLoop | None = None) -> set[TaskAny]:
     """Return a set of the runnable tasks for the loop."""
     loop = loop or asyncio.get_running_loop()
     if isinstance(loop, AbstractSchedulingLoop):
@@ -144,7 +145,7 @@ def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> set[Task
     return result
 
 
-def blocked_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> set[TaskAny]:
+def blocked_tasks(loop: asyncio.AbstractEventLoop | None = None) -> set[TaskAny]:
     """Return a set of the blocked tasks for the loop."""
     loop = loop or asyncio.get_running_loop()
     result = asyncio.all_tasks(loop) - runnable_tasks(loop)

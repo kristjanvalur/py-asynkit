@@ -5,23 +5,18 @@ import sys
 import weakref
 from abc import ABC, abstractmethod
 from asyncio import Handle, Lock, Task
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 from contextvars import Context
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
     Any,
-    AsyncIterator,
-    Callable,
     Generic,
-    Iterable,
-    Iterator,
-    Optional,
+    Literal,
     Protocol,
     TypeVar,
     cast,
 )
-
-from typing_extensions import Literal
 
 from asynkit.compat import (
     FutureBool,
@@ -61,7 +56,7 @@ class BasePriorityObject(ABC):
     """
 
     @abstractmethod
-    def effective_priority(self) -> Optional[float]:
+    def effective_priority(self) -> float | None:
         """
         Return the effective priority of this object.  For a task,
         this is the minimum of the task's priority and the effective
@@ -126,15 +121,13 @@ class PriorityLock(Lock, BasePriorityObject):
     """
 
     # Override base class _waiters to use priority queue instead of deque
-    _waiters: Optional[  # type: ignore[assignment]
-        PriorityQueue[float, tuple[FutureBool, ReferenceTypeTaskAny]]
-    ]
+    _waiters: PriorityQueue[float, tuple[FutureBool, ReferenceTypeTaskAny]] | None  # type: ignore[assignment]
 
     def __init__(self) -> None:
         # we use weakrefs to avoid reference cycles.  Tasks _own_ locks,
         # but locks don't own tasks. These are _backrefs_.
         super().__init__()
-        self._owning: Optional[ReferenceTypeTaskAny] = None
+        self._owning: ReferenceTypeTaskAny | None = None
 
     async def acquire(self) -> Literal[True]:
         """Acquire a lock.
@@ -214,7 +207,7 @@ class PriorityLock(Lock, BasePriorityObject):
         if not fut.done():  # pragma: no branch
             fut.set_result(True)
 
-    def effective_priority(self) -> Optional[float]:
+    def effective_priority(self) -> float | None:
         # waiting tasks are either PriorityTasks or not.
         # regular tasks are given a priority of 0
         if not self._waiters:
@@ -265,7 +258,7 @@ class PriorityCondition(asyncio.Condition):
 
     LockType = PriorityLock
 
-    def __init__(self, lock: Optional[asyncio.Lock] = None) -> None:
+    def __init__(self, lock: asyncio.Lock | None = None) -> None:
         lock = lock or self.LockType()
         super().__init__(lock=lock)
         # Override base class _waiters to use priority queue instead of deque
@@ -336,7 +329,7 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
         # because that will schedule the task.
         self.priority_value = priority
         self._holding_locks: set[PriorityLock] = set()
-        self._waiting_on: Optional[Any] = None
+        self._waiting_on: Any | None = None
         super().__init__(coro, loop=loop, name=name)
 
     def add_owned_lock(self, lock: PriorityLock) -> None:
@@ -345,7 +338,7 @@ class PriorityTask(Task, BasePriorityObject):  # type: ignore[type-arg]
     def remove_owned_lock(self, lock: PriorityLock) -> None:
         self._holding_locks.remove(lock)
 
-    def set_waiting_on(self, obj: Optional[Any]) -> None:
+    def set_waiting_on(self, obj: Any | None) -> None:
         if obj is not None:
             assert self._waiting_on is None
         else:
@@ -581,7 +574,7 @@ class PosPriorityQueue(Generic[T]):
         self,
         key: Callable[[T], bool],
         remove: bool = False,
-    ) -> Optional[T]:
+    ) -> T | None:
         found = self._pq.find(key, remove)
         if found is not None:
             pri, obj = found
@@ -592,7 +585,7 @@ class PosPriorityQueue(Generic[T]):
         self,
         key: Callable[[T], bool],
         new_priority: float,
-    ) -> Optional[T]:
+    ) -> T | None:
         """
         Reschedule an object which is already in the queue.
         """
@@ -648,7 +641,7 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
 
     def queue_find(
         self, key: Callable[[Handle], bool], remove: bool = False
-    ) -> Optional[Handle]:
+    ) -> Handle | None:
         return self.ready_queue.find(key, remove)
 
     def queue_remove(self, handle: Handle) -> None:
@@ -665,7 +658,7 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
         position: int,
         callback: Callable[..., Any],
         *args: Any,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ) -> Handle:
         """Arrange for a callback to be inserted at position 'pos' near the the head of
         the queue to be called soon.  'position' is typically a low number, 0 or 1.
@@ -679,7 +672,7 @@ class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):
 
     # helper to find tasks from handles and to find certain handles
     # in the queue
-    def task_from_handle(self, handle: Handle) -> Optional[TaskAny]:
+    def task_from_handle(self, handle: Handle) -> TaskAny | None:
         """
         Extract the runnable Task object
         from its scheduled callback.  Returns None if the

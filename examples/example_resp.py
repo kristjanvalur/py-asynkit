@@ -1,4 +1,5 @@
-from typing import Any, Generator, List, Optional, Tuple
+from collections.abc import Generator
+from typing import Any
 
 import pytest
 
@@ -24,7 +25,7 @@ CRNL = b"\r\n"
 
 def parse_resp_gen(
     unparsed: bytes,
-) -> Generator[Optional[Tuple[Any, bytes]], Optional[bytes], None]:
+) -> Generator[tuple[Any, bytes] | None, bytes | None, None]:
     """
     This is a generator function that parses a Redis RESP string.
     we only support ints and arrays of ints for simplicity
@@ -47,7 +48,7 @@ def parse_resp_gen(
 
     elif cmd == b"*":
         count = int(value)
-        result_array: List[Any] = []
+        result_array: list[Any] = []
         for _ in range(count):
             # recursively parse each sub-object
             # boilerplate required.
@@ -84,8 +85,8 @@ def test_generator() -> None:
 
 
 async def parse_resp_mon(
-    monitor: Monitor[Tuple[Any, bytes]], unparsed: bytes
-) -> Tuple[Any, bytes]:
+    monitor: Monitor[tuple[Any, bytes]], unparsed: bytes
+) -> tuple[Any, bytes]:
     """
     A Monitor based parser for Redis RESP strings.
     """
@@ -103,7 +104,7 @@ async def parse_resp_mon(
 
     elif cmd == b"*":
         count = int(value)
-        result_array: List[Any] = []
+        result_array: list[Any] = []
         # recursively parse each sub-object
         # no boilerplate required.
         for _ in range(count):
@@ -121,7 +122,7 @@ async def test_monitor() -> None:
     chunks = [resp[i : i + 2] for i in range(0, len(resp), 2)]
 
     # create the parser
-    m: Monitor[Tuple[Any, bytes]] = Monitor()
+    m: Monitor[tuple[Any, bytes]] = Monitor()
     parser = parse_resp_mon(m, b"")
     await m.start(parser)
 
@@ -143,7 +144,7 @@ def test_monitor_sync() -> None:
     chunks = [resp[i : i + 2] for i in range(0, len(resp), 2)]
 
     # create the parser
-    m: Monitor[Tuple[Any, bytes]] = Monitor()
+    m: Monitor[tuple[Any, bytes]] = Monitor()
     parser = parse_resp_mon(m, b"")
     await_sync(m.start(parser))
 

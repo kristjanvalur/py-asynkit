@@ -1,7 +1,8 @@
 import asyncio
 from asyncio import AbstractEventLoop, Handle
+from collections.abc import Callable, Iterable
 from contextvars import Context
-from typing import Any, Callable, Iterable, Optional, cast
+from typing import Any, cast
 
 from . import default
 from .schedulingloop import AbstractSchedulingLoop as AbstractSchedulingLoop
@@ -20,7 +21,7 @@ default loop implementation.
 
 
 def get_scheduling_loop(
-    loop: Optional[AbstractEventLoop] = None,
+    loop: AbstractEventLoop | None = None,
 ) -> AbstractSchedulingLoop:
     """
     get the AbstractSchedulingLoop for the given loop
@@ -42,8 +43,8 @@ def call_pos(
     position: int,
     callback: Callable[..., Any],
     *args: Any,
-    context: Optional[Context] = None,
-    loop: Optional[AbstractEventLoop] = None,
+    context: Context | None = None,
+    loop: AbstractEventLoop | None = None,
 ) -> Handle:
     """Arrange for a callback to be made at position 'pos' near the the head of
     the callable queue.  'position' is typically a low number, 0 or 1, where 0
@@ -56,7 +57,7 @@ def call_pos(
 
 
 def ready_len(
-    loop: Optional[AbstractEventLoop] = None,
+    loop: AbstractEventLoop | None = None,
 ) -> int:
     """Returns the length of the ready queue.  This is the number
     of Handles in there, which may not all represent ready Tasks.
@@ -66,8 +67,8 @@ def ready_len(
 
 def ready_remove(
     handle: Handle,
-    loop: Optional[AbstractEventLoop] = None,
-) -> Optional[Handle]:
+    loop: AbstractEventLoop | None = None,
+) -> Handle | None:
     """Removes a handle from the ready queue.
     Raises ValueError if not found."""
     sl = get_scheduling_loop(loop)
@@ -76,9 +77,9 @@ def ready_remove(
 
 def ready_find(
     task: TaskAny,
-    loop: Optional[AbstractEventLoop] = None,
+    loop: AbstractEventLoop | None = None,
     remove: bool = False,
-) -> Optional[Handle]:
+) -> Handle | None:
     """Finds a task in the ready queue, and returns its handle,
     optionally removing it from the queue.
     Returns None if not found."""
@@ -88,14 +89,14 @@ def ready_find(
 
 def ready_insert(
     item: Handle,
-    loop: Optional[AbstractEventLoop] = None,
+    loop: AbstractEventLoop | None = None,
 ) -> None:
     """Inserts a handle in the default position on the ready queue"""
     get_scheduling_loop(loop).queue_insert(item)
 
 
 def ready_tasks(
-    loop: Optional[AbstractEventLoop] = None,
+    loop: AbstractEventLoop | None = None,
 ) -> Iterable[TaskAny]:
     """Returns all the Tasks in the ready queue"""
     sl = get_scheduling_loop(loop)
@@ -106,7 +107,7 @@ def ready_tasks(
 
 
 def get_ready_queue(
-    loop: Optional[AbstractEventLoop] = None,
+    loop: AbstractEventLoop | None = None,
 ) -> Iterable[Handle]:
     """
     Low level routine, mostly used for testing.  May
@@ -117,8 +118,8 @@ def get_ready_queue(
 
 def task_from_handle(
     handle: Handle,
-    loop: Optional[AbstractEventLoop] = None,
-) -> Optional[TaskAny]:
+    loop: AbstractEventLoop | None = None,
+) -> TaskAny | None:
     """
     Low level routine, mostly used for testing.  May
     raise NotImplementedError if not supported.

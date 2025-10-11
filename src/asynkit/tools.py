@@ -4,15 +4,11 @@ import asyncio
 import contextlib
 import heapq
 from collections import deque
+from collections.abc import Callable, Generator, Iterable, Iterator
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Generator,
     Generic,
-    Iterable,
-    Iterator,
-    Optional,
     TypeVar,
 )
 
@@ -222,7 +218,7 @@ class PriorityQueue(Generic[P, T]):
         self,
         key: Callable[[T], bool],
         remove: bool = False,
-    ) -> Optional[tuple[P, T]]:
+    ) -> tuple[P, T] | None:
         # reversed is a heuristic because we are more likely to be looking for
         # more recently added items
         for i, entry in enumerate(reversed(self._pq)):
@@ -248,7 +244,7 @@ class PriorityQueue(Generic[P, T]):
         self,
         key: Callable[[T], bool],
         new_priority: P,
-    ) -> Optional[T]:
+    ) -> T | None:
         """
         Reschedule an object which is already in the queue.
         """
@@ -295,7 +291,7 @@ CA = TypeVar("CA", bound=Cancellable)
 
 
 @contextlib.contextmanager
-def cancelling(target: CA, msg: Optional[str] = None) -> Generator[CA, None, None]:
+def cancelling(target: CA, msg: str | None = None) -> Generator[CA, None, None]:
     """Ensure that the target is cancelled"""
     try:
         yield target

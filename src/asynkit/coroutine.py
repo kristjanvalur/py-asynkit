@@ -1,27 +1,29 @@
 import asyncio
+import contextlib
 import functools
 import inspect
 import types
 from asyncio import Future
-from contextvars import Context, copy_context
-from types import FrameType
-from typing import (
-    Any,
+from collections.abc import (
     AsyncGenerator,
     AsyncIterable,
     Awaitable,
     Callable,
-    ContextManager,
     Coroutine,
     Generator,
     Iterator,
-    Optional,
+)
+from contextvars import Context, copy_context
+from types import FrameType
+from typing import (
+    Any,
+    TypeAlias,
     TypeVar,
     cast,
     overload,
 )
 
-from typing_extensions import ParamSpec, Protocol, TypeAlias
+from typing_extensions import ParamSpec, Protocol
 
 from .tools import Cancellable, cancelling, create_task
 
@@ -171,13 +173,13 @@ class CoroStart(Awaitable[T_co]):
         self,
         coro: Coroutine[Any, Any, T_co],
         *,
-        context: Optional[Context] = None,
+        context: Context | None = None,
     ):
         self.coro = coro
         self.context = context
-        self.start_result: Optional[tuple[Any, Optional[BaseException]]] = self._start()
+        self.start_result: tuple[Any, BaseException | None] | None = self._start()
 
-    def _start(self) -> tuple[Any, Optional[BaseException]]:
+    def _start(self) -> tuple[Any, BaseException | None]:
         """
         Start the coroutine execution. It runs the coroutine to its first suspension
         point or until it raises an exception or returns a value, whichever comes
@@ -323,7 +325,7 @@ class CoroStart(Awaitable[T_co]):
             return cast(T_co, exc.value)
         raise exc
 
-    def exception(self) -> Optional[BaseException]:
+    def exception(self) -> BaseException | None:
         """
         Returns the exception or None
         """
@@ -373,7 +375,7 @@ class CoroStart(Awaitable[T_co]):
 
 
 async def coro_await(
-    coro: Coroutine[Any, Any, T], *, context: Optional[Context] = None
+    coro: Coroutine[Any, Any, T], *, context: Context | None = None
 ) -> T:
     """
     A simple await, using the partial run primitives, equivalent to
@@ -388,7 +390,7 @@ async def coro_await(
 def coro_eager(
     coro: Coroutine[Any, Any, T],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> CAwaitable[T]:
     """
     Make the coroutine "eager":
@@ -412,7 +414,7 @@ def coro_eager(
 def func_eager(
     func: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> Callable[P, CAwaitable[T]]:
     """
     Decorator to automatically apply the `coro_eager` to the
@@ -430,7 +432,7 @@ def func_eager(
 def eager(
     arg: Coroutine[Any, Any, T],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> CAwaitable[T]: ...
 
 
@@ -438,14 +440,14 @@ def eager(
 def eager(
     arg: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> Callable[P, CAwaitable[T]]: ...
 
 
 def eager(
     arg: Coroutine[Any, Any, T] | Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
+    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> CAwaitable[T] | Callable[P, CAwaitable[T]]:
     """
     Convenience function invoking either `coro_eager` or `func_eager`
@@ -463,9 +465,9 @@ def eager(
 def eager_ctx(
     coro: Coroutine[Any, Any, T],
     *,
-    task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
-    msg: Optional[str] = None,
-) -> ContextManager[CAwaitable[T]]:
+    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    msg: str | None = None,
+) -> contextlib.AbstractContextManager[CAwaitable[T]]:
     """Create an eager task and return a context manager that will cancel it on exit."""
     e = coro_eager(coro, task_factory=task_factory)
     return cancelling(e, msg=msg)

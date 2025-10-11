@@ -3,7 +3,7 @@ import inspect
 import types
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, copy_context
-from typing import Any, List
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -175,7 +175,7 @@ class TestEager:
         assert log == expect
 
     async def test_eager_ctx_noawait(self, block: bool) -> None:
-        log: List[Any] = []
+        log: list[Any] = []
         coro, expect = self.get_coro1(block)
         with asynkit.eager_ctx(coro(log)) as c:
             log.append("a")
