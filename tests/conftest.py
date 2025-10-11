@@ -11,7 +11,7 @@ ProactorLoop = getattr(asynkit, "SchedulingProactorEventLoop", None)
 
 # Check if trio is available and compatible
 try:
-    import trio  # noqa: F401
+    import trio  # noqa: F401  # type: ignore[import-untyped]
 
     TRIO_AVAILABLE = True
 except (ImportError, TypeError):

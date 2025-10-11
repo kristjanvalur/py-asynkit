@@ -138,8 +138,13 @@ module = [
     "asynkit.loop.eventloop",
     "asynkit.tools",
     "tests.test_coro",
+    "tests.conftest",
 ]
 warn_unused_ignores=false
+
+[[tool.mypy.overrides]]
+module = "trio"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "asynkit.compat"
