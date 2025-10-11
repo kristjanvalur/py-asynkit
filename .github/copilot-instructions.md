@@ -40,29 +40,48 @@ py-asynkit/
 ## Development Setup
 
 ### Prerequisites
-- Python 3.8+
-- Poetry for dependency management
+- Python 3.9+
+- uv for dependency management
 
 ### Installation
 ```bash
-poetry install
+uv sync
 ```
 
 ### Common Tasks (using poethepoet)
-- `poetry run poe test` - Run tests
-- `poetry run poe cov` - Run tests with coverage
-- `poetry run poe lint` - Run ruff linter
-- `poetry run poe black` - Format code with black
-- `poetry run poe typing` - Run mypy type checking
-- `poetry run poe check` - Run all checks (style, lint, typing, coverage)
+- `uv run poe test` - Run tests
+- `uv run poe cov` - Run tests with coverage
+- `uv run poe lint` - Run ruff linter
+- `uv run poe format` - Format code with ruff
+- `uv run poe typing` - Run mypy type checking
+- `uv run poe check` - Run all checks (style, lint, typing, coverage)
+
+## Important: Low-Level Implementation Details
+
+**asynkit fundamentally works by accessing internal, undocumented implementation details of Python's asyncio module.** This includes:
+
+- Direct manipulation of coroutine internals (`cr_frame`, `cr_await`, `gi_frame`)
+- Calling low-level coroutine methods like `throw()`, `send()`, `close()`
+- Manipulating event loop internals and the ready queue
+- Accessing private asyncio attributes and methods
+- Working with frame objects and execution state
+
+**Implications for Type Checking:**
+- Strict mypy type checking is **not always possible** for this codebase
+- The Python type system doesn't expose these internal APIs properly
+- `type: ignore` comments are sometimes **necessary and acceptable** when working with these low-level details
+- Some type errors cannot be resolved without sacrificing functionality
+- Focus on type safety for public APIs; internal implementation may need type bypasses
+
+When adding type ignores for low-level operations, add a comment explaining why the bypass is necessary (e.g., "accessing internal asyncio implementation detail").
 
 ## Coding Conventions
 
 ### Style Guide
-- **Formatting**: Black (line length 88)
+- **Formatting**: Ruff format (line length 88)
 - **Imports**: Organized with ruff (isort-style)
 - **Linting**: Ruff with E, F, I rules enabled
-- **Type Checking**: Strict mypy for `asynkit.*` modules
+- **Type Checking**: Mypy for `asynkit.*` modules (strict where possible, pragmatic type ignores when needed for low-level operations)
 - **Docstrings**: Triple-quoted strings for public APIs
 
 ### Type Annotations
@@ -184,9 +203,10 @@ Use `@types.coroutine` decorator for generator-based coroutines that can be awai
 ## Compatibility Notes
 
 ### Python Version Support
-- Minimum: Python 3.8
-- Tested on: 3.8, 3.9, 3.10, 3.11, 3.12, PyPy 3.9, PyPy 3.10
-- Type aliases: Use `typing_extensions.TypeAlias` for 3.8 compatibility
+- Minimum: Python 3.9
+- Tested on: 3.9, 3.10, 3.11, 3.12, PyPy 3.9, PyPy 3.10
+- Type hints: Use built-in generics (`list[int]`, `dict[str, int]`) - Python 3.9+ feature
+- Union syntax: Use `Optional[X]` and `Union[X, Y]` (not `X | Y` which requires 3.10+)
 - Generic syntax: Use old-style `Generic[T]` base class, not PEP 695 syntax
 
 ### Platform Support
@@ -277,8 +297,8 @@ When adding new features:
 2. Update `__all__` exports
 3. Add tests mirroring the module structure
 4. Update README.md with examples
-5. Run full check: `poetry run poe check`
-6. Consider backward compatibility (Python 3.8+)
+5. Run full check: `uv run poe check`
+6. Consider backward compatibility (Python 3.9+)
 7. Mark experimental features clearly
 
 ## Related Documentation
