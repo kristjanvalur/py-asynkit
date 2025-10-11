@@ -1,0 +1,289 @@
+# GitHub Copilot Instructions for py-asynkit
+
+## Project Overview
+
+**asynkit** is a toolkit for Python coroutines that provides advanced control over Python's `asyncio` module. It offers low-level coroutine manipulation, custom event loop implementations, and scheduling helpers.
+
+### Key Features
+- Helper tools for controlling coroutine execution (`CoroStart`, `Monitor`)
+- Utility classes like `GeneratorObject` 
+- Coroutine helpers including `coro_iter()` and `awaitmethod()` decorator
+- Running async code from non-async code (`await_sync()`, `aiter_sync()`)
+- Scheduling helpers and custom event-loop implementations
+- Eager execution of Tasks (similar to C# async/await behavior)
+- Experimental priority scheduling of Tasks
+- Limited support for `anyio` and `trio` backends
+
+## Project Structure
+
+```
+py-asynkit/
+├── src/asynkit/
+│   ├── coroutine.py       # Core coroutine manipulation tools (CoroStart, eager, await_sync)
+│   ├── monitor.py         # Monitor class for suspending/resuming coroutines
+│   ├── scheduling.py      # Task scheduling utilities (task_switch, sleep_insert)
+│   ├── tools.py           # Helper utilities (cancelling context, create_task)
+│   ├── loop/              # Custom event loop implementations
+│   │   ├── eventloop.py   # Extended event loop base
+│   │   ├── schedulingloop.py  # Custom scheduling loop
+│   │   ├── extensions.py  # Event loop introspection tools
+│   │   └── types.py       # Type aliases for compatibility
+│   └── experimental/      # Experimental features
+│       ├── interrupt.py   # Task interruption support
+│       ├── priority.py    # Priority scheduling
+│       └── anyio.py       # anyio backend integration
+├── tests/                 # Unit tests mirroring src structure
+├── examples/              # Example code demonstrating features
+└── pyproject.toml         # Poetry configuration
+```
+
+## Development Setup
+
+### Prerequisites
+- Python 3.8+
+- Poetry for dependency management
+
+### Installation
+```bash
+poetry install
+```
+
+### Common Tasks (using poethepoet)
+- `poetry run poe test` - Run tests
+- `poetry run poe cov` - Run tests with coverage
+- `poetry run poe lint` - Run ruff linter
+- `poetry run poe black` - Format code with black
+- `poetry run poe typing` - Run mypy type checking
+- `poetry run poe check` - Run all checks (style, lint, typing, coverage)
+
+## Coding Conventions
+
+### Style Guide
+- **Formatting**: Black (line length 88)
+- **Imports**: Organized with ruff (isort-style)
+- **Linting**: Ruff with E, F, I rules enabled
+- **Type Checking**: Strict mypy for `asynkit.*` modules
+- **Docstrings**: Triple-quoted strings for public APIs
+
+### Type Annotations
+- All public APIs must have complete type annotations
+- Use `TypeVar`, `Generic`, `Protocol` for flexible typing
+- Use `typing_extensions` for compatibility (ParamSpec, TypeAlias)
+- Covariant/contravariant type vars where appropriate (`T_co`, `T_contra`)
+
+### Naming Conventions
+- **Public APIs**: Listed in `__all__` exports
+- **Private functions**: Prefixed with underscore (e.g., `_coro_getattr`)
+- **Async functions**: Clear `async def` signature
+- **Coroutines**: Often named with `coro_*` prefix
+- **Monitor methods**: Prefixed with `a` for async versions (e.g., `aawait`, `athrow`)
+
+### Import Organization
+1. Standard library imports
+2. Third-party imports (asyncio, typing_extensions)
+3. Local imports (relative from `.`)
+
+## Key Concepts and Patterns
+
+### CoroStart - Starting Coroutines Eagerly
+`CoroStart` allows starting a coroutine and determining if it completed synchronously:
+```python
+start = CoroStart(my_coroutine())
+if start.done():
+    result = start.result()  # Get result synchronously
+else:
+    result = await start  # Await if still pending
+```
+
+### Monitor - Out-of-Band Communication
+The `Monitor` class enables pausing coroutines and sending data out-of-band:
+```python
+m = Monitor()
+coro = monitored_function(m, arg)
+initial_data = await m.start(coro)  # Start and get initial OOB data
+result = await m.aawait(coro, data)  # Resume with data
+```
+
+Key Monitor methods:
+- `start()` - Start coroutine, catch first OOB data
+- `aawait()` - Resume coroutine with data
+- `athrow()` - Throw exception into coroutine
+- `aclose()` - Close coroutine gracefully
+- `oob()` - Send out-of-band data from within monitored coroutine
+
+### GeneratorObject - Async Generator Protocol
+Wraps coroutines to behave like async generators with `asend()` and `athrow()` methods.
+
+### Eager Execution
+The `@eager` decorator makes coroutines execute immediately until they block:
+```python
+@asynkit.eager
+async def fetch_data():
+    # Executes immediately, not when awaited
+    return await remote_call()
+```
+
+### Scheduling Helpers
+- `task_switch()` - Yield control to other tasks
+- `sleep_insert(pos)` - Resume at specific position in ready queue
+- `task_reinsert(task, pos)` - Place task at position in queue
+- `runnable_tasks()` / `blocked_tasks()` - Introspect event loop state
+
+### Running Async from Sync
+- `await_sync(coro)` - Run coroutine synchronously (must not block)
+- `aiter_sync(aiterable)` - Iterate async iterator synchronously
+
+## Testing Guidelines
+
+### Test Structure
+- Tests mirror source structure in `tests/` directory
+- Use pytest with anyio for async testing
+- Mark async tests with `pytestmark = pytest.mark.anyio`
+
+### Fixtures
+- `anyio_backend` fixture can specify event loop type:
+  - `"asyncio"` - Standard asyncio (default)
+  - `("asyncio", {"policy": CustomPolicy()})` - Custom policy
+
+### Common Test Patterns
+```python
+pytestmark = pytest.mark.anyio
+
+async def test_feature():
+    # Test async functionality
+    result = await my_async_function()
+    assert result == expected
+
+def test_sync_feature():
+    # Test synchronous wrapper
+    result = await_sync(my_async_function())
+    assert result == expected
+```
+
+### Coverage
+- Aim for high coverage (`pytest --cov=asynkit`)
+- Use `pragma: no cover` for version-specific branches
+- Exclude lines: `pragma: no cover`, `@overload`, `@abstractmethod`, `assert False`, `TYPE_CHECKING`
+
+## Working with Low-Level Coroutine APIs
+
+### Coroutine Introspection
+- `coro_is_new(coro)` - Check if coroutine hasn't started
+- `coro_is_suspended(coro)` - Check if coroutine is paused
+- `coro_is_finished(coro)` - Check if coroutine completed
+- `coro_get_frame(coro)` - Get coroutine frame object
+
+### Generator-based Coroutines
+Use `@types.coroutine` decorator for generator-based coroutines that can be awaited.
+
+### Exception Handling
+- `SynchronousError` - Raised when async operation doesn't complete synchronously
+- `SynchronousAbort` - BaseException for aborting synchronous execution
+- `OOBData` - Exception carrying out-of-band data in Monitor protocol
+
+## Compatibility Notes
+
+### Python Version Support
+- Minimum: Python 3.8
+- Tested on: 3.8, 3.9, 3.10, 3.11, 3.12, PyPy 3.9, PyPy 3.10
+- Type aliases: Use `typing_extensions.TypeAlias` for 3.8 compatibility
+- Generic syntax: Use old-style `Generic[T]` base class, not PEP 695 syntax
+
+### Platform Support
+- Primary: Linux (Ubuntu)
+- Tested: Windows (limited matrix)
+- Event loops: Selector loop (all platforms), Proactor loop (Windows)
+
+### Backend Support
+- **asyncio**: Full support (primary backend)
+- **anyio**: Supported with asyncio backend
+- **trio**: Limited support via anyio
+
+## Common Patterns to Follow
+
+### Creating Tasks
+Use `asynkit.tools.create_task()` for compatibility:
+```python
+from asynkit.tools import create_task
+task = create_task(my_coroutine())
+```
+
+### Cancellation Context
+Use `cancelling()` context manager for cancellation detection:
+```python
+async with cancelling() as c:
+    await some_operation()
+    if c.cancelled():
+        # Handle cancellation
+```
+
+### Context Variables
+Use `coro_await()` to run coroutines with specific context:
+```python
+context = contextvars.copy_context()
+result = await coro_await(my_coro(), context=context)
+```
+
+### Custom Event Loops
+Extend `AbstractSchedulingLoop` or use provided implementations:
+- `SchedulingEventLoop` - With task introspection
+- `PriorityEventLoop` - With priority scheduling (experimental)
+
+## Documentation
+
+### Docstring Style
+- First line: Brief summary
+- Empty line
+- Detailed description
+- Parameters/Returns documented inline when non-obvious
+- Examples in docstrings for complex APIs
+
+### README Examples
+The README.md contains extensive examples - keep it in sync when adding features.
+
+## Experimental Features
+
+Features in `asynkit.experimental` are:
+- Not guaranteed stable
+- May be platform-specific
+- Subject to change without deprecation
+- Use with caution in production
+
+Current experimental features:
+- `task_interrupt()` - Interrupt running tasks
+- `task_timeout()` - Timeout with interruption
+- Priority scheduling
+- anyio eager task groups
+
+## Performance Considerations
+
+- Eager execution reduces latency for IO-bound operations
+- Direct coroutine manipulation has overhead - use judiciously
+- Monitor adds overhead for OOB communication
+- Custom event loops may impact throughput
+
+## Common Pitfalls
+
+1. **Forgetting to await Monitor operations**: `aawait()`, `athrow()`, `aclose()` must be awaited
+2. **Mixing sync and async incorrectly**: `await_sync()` only works if coroutine doesn't actually suspend
+3. **Not handling OOBData**: Monitor coroutines must catch and handle `OOBData` exceptions
+4. **Event loop assumptions**: Custom loops may not support all asyncio features
+5. **Generator vs Coroutine**: Use `@types.coroutine` when needed for generator-based coroutines
+
+## Contributing Guidelines
+
+When adding new features:
+1. Add comprehensive type annotations
+2. Update `__all__` exports
+3. Add tests mirroring the module structure
+4. Update README.md with examples
+5. Run full check: `poetry run poe check`
+6. Consider backward compatibility (Python 3.8+)
+7. Mark experimental features clearly
+
+## Related Documentation
+
+- Python asyncio docs: https://docs.python.org/3/library/asyncio.html
+- PEP 492 (async/await): https://peps.python.org/pep-0492/
+- anyio docs: https://anyio.readthedocs.io/
+- Repository: https://github.com/kristjanvalur/py-asynkit
