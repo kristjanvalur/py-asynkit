@@ -14,8 +14,8 @@ PY_311 = sys.version_info >= (3, 11)
 
 T = TypeVar("T")
 
-# The following is needed for mypy to work with Python 3.8
-# which doesn't allow subscripting many types
+# The following is needed for mypy and older Python versions
+# which don't allow subscripting many types at runtime
 if TYPE_CHECKING:
     _TaskAny = asyncio.Task[Any]
     FutureBool = asyncio.Future[bool]
