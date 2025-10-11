@@ -174,9 +174,10 @@ class TestStartSoon:
 
         with pytest.raises(EOFError) if not (eager and not block) else nullcontext():
             async with group() as tg:
-                with pytest.raises(EOFError) if (
-                    eager and not block
-                ) else nullcontext():
+                ctx = (
+                    pytest.raises(EOFError) if (eager and not block) else nullcontext()
+                )
+                with ctx:
                     tg.start_soon(coro, result, "b", name="myname")
                     assert result == (["a"] if eager else [])
                 event.set()

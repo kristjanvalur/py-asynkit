@@ -35,8 +35,8 @@ jobs:
         run: uv run poe cov
       - name: Run Lint
         run: uv run poe lint
-      - name: Run Black
-        run: uv run poe black --check
+      - name: Run Format Check
+        run: uv run poe style
       - name: Run typechecks
         run: uv run poe typing
 
