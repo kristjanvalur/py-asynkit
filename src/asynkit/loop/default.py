@@ -1,8 +1,10 @@
 import asyncio
 import asyncio.tasks
 from asyncio import AbstractEventLoop, Handle, Task
+from collections import deque
+from collections.abc import Callable, Iterable
 from contextvars import Context
-from typing import Any, Callable, Deque, Iterable, Optional, Tuple, cast
+from typing import Any, Optional, cast
 
 from ..compat import call_soon
 from ..tools import deque_pop
@@ -10,7 +12,7 @@ from .schedulingloop import AbstractSchedulingLoop
 from .types import QueueType, TaskAny
 
 # asyncio by default uses a C implemented task from _asyncio module
-TaskTypes: Tuple[Any, ...]
+TaskTypes: tuple[Any, ...]
 if hasattr(asyncio.tasks, "_PyTask"):
     PyTask = asyncio.tasks._PyTask
     TaskTypes = (Task, PyTask)
@@ -105,7 +107,7 @@ def task_from_handle(
 
 
 def queue_find(
-    queue: Deque[Handle], key: Callable[[Handle], bool], remove: bool = False
+    queue: deque[Handle], key: Callable[[Handle], bool], remove: bool = False
 ) -> Optional[Handle]:
     # search from the end of the queue since this is commonly
     # done for just-inserted callbacks
@@ -118,7 +120,7 @@ def queue_find(
     return None
 
 
-def queue_remove(queue: Deque[Handle], in_handle: Handle) -> None:
+def queue_remove(queue: deque[Handle], in_handle: Handle) -> None:
     # search from the end
     for i, handle in enumerate(reversed(queue)):
         if in_handle is handle:

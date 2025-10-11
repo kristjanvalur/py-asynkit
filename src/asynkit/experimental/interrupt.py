@@ -21,7 +21,7 @@ __all__ = [
     "PyTask",
 ]
 
-_have_context = sys.version_info > (3, 8)
+# Python 3.9+ always has context support
 _have_get_loop = sys.version_info >= (3, 10)
 _is_310 = sys.version_info >= (3, 10)
 
@@ -138,7 +138,7 @@ def task_throw(task: TaskAny, exception: BaseException) -> None:
                 raise RuntimeError("cannot interrupt self")
 
         callback, arg = step_method, exception
-        ctx = task._context if _have_context else None  # type: ignore[attr-defined]
+        ctx = task._context  # type: ignore[attr-defined]
 
     # clear the future waiter, and re-insert it.  fut_waiter is not necessarily
     # done.
@@ -150,17 +150,11 @@ def task_throw(task: TaskAny, exception: BaseException) -> None:
         # while the task is blocked, no longer holds!  so we should really make
         # sure this task is switched to immediately!
         task._fut_waiter = None  # type: ignore[attr-defined]
-    if _have_context:
-        task_loop.call_soon(  # type: ignore[call-arg]
-            callback,
-            arg,
-            context=ctx,
-        )
-    else:  # pragma: no cover
-        task_loop.call_soon(
-            callback,
-            arg,
-        )
+    task_loop.call_soon(  # type: ignore[call-arg]
+        callback,
+        arg,
+        context=ctx,
+    )
 
 
 def c_task_reschedule(
@@ -200,7 +194,7 @@ def c_task_reschedule(
             assert task is asyncio.current_task()
             raise RuntimeError("cannot interrupt self")
         callback = handle._callback  # type: ignore[attr-defined]
-        ctx = handle._context if _have_context else None  # type: ignore[attr-defined]
+        ctx = handle._context  # type: ignore[attr-defined]
 
     # we now have a callback, a bound method.  We must re-use this method
     # because we have no way to create a new bound method for the internal
@@ -243,24 +237,14 @@ def future_find_task_callback(fut_waiter: FutureAny, task: TaskAny) -> Any:
     Look for the correct callback on the future to remove, by finding the
     one associated with a task.
     """
-    if _have_context:
-        found = [
-            (f, ctx)
-            for (f, ctx) in fut_waiter._callbacks  # type: ignore[attr-defined]
-            if getattr(f, "__self__", None) is task
-        ]
-    else:  # pragma: no cover
-        found = [
-            f
-            for f in fut_waiter._callbacks  # type: ignore[attr-defined]
-            if getattr(f, "__self__", None) is task
-        ]
+    found = [
+        (f, ctx)
+        for (f, ctx) in fut_waiter._callbacks  # type: ignore[attr-defined]
+        if getattr(f, "__self__", None) is task
+    ]
     assert len(found) == 1
     cb = found[0]
-    if _have_context:
-        callback, ctx = cb
-    else:  # pragma: no cover
-        callback, ctx = cb, None  # type: ignore[assignment]
+    callback, ctx = cb
     return callback, ctx
 
 

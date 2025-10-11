@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Coroutine, Optional, Set
+from typing import Any, Coroutine, Optional
 
 from .loop.extensions import (
     get_scheduling_loop,
@@ -133,7 +133,7 @@ async def create_task_start(
     return task
 
 
-def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[TaskAny]:
+def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> set[TaskAny]:
     """Return a set of the runnable tasks for the loop."""
     loop = loop or asyncio.get_running_loop()
     if isinstance(loop, AbstractSchedulingLoop):
@@ -144,7 +144,7 @@ def runnable_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[Task
     return result
 
 
-def blocked_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> Set[TaskAny]:
+def blocked_tasks(loop: Optional[asyncio.AbstractEventLoop] = None) -> set[TaskAny]:
     """Return a set of the blocked tasks for the loop."""
     loop = loop or asyncio.get_running_loop()
     result = asyncio.all_tasks(loop) - runnable_tasks(loop)
