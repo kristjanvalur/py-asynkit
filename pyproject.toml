@@ -36,7 +36,8 @@ dev = [
     "poethepoet>=0.29.0",
     "ruff>=0.4.0",
     "anyio[trio]>=3.6.0,<3.7.0",
-    "blacken-docs>=1.13.0",
+    "mdformat>=0.7.0",
+    "mdformat-ruff>=0.1.0",
 ]
 
 [tool.poe]
@@ -49,13 +50,17 @@ format = "ruff format ."
 test = "pytest tests examples"
 cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 typing = "mypy -p asynkit -p tests -p examples"
-blacken-docs = "blacken-docs README.md"
-formatall = ["format", "blacken-docs"]
-check = ["style", "lint", "typing", "cov"]
+format-docs = "mdformat --number README.md"
+formatall = ["format", "format-docs"]
+check = ["style", "style-docs", "lint", "typing", "cov"]
 
 [tool.poe.tasks.style]
 help = "Validate code style"
 cmd  = "ruff format . --check --diff"
+
+[tool.poe.tasks.style-docs]
+help = "Validate documentation style"
+cmd  = "mdformat --check --number README.md"
 
 [build-system]
 requires = ["hatchling"]

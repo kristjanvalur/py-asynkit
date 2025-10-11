@@ -37,6 +37,8 @@ jobs:
         run: uv run poe lint
       - name: Run Format Check
         run: uv run poe style
+      - name: Run Docs Format Check
+        run: uv run poe style-docs
       - name: Run typechecks
         run: uv run poe typing
 

@@ -60,7 +60,7 @@ class EagerTaskGroup(TaskGroup):
         self,
         func: Callable[..., Coroutine[Any, Any, Any]],
         *args: object,
-        name: Optional[object] = None
+        name: Optional[object] = None,
     ) -> Coroutine[Any, Any, Any]:
         ts = TaskStatusForwarder()
         cs = CoroStart(func(*args, task_status=ts))
@@ -105,7 +105,7 @@ class EagerTaskGroup(TaskGroup):
         self,
         func: Callable[..., Coroutine[Any, Any, Any]],
         *args: object,
-        name: Optional[object] = None
+        name: Optional[object] = None,
     ) -> Any:
         cs = CoroStart(func(*args))
         if cs.done():

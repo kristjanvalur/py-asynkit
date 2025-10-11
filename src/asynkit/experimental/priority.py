@@ -625,8 +625,7 @@ class EventLoopLike(Protocol):  # pragma: no cover
             callback: Callable[..., Any],
             *args: Any,
             context: Optional[Context] = None,
-        ) -> Handle:
-            ...  # pragma: no cover
+        ) -> Handle: ...  # pragma: no cover
 
     else:
 
@@ -634,8 +633,7 @@ class EventLoopLike(Protocol):  # pragma: no cover
             self,
             callback: Callable[..., Any],
             *args: Any,
-        ) -> Handle:
-            ...  # pragma: no cover
+        ) -> Handle: ...  # pragma: no cover
 
 
 class PrioritySchedulingMixin(AbstractSchedulingLoop, EventLoopLike):

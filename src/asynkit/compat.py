@@ -73,7 +73,6 @@ if sys.version_info >= (3, 10):  # pragma: no cover
         pass
 
 else:  # pragma: no cover
-
     _global_lock = threading.Lock()
 
     # Used as a sentinel for loop parameter

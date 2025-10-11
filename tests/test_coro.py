@@ -255,7 +255,6 @@ class TestCoroStart:
         assert err.match("cannot reuse already awaited")
 
     async def test_close(self, block):
-
         # first test regular coroutine
         async def normal():
             await sleep(0)

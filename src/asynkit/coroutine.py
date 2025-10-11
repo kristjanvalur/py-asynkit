@@ -246,12 +246,10 @@ class CoroStart(Awaitable[T_co]):
                     return cast(T_co, exc.value)
 
     @overload
-    async def athrow(self, exc: Type[BaseException]) -> T_co:
-        ...
+    async def athrow(self, exc: Type[BaseException]) -> T_co: ...
 
     @overload
-    async def athrow(self, exc: BaseException) -> T_co:
-        ...
+    async def athrow(self, exc: BaseException) -> T_co: ...
 
     async def athrow(self, exc: Union[Type[BaseException], BaseException]) -> T_co:
         """
@@ -262,21 +260,22 @@ class CoroStart(Awaitable[T_co]):
 
         try:
             self.start_result = (
-                self.context.run(self.coro.throw, type(value), value)
-                if self.context
-                else self.coro.throw(type(value), value)
-            ), None
+                (
+                    self.context.run(self.coro.throw, type(value), value)
+                    if self.context
+                    else self.coro.throw(type(value), value)
+                ),
+                None,
+            )
         except BaseException as exception:
             self.start_result = (None, exception)
         return await self
 
     @overload
-    def throw(self, exc: Type[BaseException]) -> T_co:
-        ...
+    def throw(self, exc: Type[BaseException]) -> T_co: ...
 
     @overload
-    def throw(self, exc: BaseException) -> T_co:
-        ...
+    def throw(self, exc: BaseException) -> T_co: ...
 
     def throw(
         self, exc: Union[Type[BaseException], BaseException], tries: int = 1
@@ -440,8 +439,7 @@ def eager(
     arg: Coroutine[Any, Any, T],
     *,
     task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
-) -> CAwaitable[T]:
-    ...
+) -> CAwaitable[T]: ...
 
 
 @overload
@@ -449,8 +447,7 @@ def eager(
     arg: Callable[P, Coroutine[Any, Any, T]],
     *,
     task_factory: Optional[Callable[[Coroutine[Any, Any, T]], CAwaitable[T]]] = None,
-) -> Callable[P, CAwaitable[T]]:
-    ...
+) -> Callable[P, CAwaitable[T]]: ...
 
 
 def eager(
@@ -527,7 +524,7 @@ def awaitmethod(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, Iterat
 
 
 def awaitmethod_iter(
-    func: Callable[P, Coroutine[Any, Any, T]]
+    func: Callable[P, Coroutine[Any, Any, T]],
 ) -> Callable[P, Iterator[T]]:
     """
     Same as above, but implemented using the coro_iter helper.

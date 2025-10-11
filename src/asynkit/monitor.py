@@ -138,8 +138,7 @@ class Monitor(Generic[T]):
         type: Type[BaseException],
         value: Union[BaseException, object] = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     @overload
     async def athrow(
@@ -148,8 +147,7 @@ class Monitor(Generic[T]):
         type: BaseException,
         value: None = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     async def athrow(
         self,
@@ -244,8 +242,7 @@ class BoundMonitor(Generic[T]):
         type: Type[BaseException],
         value: Union[BaseException, object] = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     @overload
     async def athrow(
@@ -253,8 +250,7 @@ class BoundMonitor(Generic[T]):
         type: BaseException,
         value: None = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     async def athrow(
         self,
@@ -267,7 +263,10 @@ class BoundMonitor(Generic[T]):
         point where it is suspended.
         """
         return await self.monitor.athrow(
-            self.coro, type, value, traceback  # type: ignore [arg-type]
+            self.coro,
+            type,
+            value,
+            traceback,  # type: ignore [arg-type]
         )
 
     async def aclose(self) -> None:
@@ -354,8 +353,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         type: Type[BaseException],
         value: Union[BaseException, object] = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> T_co:
-        ...
+    ) -> T_co: ...
 
     @overload
     async def athrow(
@@ -363,8 +361,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
         type: BaseException,
         value: None = ...,
         traceback: Optional[TracebackType] = ...,
-    ) -> T_co:
-        ...
+    ) -> T_co: ...
 
     async def athrow(
         self,

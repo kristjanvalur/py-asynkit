@@ -27,8 +27,7 @@ T = TypeVar("T")
 class Sortable(Protocol):
     """Objects that have the < operator defined"""
 
-    def __lt__(self: T, other: T) -> bool:
-        ...  # pragma: no cover
+    def __lt__(self: T, other: T) -> bool: ...  # pragma: no cover
 
 
 P = TypeVar("P", bound=Sortable)
@@ -301,16 +300,13 @@ class PriEntry(Generic[P, T]):
 class Cancellable(Protocol):
     if sys.version_info >= (3, 9):  # pragma: no cover
 
-        def cancel(self, msg: Optional[str] = None) -> Any:
-            ...
+        def cancel(self, msg: Optional[str] = None) -> Any: ...
 
     else:  # pragma: no cover
 
-        def cancel(self) -> Any:
-            ...
+        def cancel(self) -> Any: ...
 
-    def cancelled(self) -> bool:
-        ...
+    def cancelled(self) -> bool: ...
 
 
 CA = TypeVar("CA", bound=Cancellable)

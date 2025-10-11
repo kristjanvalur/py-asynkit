@@ -46,11 +46,9 @@ T = TypeVar("T")
 
 class HasReadyQueue(Protocol):
     @property
-    def _ready(self) -> Deque[Handle]:
-        ...  # pragma: no cover
+    def _ready(self) -> Deque[Handle]: ...  # pragma: no cover
 
-    def get_ready_queue(self: HasReadyQueue) -> Deque[Handle]:
-        ...  # pragma: no cover
+    def get_ready_queue(self: HasReadyQueue) -> Deque[Handle]: ...  # pragma: no cover
 
 
 class SchedulingMixin(AbstractSchedulingLoop):
@@ -113,7 +111,8 @@ DefaultSchedulingEventLoop = SchedulingSelectorEventLoop
 if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
 
     class SchedulingProactorEventLoop(
-        asyncio.ProactorEventLoop, SchedulingMixin  # type: ignore
+        asyncio.ProactorEventLoop,
+        SchedulingMixin,  # type: ignore
     ):
         pass
 
