@@ -707,21 +707,22 @@ class TestContext:
 
 @pytest.mark.parametrize("kind", ["cr", "gi", "ag"])
 class TestCoroState:
-    def get_coro(self, kind):
+    def get_coro(self, kind):  # type: ignore[misc]
+        # Intentionally defines different coroutine types based on kind
         if kind == "cr":
 
-            async def coro(f):
+            async def coro(f):  # type: ignore[misc]
                 await f
 
         elif kind == "gi":
 
             @types.coroutine
-            def coro(f):
+            def coro(f):  # type: ignore[misc]
                 yield from f
 
         else:
 
-            async def coro(f):
+            async def coro(f):  # type: ignore[misc]
                 await f
                 yield f
 

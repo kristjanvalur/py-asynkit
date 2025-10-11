@@ -129,7 +129,10 @@ class PriorityLock(Lock, BasePriorityObject, LockHelper):
     of all waiting Tasks.
     """
 
-    _waiters: Optional[PriorityQueue[float, Tuple[FutureBool, ReferenceTypeTaskAny]]]
+    # Override base class _waiters to use priority queue instead of deque
+    _waiters: Optional[  # type: ignore[assignment]
+        PriorityQueue[float, Tuple[FutureBool, ReferenceTypeTaskAny]]
+    ]
 
     def __init__(self) -> None:
         # we use weakrefs to avoid reference cycles.  Tasks _own_ locks,
@@ -269,7 +272,8 @@ class PriorityCondition(asyncio.Condition, LockHelper):
     def __init__(self, lock: Optional[asyncio.Lock] = None) -> None:
         lock = lock or self.LockType()
         super().__init__(lock=lock)
-        self._waiters: PriorityQueue[float, FutureBool] = PriorityQueue()
+        # Override base class _waiters to use priority queue instead of deque
+        self._waiters: PriorityQueue[float, FutureBool] = PriorityQueue()  # type: ignore[assignment]
 
     async def wait(self) -> Literal[True]:
         if not self.locked():  # pragma: no cover
