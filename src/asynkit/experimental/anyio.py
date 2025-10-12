@@ -11,6 +11,38 @@ from anyio.abc import TaskGroup, TaskStatus
 
 from asynkit import CoroStart
 
+"""
+Experimental anyio integration for asynkit.
+
+This module provides eager execution support for anyio task groups, allowing
+coroutines to start executing immediately rather than being deferred until awaited.
+
+**IMPORTANT: Backend Compatibility**
+
+This module requires the **asyncio** backend of anyio to work correctly.
+The **trio** backend has architectural limitations that make eager execution unreliable:
+
+- trio's Task-centric model validates Task identity on primitive entry/exit
+- Cancel scopes track which Task entered them and fail if resumed in a different Task
+- Eager execution with blocking operations will cause cancel scope corruption
+
+**Recommendation:** Use `anyio.run(..., backend="asyncio")` when using this module.
+
+Features:
+- `create_eager_task_group()`: Create a task group with eager execution
+- `EagerTaskGroup`: Wraps TaskGroup with eager start() and start_soon() methods
+
+Example:
+    >>> from asynkit.experimental.anyio import create_eager_task_group
+    >>> from anyio import run, sleep
+    >>>
+    >>> async def main():
+    ...     async with create_eager_task_group() as tg:
+    ...         tg.start_soon(my_coroutine)  # Starts immediately
+    >>>
+    >>> run(main, backend="asyncio")  # Use asyncio backend!
+"""
+
 pytestmark = pytest.mark.anyio
 
 
