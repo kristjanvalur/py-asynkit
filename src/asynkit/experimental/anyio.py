@@ -155,7 +155,7 @@ class EagerTaskGroup(TaskGroup):
         await self._task_group.__aenter__()
         return self
 
-    async def __aexit__(
+    async def __aexit__(  # type: ignore[override]
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,

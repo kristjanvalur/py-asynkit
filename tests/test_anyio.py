@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+from sys import version_info
 
 import pytest
 from anyio import Event, create_task_group, sleep
@@ -10,7 +11,47 @@ from asynkit.experimental.anyio import (
     create_eager_task_group,
 )
 
+# ExceptionGroup is built-in from Python 3.11+
+if version_info >= (3, 11):
+    from builtins import ExceptionGroup  # type: ignore[attr-defined]
+else:
+    from exceptiongroup import ExceptionGroup  # type: ignore[import-not-found]
+
 pytestmark = pytest.mark.anyio
+
+
+def raises_or_exception_group(exc_type: type[BaseException]):  # type: ignore[no-untyped-def]
+    """
+    Context manager that matches either a direct exception or an ExceptionGroup
+    containing that exception. Needed for anyio 4.x compatibility.
+    """
+
+    class ExceptionMatcher:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, et, ev, tb):
+            if et is None:
+                pytest.fail(f"Expected {exc_type.__name__} but no exception was raised")
+            # Check if it's the direct exception
+            if et is exc_type:
+                return True
+            # Check if it's an ExceptionGroup containing the exception
+            if issubclass(et, ExceptionGroup):
+                # Extract exceptions from the group
+                if hasattr(ev, "exceptions"):
+                    for e in ev.exceptions:
+                        if isinstance(e, exc_type):
+                            return True
+                pytest.fail(
+                    f"Expected {exc_type.__name__} in ExceptionGroup, "
+                    f"but got {[type(e).__name__ for e in ev.exceptions]}"
+                )
+            # Not the exception we're looking for
+            return False
+
+    return ExceptionMatcher()
+
 
 # Backend parametrization for tests
 # trio backend is incompatible with eager execution + blocking due to
@@ -84,7 +125,7 @@ async def test_error_start():
         raise EOFError()
 
     async with create_task_group() as tg:
-        with pytest.raises(EOFError):
+        with raises_or_exception_group(EOFError):
             await tg.start(foo)
 
 
@@ -92,7 +133,7 @@ async def test_error_start_soon():
     async def foo():
         raise EOFError()
 
-    with pytest.raises(EOFError):
+    with raises_or_exception_group(EOFError):
         async with create_task_group() as tg:
             tg.start_soon(foo)
 
@@ -150,9 +191,13 @@ class TestStartSoon:
         result = []
         event, coro = self.get_coro_err1(block)
 
-        with nullcontext() if eager else pytest.raises(EOFError):
+        ctx_outer = nullcontext() if eager else raises_or_exception_group(EOFError)
+        with ctx_outer:
             async with group() as tg:
-                with nullcontext() if not eager else pytest.raises(EOFError):
+                ctx_inner = (
+                    nullcontext() if not eager else raises_or_exception_group(EOFError)
+                )
+                with ctx_inner:
                     tg.start_soon(coro, result, "b", name="myname")
 
                 event.set()
@@ -178,11 +223,19 @@ class TestStartSoon:
         result = []
         event, coro = self.get_coro_err2(block)
 
-        with pytest.raises(EOFError) if not (eager and not block) else nullcontext():
+        ctx_outer = (
+            raises_or_exception_group(EOFError)
+            if not (eager and not block)
+            else nullcontext()
+        )
+        with ctx_outer:
             async with group() as tg:
-                with (
-                    pytest.raises(EOFError) if (eager and not block) else nullcontext()
-                ):
+                ctx_inner = (
+                    raises_or_exception_group(EOFError)
+                    if (eager and not block)
+                    else nullcontext()
+                )
+                with ctx_inner:
                     tg.start_soon(coro, result, "b", name="myname")
                     assert result == (["a"] if eager else [])
                 event.set()
@@ -361,7 +414,7 @@ class TestStart:
             pytest.skip("eager + blocking not tested (trio incompatible)")
 
         got_start = False
-        with pytest.raises(EOFError):
+        with raises_or_exception_group(EOFError):
             async with group() as tg:
                 coro2 = tg.start(coro, result, "b", name="myname")
                 if eager:

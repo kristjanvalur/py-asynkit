@@ -12,12 +12,15 @@ from asynkit.experimental.priority import (
     PriorityTask,
 )
 
+from ..conftest import make_loop_factory
+
 pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture
 def anyio_backend():
-    return "asyncio", {"policy": asyncio.DefaultEventLoopPolicy()}
+    policy = asyncio.DefaultEventLoopPolicy()
+    return "asyncio", {"loop_factory": make_loop_factory(policy)}
 
 
 class TestPriorityLock:
@@ -627,7 +630,8 @@ class PriorityEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 class TestPriorityScheduling:
     @pytest.fixture
     def anyio_backend(self, request):
-        return ("asyncio", {"policy": PriorityEventLoopPolicy(request)})
+        policy = PriorityEventLoopPolicy(request)
+        return ("asyncio", {"loop_factory": make_loop_factory(policy)})
 
     async def await_tasks(self):
         async def nothing():

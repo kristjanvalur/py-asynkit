@@ -80,3 +80,15 @@ class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 
     def new_event_loop(self):
         return scheduling_loop_type(self.request)()
+
+
+def make_loop_factory(loop_policy):
+    """
+    Create a loop_factory callable from an event loop policy.
+    anyio 4.x requires loop_factory instead of policy.
+    """
+
+    def loop_factory():
+        return loop_policy.new_event_loop()
+
+    return loop_factory

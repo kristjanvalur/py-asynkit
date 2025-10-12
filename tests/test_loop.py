@@ -17,7 +17,7 @@ from asynkit.loop.extensions import (
 )
 from asynkit.scheduling import task_is_runnable
 
-from .conftest import SchedulingEventLoopPolicy
+from .conftest import SchedulingEventLoopPolicy, make_loop_factory
 from .experimental.test_priority import PriorityEventLoopPolicy
 
 pytestmark = pytest.mark.anyio
@@ -26,11 +26,14 @@ pytestmark = pytest.mark.anyio
 @pytest.fixture(params=["regular", "custom", "priority"])
 def anyio_backend(request):
     if request.param == "custom":
-        return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
+        policy = SchedulingEventLoopPolicy(request)
+        return ("asyncio", {"loop_factory": make_loop_factory(policy)})
     elif request.param == "priority":
-        return ("asyncio", {"policy": PriorityEventLoopPolicy(request)})
+        policy = PriorityEventLoopPolicy(request)
+        return ("asyncio", {"loop_factory": make_loop_factory(policy)})
     else:
-        return ("asyncio", {"policy": DefaultEventLoopPolicy()})
+        policy = DefaultEventLoopPolicy()
+        return ("asyncio", {"loop_factory": make_loop_factory(policy)})
 
 
 class TestCallInsertReady:
@@ -342,7 +345,11 @@ class TestTasks:
         self.identity()
         await asyncio.sleep(0)  # make our tasks blocked on the sleep
         tasks2 = asynkit.blocked_tasks()
-        assert tasks2 == set(tasks)
+        # With anyio 4.x, the test runner task is also blocked
+        # Filter to only tasks we created
+        assert set(tasks) <= tasks2, "Created tasks should be in blocked tasks"
+        our_tasks = {t for t in tasks2 if t in tasks}
+        assert set(tasks) == our_tasks, "Only our tasks should match"
         self.identity()
         assert asynkit.runnable_tasks() == set()
         self.identity()

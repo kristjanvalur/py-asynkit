@@ -9,14 +9,15 @@ import asynkit.tools
 from asynkit.compat import PY_311
 from asynkit.tools import PriorityQueue
 
-from .conftest import SchedulingEventLoopPolicy
+from .conftest import SchedulingEventLoopPolicy, make_loop_factory
 
 pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture
 def anyio_backend(request):
-    return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
+    policy = SchedulingEventLoopPolicy(request)
+    return ("asyncio", {"loop_factory": make_loop_factory(policy)})
 
 
 def test_deque_pop():
