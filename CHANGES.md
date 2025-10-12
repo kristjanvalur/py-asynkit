@@ -8,13 +8,37 @@ All notable changes to this project will be documented in this file.
 
 - **Dropped Python 3.8 and 3.9 support**: Minimum Python version is now 3.10
   - Python 3.8 reached end-of-life in October 2024
-  - Python 3.9 reaches end-of-life in October 2.025
+  - Python 3.9 reaches end-of-life in October 2025
   - Modern Python 3.10+ syntax and features are now available throughout
-- **Added Python 3.13 support**: Tested and working on Python 3.13
-  - Note: trio backend tests are automatically skipped on Python 3.13+ (trio 0.21.0 incompatible)
-  - trio is now a separate optional dependency, only installed on Python < 3.13
+- **Added Python 3.13 support**: Fully tested and working on Python 3.13
+  - Updated anyio from 3.6.2 → 4.11.0
+  - Updated trio from 0.21.0 → 0.31.0 (now supports Python 3.13+)
+  - All 537 tests passing on Python 3.13.8
 - **Added PyPy 3.11 support**: Upgraded PyPy testing from 3.10 to 3.11
 - **Added GraalPy 3.12 support**: GraalPy is now tested in CI to verify compatibility
+
+### Dependencies
+
+- **Upgraded anyio**: 3.6.2 → 4.11.0
+  - Updated type annotations for `TaskStatus[Any]` compatibility
+  - Updated exception handling for `ExceptionGroup` vs `BaseExceptionGroup`
+  - Added `loop_factory` support for Python 3.12+ event loop creation
+  - Removed redundant `exceptiongroup` dependency (now provided by anyio)
+- **Upgraded trio**: 0.21.0 → 0.31.0
+  - Now fully supports Python 3.13+ (trio 0.31.0 released September 2025)
+  - Removed Python version restriction from dependency specification
+  - All trio backend tests now run on Python 3.13
+
+### API Improvements
+
+- **Simplified Monitor API**: Removed legacy 3-argument exception signature from `Monitor.athrow()`
+  - Old: `athrow(coro, type, value, traceback)` (deprecated since Python 3.12)
+  - New: `athrow(coro, exc)` (single exception argument)
+  - Removed redundant exception instantiation (coroutine.throw() handles both classes and instances)
+  - Updated all internal uses in `coroutine.py` and `monitor.py`
+- **Fixed Python 3.12+ deprecation warnings**: Updated all uses of `throw()` to modern single-argument form
+  - Changed from `coro.throw(type(value), value)` to `coro.throw(value)`
+  - Eliminated all deprecation warnings in test suite
 
 ### Build System & Tooling
 

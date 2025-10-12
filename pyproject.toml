@@ -40,9 +40,9 @@ dev = [
     "mdformat>=0.7.0",
     "mdformat-ruff>=0.1.0",
 ]
-# trio 0.21.0 doesn't support Python 3.13+, will upgrade in future
+# trio 0.31.0 supports Python 3.13+
 trio = [
-    "trio>=0.21.0,<0.22.0; python_version < '3.13'",
+    "trio>=0.31.0",
 ]
 
 [tool.poe]

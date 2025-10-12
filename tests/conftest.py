@@ -1,5 +1,4 @@
 import asyncio
-import sys
 
 import pytest
 
@@ -18,8 +17,9 @@ except (ImportError, TypeError):
     # TypeError can occur on Python 3.13+ with old trio versions
     TRIO_AVAILABLE = False
 
-# Skip trio tests on Python 3.13+ where old trio doesn't work
-SKIP_TRIO = not TRIO_AVAILABLE or sys.version_info >= (3, 13)
+# Skip trio tests only when trio is not available
+# trio 0.31.0+ now supports Python 3.13+
+SKIP_TRIO = not TRIO_AVAILABLE
 
 
 def pytest_configure(config):
