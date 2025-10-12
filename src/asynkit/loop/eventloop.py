@@ -27,6 +27,7 @@ __all__ = [
     "SchedulingSelectorEventLoop",
     "SchedulingEventLoopPolicy",
     "DefaultSchedulingEventLoop",
+    "scheduling_loop_factory",
     "event_loop_policy",
 ]
 
@@ -119,9 +120,42 @@ if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
         DefaultSchedulingEventLoop = SchedulingProactorEventLoop  # type: ignore
 
 
+def scheduling_loop_factory() -> AbstractEventLoop:
+    """
+    Create a new scheduling event loop.
+
+    Returns an event loop with extended scheduling capabilities. On most
+    platforms, this returns a SchedulingSelectorEventLoop. On Windows, it
+    returns a SchedulingProactorEventLoop.
+
+    This factory function is the recommended way to create scheduling event
+    loops for use with asyncio.run() (Python 3.12+) or asyncio.Runner:
+
+        asyncio.run(main(), loop_factory=asynkit.scheduling_loop_factory)
+
+    For Python 3.10-3.11 compatibility, use the SchedulingEventLoopPolicy
+    instead:
+
+        asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy())
+        asyncio.run(main())
+    """
+    return DefaultSchedulingEventLoop()  # type: ignore
+
+
 class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+    """
+    Event loop policy that creates scheduling event loops.
+
+    Note: Event loop policies are deprecated as of Python 3.14 and will be
+    removed in Python 3.16. For Python 3.12+, use scheduling_loop_factory
+    with asyncio.run() or asyncio.Runner instead.
+
+    This policy is provided for compatibility with Python 3.10-3.11 and for
+    code that hasn't migrated away from the policy system.
+    """
+
     def new_event_loop(self) -> AbstractEventLoop:
-        return DefaultSchedulingEventLoop()  # type: ignore
+        return scheduling_loop_factory()
 
 
 @contextlib.contextmanager

@@ -647,24 +647,50 @@ Concrete subclasses of Python's built-in event loop classes are provided.
 - `SchedulingSelectorEventLoop` is a subclass of `asyncio.SelectorEventLoop` with the `SchedulingMixin`
 - `SchedulingProactorEventLoop` is a subclass of `asyncio.ProactorEventLoop` with the `SchedulingMixin` on those platforms that support it.
 
-#### Event Loop Policy
+#### Creating scheduling event loops
 
-A policy class is provided to automatically create the appropriate event loops.
+The **recommended way** to use scheduling event loops is with the `scheduling_loop_factory()` function (Python 3.12+):
+
+```python
+import asyncio
+import asynkit
+
+# Modern approach (Python 3.12+)
+asyncio.run(main(), loop_factory=asynkit.scheduling_loop_factory)
+```
+
+For Python 3.11 and earlier, or when using `asyncio.Runner`:
+
+```python
+import asyncio
+import asynkit
+
+# Using asyncio.Runner (Python 3.11+)
+with asyncio.Runner(loop_factory=asynkit.scheduling_loop_factory) as runner:
+    runner.run(main())
+```
+
+#### Event Loop Policy (Legacy)
+
+**Note:** Event loop policies are deprecated as of Python 3.14 and will be removed in Python 3.16.
+
+For compatibility with Python 3.10-3.11, or for code that hasn't migrated away from the policy system, a policy class is provided:
 
 - `SchedulingEventLoopPolicy` is a subclass of `asyncio.DefaultEventLoopPolicy` which instantiates either of the above event loop classes as appropriate.
 
 Use this either directly:
 
 ```python
+# Legacy approach (Python 3.10-3.11)
 asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy())
-asyncio.run(myprogram())
+asyncio.run(main())
 ```
 
 or with a context manager:
 
 ```python
 with asynkit.event_loop_policy():
-    asyncio.run(myprogram())
+    asyncio.run(main())
 ```
 
 ## Priority Scheduling

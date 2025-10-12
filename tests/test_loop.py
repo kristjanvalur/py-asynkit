@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from asyncio import DefaultEventLoopPolicy
 from unittest.mock import patch
 
@@ -536,3 +537,25 @@ def test_event_loop_policy_context():
             assert isinstance(asyncio.get_running_loop(), asynkit.SchedulingMixin)
 
         asyncio.run(foo())
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 12),
+    reason="loop_factory parameter added in Python 3.12",
+)
+def test_scheduling_loop_factory():
+    """Test that scheduling_loop_factory works with asyncio.run() in Python 3.12+"""
+
+    async def main():
+        loop = asyncio.get_running_loop()
+        # Verify we got a scheduling loop
+        assert isinstance(loop, asynkit.SchedulingMixin)
+        assert hasattr(loop, "queue_len")
+        assert hasattr(loop, "queue_insert_pos")
+        # Test that scheduling features work
+        assert loop.queue_len() >= 0
+        return "success"
+
+    # Test with asyncio.run and loop_factory
+    result = asyncio.run(main(), loop_factory=asynkit.scheduling_loop_factory)
+    assert result == "success"
