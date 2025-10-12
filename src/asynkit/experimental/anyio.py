@@ -46,7 +46,7 @@ Example:
 pytestmark = pytest.mark.anyio
 
 
-class TaskStatusForwarder(TaskStatus):
+class TaskStatusForwarder(TaskStatus[Any]):
     """
     A helper class for `EagerTaskGroup.start()` which forwards the actual
     `started()` call into an inner TaskGroup
@@ -55,7 +55,7 @@ class TaskStatusForwarder(TaskStatus):
     __slots__ = ["forward", "done", "value"]
 
     def __init__(self) -> None:
-        self.forward: TaskStatus | None = None
+        self.forward: TaskStatus[Any] | None = None
         self.done: bool = False
         self.value: object = None
 
@@ -67,7 +67,7 @@ class TaskStatusForwarder(TaskStatus):
             self.value = value
         self.done = True
 
-    def set_forward(self, forward: TaskStatus) -> None:
+    def set_forward(self, forward: TaskStatus[Any]) -> None:
         assert not self.forward
         self.forward = forward
         if self.done:
@@ -91,7 +91,7 @@ class EagerTaskGroup(TaskGroup):
         self._task_group = tg
         self.cancel_scope = tg.cancel_scope
 
-    def start(
+    def start(  # type: ignore[override]
         self,
         func: Callable[..., Coroutine[Any, Any, Any]],
         *args: object,
@@ -106,7 +106,7 @@ class EagerTaskGroup(TaskGroup):
             if ts.done:
                 if cs.exception():
                     # return the value, start task to raise error
-                    async def task_helper(*, task_status: TaskStatus) -> Any:
+                    async def task_helper(*, task_status: TaskStatus[Any]) -> Any:
                         task_status.started(ts.get_value())
                         cs.result()
 
@@ -129,14 +129,16 @@ class EagerTaskGroup(TaskGroup):
 
         else:
 
-            def task_helper(*, task_status: TaskStatus) -> Coroutine[Any, Any, Any]:
+            def task_helper(
+                *, task_status: TaskStatus[Any]
+            ) -> Coroutine[Any, Any, Any]:
                 ts.set_forward(task_status)
                 return cs.as_coroutine()
 
             result = self._task_group.start(task_helper, name=name)
         return result
 
-    def start_soon(
+    def start_soon(  # type: ignore[override]
         self,
         func: Callable[..., Coroutine[Any, Any, Any]],
         *args: object,
