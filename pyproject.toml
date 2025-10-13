@@ -55,7 +55,7 @@ format = "ruff format ."
 test = "pytest tests examples"
 cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 typing = "mypy -p asynkit -p tests -p examples"
-format-docs = "mdformat --number README.md"
+format-docs = "mdformat --number *.md docs/*.md"
 formatall = ["format", "format-docs"]
 check = ["style", "style-docs", "lint", "typing", "cov"]
 
@@ -65,7 +65,7 @@ cmd  = "ruff format . --check --diff"
 
 [tool.poe.tasks.style-docs]
 help = "Validate documentation style"
-cmd  = "mdformat --check --number README.md"
+cmd  = "mdformat --check --number *.md docs/*.md"
 
 [build-system]
 requires = ["hatchling"]

@@ -188,10 +188,10 @@ The deployment workflow now uses:
 ## Benefits of uv
 
 1. **Speed**: uv is 10-100x faster than pip and Poetry
-1. **Standards**: Uses PEP 621 standard metadata format
-1. **Simplicity**: Single tool for Python version management, virtual environments, and dependencies
-1. **Modern**: Built with Rust, actively maintained by Astral (creators of Ruff)
-1. **Compatible**: Works with standard Python packaging tools
+2. **Standards**: Uses PEP 621 standard metadata format
+3. **Simplicity**: Single tool for Python version management, virtual environments, and dependencies
+4. **Modern**: Built with Rust, actively maintained by Astral (creators of Ruff)
+5. **Compatible**: Works with standard Python packaging tools
 
 ## Ruff as Single Linter and Formatter
 
