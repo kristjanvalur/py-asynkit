@@ -292,10 +292,22 @@ PyPy is also supported:
 
 ```bash
 # Install PyPy
-uv python install pypy@3.10
+uv python install pypy@3.11
 
 # Run tests with PyPy
-uv run --python pypy@3.10 pytest tests
+uv run --python pypy@3.11 pytest tests
+```
+
+### Testing with GraalPy
+
+GraalPy is also supported:
+
+```bash
+# Install GraalPy
+uv python install graalpy-3.12
+
+# Run tests with GraalPy
+uv run --python graalpy-3.12 pytest tests
 ```
 
 ### Automated Multi-Version Testing
