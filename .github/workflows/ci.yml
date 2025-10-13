@@ -93,6 +93,7 @@ jobs:
       url: https://pypi.org/p/asynkit
     permissions:
       id-token: write
+      contents: write  # Required for creating GitHub releases
     steps:
     - uses: actions/checkout@v3
     - name: Install uv
@@ -104,6 +105,22 @@ jobs:
 
     - name: Build a binary wheel and a source tarball
       run: uv build
+
+    - name: Extract release notes
+      id: extract_notes
+      run: |
+        python3 .github/scripts/extract_release_notes.py ${GITHUB_REF#refs/tags/} > release_notes.md
+        echo "Release notes extracted for ${GITHUB_REF#refs/tags/}"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: release_notes.md
+        files: |
+          dist/*.whl
+          dist/*.tar.gz
+        draft: false
+        prerelease: false
 
     - name: Publish distribution to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
