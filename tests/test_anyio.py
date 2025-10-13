@@ -15,7 +15,9 @@ from asynkit.experimental.anyio import (
 if version_info >= (3, 11):
     from builtins import ExceptionGroup  # type: ignore[attr-defined]
 else:
-    from exceptiongroup import ExceptionGroup  # type: ignore[import-not-found]
+    from exceptiongroup import (  # type: ignore[import-not-found, unused-ignore]
+        ExceptionGroup,
+    )
 
 pytestmark = pytest.mark.anyio
 
