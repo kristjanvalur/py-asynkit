@@ -9,7 +9,6 @@ This folder contains documentation for developers and maintainers of py-asynkit.
   - How to test with different Python versions
   - Build system changes
   - Ruff formatter migration
-
 - **[PYPI_DEPLOYMENT.md](PYPI_DEPLOYMENT.md)**: PyPI deployment and GitHub releases setup, including:
   - GitHub Actions workflow configuration
   - PyPI Trusted Publishers setup
