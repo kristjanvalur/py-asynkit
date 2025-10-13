@@ -48,33 +48,33 @@ To enable deployment, you need to create a GitHub Environment named `pypi`:
 ### Step 1: Create the Environment
 
 1. Go to your repository on GitHub
-1. Navigate to **Settings** → **Environments**
-1. Click **New environment**
-1. Name it `pypi` (must match the workflow configuration)
-1. Click **Configure environment**
+2. Navigate to **Settings** → **Environments**
+3. Click **New environment**
+4. Name it `pypi` (must match the workflow configuration)
+5. Click **Configure environment**
 
 ### Step 2: Configure Protection Rules (Optional but Recommended)
 
 You can add protection rules to require manual approval before deployment:
 
 1. **Required reviewers**: Add team members who must approve deployments
-1. **Wait timer**: Add a delay before deployment proceeds
-1. **Deployment branches**: Restrict to specific branches (tags are always allowed)
+2. **Wait timer**: Add a delay before deployment proceeds
+3. **Deployment branches**: Restrict to specific branches (tags are always allowed)
 
 ### Step 3: Set Up PyPI Trusted Publisher
 
 Instead of using API tokens, configure PyPI to trust GitHub Actions via OIDC:
 
 1. Go to [PyPI](https://pypi.org) and log in
-1. Navigate to your project's settings (or create the project first)
-1. Go to **Publishing** → **Add a new publisher**
-1. Fill in the following details:
+2. Navigate to your project's settings (or create the project first)
+3. Go to **Publishing** → **Add a new publisher**
+4. Fill in the following details:
    - **PyPI Project Name**: `asynkit`
    - **Owner**: `kristjanvalur` (GitHub username or organization)
    - **Repository name**: `py-asynkit`
    - **Workflow name**: `ci.yml`
    - **Environment name**: `pypi`
-1. Click **Add**
+5. Click **Add**
 
 This allows GitHub Actions to publish without storing any secrets. The `id-token: write` permission in the workflow enables OIDC authentication.
 
@@ -89,7 +89,7 @@ To publish a new version to PyPI:
    version = "0.13.1"  # Increment version
    ```
 
-1. **Update the changelog** in `CHANGES.md`:
+2. **Update the changelog** in `CHANGES.md`:
 
    ```markdown
    ## [0.13.1] - 2025-01-15
@@ -98,14 +98,14 @@ To publish a new version to PyPI:
    - Bug fix description
    ```
 
-1. **Commit the changes**:
+3. **Commit the changes**:
 
    ```bash
    git add pyproject.toml CHANGES.md
    git commit -m "Bump version to 0.13.1"
    ```
 
-1. **Create and push a version tag**:
+4. **Create and push a version tag**:
 
    ```bash
    git tag v0.13.1
@@ -113,14 +113,14 @@ To publish a new version to PyPI:
    git push origin v0.13.1
    ```
 
-1. The workflow will automatically:
+5. The workflow will automatically:
 
    - Run all tests and linting
    - Build the package using `uv build`
    - Request approval if reviewers are configured
    - Publish to PyPI using Trusted Publishers
 
-1. **Monitor the deployment**:
+6. **Monitor the deployment**:
 
    - Go to **Actions** tab in GitHub
    - Find the workflow run for your tag
