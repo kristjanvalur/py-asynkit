@@ -304,10 +304,10 @@ GraalPy is also supported:
 
 ```bash
 # Install GraalPy
-uv python install graalpy-24.1
+uv python install graalpy-3.12
 
 # Run tests with GraalPy
-uv run --python graalpy-24.1 pytest tests
+uv run --python graalpy-3.12 pytest tests
 ```
 
 ### Automated Multi-Version Testing
