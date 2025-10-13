@@ -7,23 +7,28 @@ The `asynkit.experimental.interrupt` module provides immediate task interruption
 Standard `asyncio.Task.cancel()` is asynchronous - it marks a task for cancellation but the `CancelledError` is only raised the next time the task yields control. Task interruption provides **immediate execution control**: inject any exception into a task and have it execute right away, before other pending tasks run.
 
 This enables patterns like:
+
 - Synchronous-style timeouts that execute immediately
-- Priority-based preemption of running tasks  
+- Priority-based preemption of running tasks
 - Emergency shutdown of misbehaving tasks
 - Precise exception injection for testing and debugging
 
 ## Key Features
 
 ### Immediate Interruption
+
 Inject exceptions that execute right away, not at the next yield point.
 
 ### Custom Exceptions
+
 Use any `BaseException`, not just `CancelledError`.
 
 ### Non-Intrusive
+
 The future a task is waiting on continues running - only the wait is interrupted.
 
 ### Synchronous Reasoning
+
 When `await task_interrupt()` returns, the exception has already been raised on the target.
 
 ## Why Synchronous Interrupts?
@@ -43,6 +48,7 @@ This eliminates several classes of bugs:
 **Proven approach**: A similar synchronous error delivery mechanism has been available in **Stackless Python** since its inception and has proven invaluable for building reliable concurrent systems. The ability to send exceptions synchronously and reason about their delivery deterministically is a powerful tool for task coordination.
 
 Without synchronous delivery, you must track:
+
 - Has the exception been delivered yet?
 - Can I safely send another exception?
 - What happens if the task state changes before delivery?
@@ -95,6 +101,7 @@ assert task.done()
 An async function that injects the exception and immediately switches to the target task. When the `await` completes, you know the exception has been delivered.
 
 **Benefits**:
+
 - Synchronous reasoning: know exactly when interruption occurred
 - No collision between multiple interrupts
 - Target task executes before caller resumes
@@ -104,6 +111,7 @@ An async function that injects the exception and immediately switches to the tar
 ```python
 from asynkit.experimental import task_timeout
 import asyncio
+
 
 async def my_operation():
     try:
@@ -117,6 +125,7 @@ async def my_operation():
 A context manager that interrupts the current task after a timeout. The timeout exception is raised immediately when the timeout fires, not at the next yield point.
 
 **How it differs from `asyncio.timeout()`**:
+
 - Uses task interruption for immediate delivery
 - Clean separation from standard cancellation
 - Allows nested timeouts with different exception instances
@@ -128,7 +137,8 @@ A context manager that interrupts the current task after a timeout. The timeout 
 class InterruptException(asyncio.CancelledError):
     pass
 
-# Specific timeout exception  
+
+# Specific timeout exception
 class TimeoutInterrupt(InterruptException):
     pass
 ```
@@ -159,6 +169,7 @@ Task interruption manipulates asyncio's internal task state machine:
 ### Task States
 
 Tasks exist in one of several states:
+
 - **Blocked**: Waiting on a future (`_fut_waiter` set to an incomplete future)
 - **Runnable**: In the event loop's ready queue (`__step` or `__wakeup` scheduled)
 - **Running**: Currently executing (the current task)
@@ -173,12 +184,14 @@ Tasks exist in one of several states:
 4. **Execute**: For `task_interrupt()`, immediately switch to the task
 
 For blocked tasks:
+
 - Remove the task's `__wakeup` callback from the future
 - The future continues running, but the task stops waiting for it
 - Schedule the task with the exception
 
 For runnable tasks:
-- Remove the task's handle from the event loop's ready queue  
+
+- Remove the task's handle from the event loop's ready queue
 - Schedule it again with the exception
 
 ### Python Tasks vs C Tasks
@@ -207,6 +220,7 @@ Python 3.14.0 has a bug where `asyncio.current_task()` returns `None` for tasks 
 ### Experimental Status
 
 This module is marked experimental because:
+
 - Relies on private asyncio APIs (`_fut_waiter`, `__step`, `__wakeup`)
 - Directly manipulates event loop internals
 - Implementation details may change across Python versions
@@ -221,11 +235,15 @@ Use with understanding that future Python versions may require updates.
 ```python
 class ShutdownInterrupt(InterruptException):
     """Graceful shutdown request"""
+
     pass
+
 
 class EmergencyStop(InterruptException):
     """Immediate halt required"""
+
     pass
+
 
 async def worker():
     try:
@@ -236,6 +254,7 @@ async def worker():
     except EmergencyStop:
         # Minimal cleanup only
         pass
+
 
 # Elsewhere:
 await task_interrupt(worker_task, ShutdownInterrupt())
@@ -250,6 +269,7 @@ async def outer():
             await inner()
     except asyncio.TimeoutError:
         print("Outer timeout")
+
 
 async def inner():
     try:
@@ -267,10 +287,10 @@ Each timeout context creates its own `TimeoutInterrupt` instance, allowing the c
 async def supervisor(task):
     """Monitor a task and interrupt if it misbehaves"""
     start = time.time()
-    
+
     while not task.done():
         await asyncio.sleep(0.1)
-        
+
         if time.time() - start > MAX_EXECUTION_TIME:
             await task_interrupt(task, TimeoutError("exceeded limit"))
             break
@@ -298,7 +318,7 @@ Create tasks with `create_pytask()` to ensure reliable interruption:
 # Good - full interrupt support
 task = create_pytask(worker())
 
-# Limited - C task has partial support  
+# Limited - C task has partial support
 task = asyncio.create_task(worker())
 ```
 
@@ -348,12 +368,14 @@ except InterruptException:
 from asynkit.experimental import task_timeout
 import asyncio
 
+
 async def main():
     try:
         async with task_timeout(2.0):
             await asyncio.sleep(10)  # Will be interrupted
     except asyncio.TimeoutError:
         print("Timed out after 2 seconds")
+
 
 asyncio.run(main())
 ```
@@ -363,8 +385,10 @@ asyncio.run(main())
 ```python
 from asynkit.experimental import create_pytask, task_interrupt, InterruptException
 
+
 class StopWorking(InterruptException):
     pass
+
 
 async def worker():
     try:
@@ -374,13 +398,14 @@ async def worker():
         print(f"Interrupted at item {i}")
         return i
 
+
 async def main():
     task = create_pytask(worker())
     await asyncio.sleep(0.5)  # Let it work a bit
-    
+
     result = await task_interrupt(task, StopWorking())
     # Worker has already stopped by this point
-    
+
     print(f"Worker stopped, processed {await task} items")
 ```
 
@@ -389,8 +414,10 @@ async def main():
 ```python
 from asynkit.experimental import create_pytask, task_interrupt
 
+
 class PreemptException(InterruptException):
     pass
+
 
 async def low_priority_work():
     try:
@@ -400,12 +427,13 @@ async def low_priority_work():
         # Save state and yield to high priority task
         await save_checkpoint()
 
+
 async def main():
     background = create_pytask(low_priority_work())
-    
+
     # High priority work arrives
     await task_interrupt(background, PreemptException())
-    
+
     # Background task has yielded, do high priority work
     await urgent_processing()
 ```

@@ -41,7 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### API Improvements
 
-- **Updated interrupt module for Python 3.14 compatibility**: 
+- **Updated interrupt module for Python 3.14 compatibility**:
   - Modified `task_factory()` signature to accept `**kwargs` parameter
   - Python 3.14 changed task factory signature from `(loop, coro)` to `(loop, coro, **kwargs)`
   - Maintains backward compatibility with Python 3.10-3.13
