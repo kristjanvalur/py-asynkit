@@ -1,4 +1,5 @@
 import asyncio
+import sys
 
 import pytest
 
@@ -36,7 +37,23 @@ def pytest_collection_modifyitems(config, items):
     skip_trio = pytest.mark.skip(
         reason="trio not available or incompatible with this Python version"
     )
+    # Mark pytask tests as xfail on Python 3.14+ due to asyncio.current_task() issues
+    xfail_pytask_314 = pytest.mark.xfail(
+        reason="Python 3.14+ has issues with PyTasks and asyncio.current_task()",
+        strict=False,
+    )
+
     for item in items:
+        # Mark pytask tests as xfail on Python 3.14+
+        if (
+            sys.version_info >= (3, 14)
+            and "test_interrupt.py" in str(item.fspath)
+            and hasattr(item, "callspec")
+            and "ctask" in item.callspec.params
+            and not item.callspec.params["ctask"]  # pytask is ctask=False
+        ):
+            item.add_marker(xfail_pytask_314)
+
         # Mark and potentially skip tests that use trio backend
         if "anyio_backend" in item.fixturenames:
             # Check if this test is parameterized with trio

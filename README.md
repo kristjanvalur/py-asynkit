@@ -906,6 +906,11 @@ Some features are currently available experimentally. They may work only on some
 
 ### Task Interruption
 
+**Note:** Task interruption with `_PyTask` objects does not work on Python 3.14.0 due to a bug
+in `asyncio.current_task()` that prevents it from recognizing tasks created by custom task factories.
+This affects the `create_pytask()` function and any code using it.
+C Tasks (from `asyncio.create_task()`) have limited interrupt support.
+
 Methods are provided to raise exceptions on a `Task`. This is somewhat similar to
 `task.cancel()` but different:
 
