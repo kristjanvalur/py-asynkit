@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
   - Note: trio backend tests are automatically skipped on Python 3.13+ (trio 0.21.0 incompatible)
   - trio is now a separate optional dependency, only installed on Python < 3.13
 - **Added PyPy 3.11 support**: Upgraded PyPy testing from 3.10 to 3.11
+- **Added GraalPy 24.1 support**: GraalPy is now tested in CI to verify compatibility
 
 ### Build System & Tooling
 

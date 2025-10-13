@@ -298,6 +298,18 @@ uv python install pypy@3.10
 uv run --python pypy@3.10 pytest tests
 ```
 
+### Testing with GraalPy
+
+GraalPy is also supported:
+
+```bash
+# Install GraalPy
+uv python install graalpy-24.1
+
+# Run tests with GraalPy
+uv run --python graalpy-24.1 pytest tests
+```
+
 ### Automated Multi-Version Testing
 
 For CI/CD-like testing locally, you can create a simple script:
