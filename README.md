@@ -808,7 +808,7 @@ __async generators__.
 
 ## `anyio` support
 
-The library has been tested to work with `anyio` 4.11.0+ on Python 3.10-3.13, including the `trio` backend (trio 0.31.0+). 
+The library has been tested to work with `anyio` 4.11.0+ on Python 3.10-3.13, including the `trio` backend (trio 0.31.0+).
 However, not all features are supported on the `trio` backend.
 **For full asynkit functionality, use the `asyncio` backend.**
 
