@@ -292,10 +292,10 @@ PyPy is also supported:
 
 ```bash
 # Install PyPy
-uv python install pypy@3.10
+uv python install pypy@3.11
 
 # Run tests with PyPy
-uv run --python pypy@3.10 pytest tests
+uv run --python pypy@3.11 pytest tests
 ```
 
 ### Testing with GraalPy
