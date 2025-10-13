@@ -27,6 +27,7 @@ build-n-publish:
     url: https://pypi.org/p/asynkit
   permissions:
     id-token: write  # Required for Trusted Publishers
+    contents: write  # Required for creating GitHub releases
   steps:
     - uses: actions/checkout@v3
     - name: Install uv
@@ -37,6 +38,13 @@ build-n-publish:
       run: uv python install 3.10
     - name: Build a binary wheel and a source tarball
       run: uv build
+    - name: Extract release notes
+      run: python3 .github/scripts/extract_release_notes.py ${GITHUB_REF#refs/tags/} > release_notes.md
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: release_notes.md
+        files: dist/*
     - name: Publish distribution to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
 ```
@@ -78,6 +86,37 @@ Instead of using API tokens, configure PyPI to trust GitHub Actions via OIDC:
 
 This allows GitHub Actions to publish without storing any secrets. The `id-token: write` permission in the workflow enables OIDC authentication.
 
+## GitHub Releases
+
+The workflow automatically creates a GitHub Release when you push a version tag. The release includes:
+
+- **Release notes** extracted automatically from `CHANGES.md`
+- **Distribution files** (wheel and source tarball) attached for easy download
+- **Version tag** linked to the release
+
+### How Release Notes are Generated
+
+The workflow uses `.github/scripts/extract_release_notes.py` to extract the relevant section from `CHANGES.md` for each version. The script:
+
+1. Looks for a section header matching the version (e.g., `## [0.13.0] - 2025`)
+2. Extracts all content until the next version header
+3. Formats it as the GitHub release body
+
+This means your `CHANGES.md` structure becomes the source of truth for release notes. Just follow the existing format:
+
+```markdown
+## [X.Y.Z] - DATE
+
+### Section Header
+
+- Change description
+- Another change
+
+### Another Section
+
+- More changes
+```
+
 ## Publishing a New Version
 
 To publish a new version to PyPI:
@@ -117,6 +156,8 @@ To publish a new version to PyPI:
 
    - Run all tests and linting
    - Build the package using `uv build`
+   - Extract release notes from `CHANGES.md`
+   - Create a GitHub Release with the extracted notes and distribution files
    - Request approval if reviewers are configured
    - Publish to PyPI using Trusted Publishers
 
@@ -126,7 +167,8 @@ To publish a new version to PyPI:
    - Find the workflow run for your tag
    - Check the **build-n-publish** job
    - If reviewers are configured, approve the deployment
-   - Verify publication at https://pypi.org/p/asynkit
+   - Verify the GitHub Release at `https://github.com/kristjanvalur/py-asynkit/releases`
+   - Verify PyPI publication at https://pypi.org/p/asynkit
 
 ## Benefits of This Approach
 
@@ -147,6 +189,12 @@ To publish a new version to PyPI:
 - **Fast builds**: uv is 10-100x faster than pip/Poetry for dependency resolution
 - **Simple workflow**: Single tool (`uv`) handles Python setup and building
 - **Caching**: Dependencies are cached for faster subsequent runs
+
+### Discoverability
+
+- **GitHub Releases**: Automatically creates releases with changelogs for easy discovery
+- **Distribution files**: Wheels and source distributions attached to releases
+- **Release notes**: Automatically extracted from `CHANGES.md` for consistency
 
 ## Troubleshooting
 
@@ -171,6 +219,14 @@ You cannot republish the same version. Increment the version number in `pyprojec
 
 The `build-n-publish` job depends on `tests` and `lint` jobs passing. Fix any test failures before the deployment will proceed.
 
+### GitHub Release creation fails
+
+If the GitHub Release creation fails, check:
+
+- The workflow has `permissions: contents: write`
+- The `CHANGES.md` file has a properly formatted entry for the version
+- The `.github/scripts/extract_release_notes.py` script is present and executable
+
 ## Migration from Previous Setup
 
 The previous workflow published to both Test PyPI (on every master commit) and PyPI (on tags). The new workflow:
@@ -180,6 +236,7 @@ The previous workflow published to both Test PyPI (on every master commit) and P
 - ✅ Uses Trusted Publishers (more secure than API tokens)
 - ✅ Uses deployment environments (enables approval workflows)
 - ✅ Uses uv consistently throughout (faster, simpler)
+- ✅ Creates GitHub Releases automatically with changelog entries
 
 If you need Test PyPI for testing, you can manually test builds:
 
@@ -200,3 +257,5 @@ uv run twine upload --repository testpypi dist/*
 - [PyPI Trusted Publishers Guide](https://docs.pypi.org/trusted-publishers/)
 - [uv Documentation](https://docs.astral.sh/uv/)
 - [GitHub Actions OIDC](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect)
+- [GitHub Releases Documentation](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
+- [softprops/action-gh-release](https://github.com/softprops/action-gh-release) - GitHub Action used for creating releases
