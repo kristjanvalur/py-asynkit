@@ -5,20 +5,24 @@ This project has been successfully migrated from Poetry to uv. This document exp
 ## What Changed
 
 ### Build System
+
 - **Before**: Poetry (`poetry-core`)
 - **After**: Hatchling with PEP 621 metadata in `pyproject.toml`
 
 ### Dependency Management
+
 - **Before**: Poetry with `poetry.lock`
 - **After**: uv with `uv.lock`
 
 ### Project Metadata
+
 - **Before**: `[tool.poetry]` section
 - **After**: `[project]` section (PEP 621 standard)
 
 ## Installation
 
 ### Installing uv
+
 ```bash
 # Windows (PowerShell)
 irm https://astral.sh/uv/install.ps1 | iex
@@ -28,6 +32,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ### Setting up the development environment
+
 ```bash
 # Sync all dependencies (including dev dependencies)
 uv sync --all-extras
@@ -51,7 +56,7 @@ uv sync
 | `poetry run <cmd>` | `uv run <cmd>` | Run a command in the virtual environment |
 | `poetry shell` | N/A (uv handles this automatically) | Activate virtual environment |
 | `poetry build` | `uv build` | Build distribution packages |
-| `poetry publish` | N/A (use twine or similar) | Publish to PyPI |
+| `poetry publish` | Automated via GitHub Actions | Publish to PyPI (see [PYPI_DEPLOYMENT.md](PYPI_DEPLOYMENT.md)) |
 
 ### Running Tests and Tools
 
@@ -98,6 +103,7 @@ uv run ruff check .
 ## Key Changes in pyproject.toml
 
 ### Project Metadata
+
 ```toml
 # Old (Poetry)
 [tool.poetry]
@@ -115,6 +121,7 @@ authors = [
 ```
 
 ### Dependencies
+
 ```toml
 # Old (Poetry)
 [tool.poetry.dependencies]
@@ -138,6 +145,7 @@ dev = [
 ```
 
 ### Build System
+
 ```toml
 # Old (Poetry)
 [build-system]
@@ -151,6 +159,7 @@ build-backend = "hatchling.build"
 ```
 
 ### Poethepoet Configuration
+
 Added executor configuration to use simple mode instead of Poetry mode:
 
 ```toml
@@ -167,13 +176,22 @@ The `.github/workflows/ci.yml` has been updated to use uv:
 - Changed `poetry run` to `uv run`
 - Changed `poetry build` to `uv build`
 
+### PyPI Publishing
+
+The deployment workflow now uses:
+
+- **GitHub Environments** for deployment protection and approval
+- **Trusted Publishers (OIDC)** for secure, passwordless authentication to PyPI
+- Only publishes on version tags (e.g., `v0.13.0`), not on every master commit
+- See [PYPI_DEPLOYMENT.md](PYPI_DEPLOYMENT.md) for detailed setup instructions
+
 ## Benefits of uv
 
 1. **Speed**: uv is 10-100x faster than pip and Poetry
-2. **Standards**: Uses PEP 621 standard metadata format
-3. **Simplicity**: Single tool for Python version management, virtual environments, and dependencies
-4. **Modern**: Built with Rust, actively maintained by Astral (creators of Ruff)
-5. **Compatible**: Works with standard Python packaging tools
+1. **Standards**: Uses PEP 621 standard metadata format
+1. **Simplicity**: Single tool for Python version management, virtual environments, and dependencies
+1. **Modern**: Built with Rust, actively maintained by Astral (creators of Ruff)
+1. **Compatible**: Works with standard Python packaging tools
 
 ## Ruff as Single Linter and Formatter
 
@@ -342,12 +360,15 @@ echo "All tests passed!"
 ## Troubleshooting
 
 ### "Package not found"
+
 Make sure you've run `uv sync --all-extras` to install all dependencies.
 
 ### "Command not found: uv"
+
 Install uv using the installation instructions above.
 
 ### poethepoet tasks fail
+
 Make sure the `[tool.poe]` section has `executor = {type = "simple"}` in `pyproject.toml`.
 
 ## More Information
