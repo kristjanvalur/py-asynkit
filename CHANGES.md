@@ -14,6 +14,16 @@ All notable changes to this project will be documented in this file.
   - Updated anyio from 3.6.2 → 4.11.0
   - Updated trio from 0.21.0 → 0.31.0 (now supports Python 3.13+)
   - All 537 tests passing on Python 3.13.8
+- **Added Python 3.14 support (with limitations)**: Python 3.14.0 is now supported with known limitations
+  - Updated `task_factory` signature to accept `**kwargs` parameter (new in Python 3.14)
+  - All core features work correctly on Python 3.14
+  - **Known Issue**: Experimental `interrupt` module has limited functionality on Python 3.14.0
+    - `create_pytask()` function affected by a bug in `asyncio.current_task()`
+    - Python 3.14.0's `current_task()` does not recognize tasks created by custom task factories
+    - Tests for `_PyTask` interruption are marked as xfail on Python 3.14
+    - C Task interruption still has the same partial support as before
+    - Bug has been reported to Python core team with minimal reproduction test case
+    - Users requiring full interrupt functionality should use Python 3.10-3.13
 - **Added PyPy 3.11 support**: Upgraded PyPy testing from 3.10 to 3.11
 - **Added GraalPy 3.12 support**: GraalPy is now tested in CI to verify compatibility
 
@@ -31,6 +41,10 @@ All notable changes to this project will be documented in this file.
 
 ### API Improvements
 
+- **Updated interrupt module for Python 3.14 compatibility**: 
+  - Modified `task_factory()` signature to accept `**kwargs` parameter
+  - Python 3.14 changed task factory signature from `(loop, coro)` to `(loop, coro, **kwargs)`
+  - Maintains backward compatibility with Python 3.10-3.13
 - **Simplified Monitor API**: Removed legacy 3-argument exception signature from `Monitor.athrow()`
   - Old: `athrow(coro, type, value, traceback)` (deprecated since Python 3.12)
   - New: `athrow(coro, exc)` (single exception argument)
