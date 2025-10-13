@@ -33,8 +33,8 @@ else:  # pragma: no cover
     PyTask = asyncio.tasks.Task
 
 
-def task_factory(loop, coro):  # type: ignore[no-untyped-def]
-    task = PyTask(coro, loop=loop)
+def task_factory(loop, coro, **kwargs):  # type: ignore[no-untyped-def]
+    task = PyTask(coro, loop=loop, **kwargs)
     return task
 
 
