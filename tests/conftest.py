@@ -1,5 +1,4 @@
 import asyncio
-import sys
 
 import pytest
 
@@ -18,8 +17,9 @@ except (ImportError, TypeError):
     # TypeError can occur on Python 3.13+ with old trio versions
     TRIO_AVAILABLE = False
 
-# Skip trio tests on Python 3.13+ where old trio doesn't work
-SKIP_TRIO = not TRIO_AVAILABLE or sys.version_info >= (3, 13)
+# Skip trio tests only when trio is not available
+# trio 0.31.0+ now supports Python 3.13+
+SKIP_TRIO = not TRIO_AVAILABLE
 
 
 def pytest_configure(config):
@@ -80,3 +80,15 @@ class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 
     def new_event_loop(self):
         return scheduling_loop_type(self.request)()
+
+
+def make_loop_factory(loop_policy):
+    """
+    Create a loop_factory callable from an event loop policy.
+    anyio 4.x requires loop_factory instead of policy.
+    """
+
+    def loop_factory():
+        return loop_policy.new_event_loop()
+
+    return loop_factory

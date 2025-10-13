@@ -259,9 +259,9 @@ class CoroStart(Awaitable[T_co]):
         try:
             self.start_result = (
                 (
-                    self.context.run(self.coro.throw, type(value), value)
+                    self.context.run(self.coro.throw, value)
                     if self.context
-                    else self.coro.throw(type(value), value)
+                    else self.coro.throw(value)
                 ),
                 None,
             )
@@ -284,7 +284,7 @@ class CoroStart(Awaitable[T_co]):
         value = exc if isinstance(exc, BaseException) else exc()
         for i in range(tries):
             try:
-                self.coro.throw(type(value), value)
+                self.coro.throw(value)
             except StopIteration as err:
                 return cast(T_co, err.value)
         else:

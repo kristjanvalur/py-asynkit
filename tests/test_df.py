@@ -4,19 +4,19 @@ import pytest
 
 import asynkit
 
-from .conftest import SchedulingEventLoopPolicy
+from .conftest import SchedulingEventLoopPolicy, make_loop_factory
 
 """
 Test depth-first coroutine execution behaviour, both with create_task_descend and eager
 """
-
 
 pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture
 def anyio_backend(request):
-    return ("asyncio", {"policy": SchedulingEventLoopPolicy(request)})
+    policy = SchedulingEventLoopPolicy(request)
+    return ("asyncio", {"loop_factory": make_loop_factory(policy)})
 
 
 @pytest.mark.parametrize("method", ["nostart", "start", "descend", "eager"])

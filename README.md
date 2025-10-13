@@ -647,24 +647,50 @@ Concrete subclasses of Python's built-in event loop classes are provided.
 - `SchedulingSelectorEventLoop` is a subclass of `asyncio.SelectorEventLoop` with the `SchedulingMixin`
 - `SchedulingProactorEventLoop` is a subclass of `asyncio.ProactorEventLoop` with the `SchedulingMixin` on those platforms that support it.
 
-#### Event Loop Policy
+#### Creating scheduling event loops
 
-A policy class is provided to automatically create the appropriate event loops.
+The **recommended way** to use scheduling event loops is with the `scheduling_loop_factory()` function (Python 3.12+):
+
+```python
+import asyncio
+import asynkit
+
+# Modern approach (Python 3.12+)
+asyncio.run(main(), loop_factory=asynkit.scheduling_loop_factory)
+```
+
+For Python 3.11 and earlier, or when using `asyncio.Runner`:
+
+```python
+import asyncio
+import asynkit
+
+# Using asyncio.Runner (Python 3.11+)
+with asyncio.Runner(loop_factory=asynkit.scheduling_loop_factory) as runner:
+    runner.run(main())
+```
+
+#### Event Loop Policy (Legacy)
+
+**Note:** Event loop policies are deprecated as of Python 3.14 and will be removed in Python 3.16.
+
+For compatibility with Python 3.10-3.11, or for code that hasn't migrated away from the policy system, a policy class is provided:
 
 - `SchedulingEventLoopPolicy` is a subclass of `asyncio.DefaultEventLoopPolicy` which instantiates either of the above event loop classes as appropriate.
 
 Use this either directly:
 
 ```python
+# Legacy approach (Python 3.10-3.11)
 asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy())
-asyncio.run(myprogram())
+asyncio.run(main())
 ```
 
 or with a context manager:
 
 ```python
 with asynkit.event_loop_policy():
-    asyncio.run(myprogram())
+    asyncio.run(main())
 ```
 
 ## Priority Scheduling
@@ -782,10 +808,23 @@ __async generators__.
 
 ## `anyio` support
 
-The library has been tested to work with the `anyio`. However, not everything is supported on the `trio` backend.
-Currently only the `asyncio` backend can be assumed to work reliably.
+The library has been tested to work with `anyio` 4.11.0+ on Python 3.10-3.13, including the `trio` backend (trio 0.31.0+).
+However, not all features are supported on the `trio` backend.
+**For full asynkit functionality, use the `asyncio` backend.**
 
-When using the asyncio backend, the module `asynkit.experimental.anyio` can be used, to provide "eager"-like
+### Backend Compatibility
+
+| Feature | asyncio backend | trio backend |
+|---------|----------------|--------------|
+| Basic `anyio` integration | ✅ Full support | ✅ Full support |
+| `create_eager_task_group()` (non-blocking) | ✅ Full support | ✅ Full support |
+| `create_eager_task_group()` (with blocking) | ✅ Full support | ❌ Not supported |
+| Event loop extensions | ✅ Full support | ❌ Not supported |
+| `CoroStart` with Tasks | ✅ Full support | ❌ Not supported |
+
+### Using with asyncio backend
+
+When using the asyncio backend, the module `asynkit.experimental.anyio` can be used to provide "eager"-like
 behaviour to task creation. It will return an `EagerTaskGroup` context manager:
 
 ```python
@@ -826,26 +865,40 @@ The first part of the function `func` is run even before calling `await` on the 
 Similarly, `EagerTaskGroup.start_soon()` will run the provided coroutine up to its first blocking point before
 returning.
 
-### `trio` limitations
+### Why trio has limitations
 
-`trio` differs significantly from `asyncio` and therefore enjoys only limited support.
+`trio` differs significantly from `asyncio` in its architectural approach, which limits asynkit compatibility:
 
-- The event loop is completely different and proprietary and so the event loop extensions don't work
-  for `trio`.
+**Different Task models:**
 
-- `CoroStart` when used with `Task` objects, such as by using `EagerTaskGroup`,
-  does not work reliably with `trio`.
-  This is because the synchronization primitives
-  are not based on `Future` objects but rather perform `Task`-based actions both before going to sleep
-  and upon waking up. If a `CoroStart` initially blocks on a primitive such as `Event.wait()` or
-  `sleep(x)` it will be surprised and throw an error when it wakes up on in a different
-  `Task` than when it was in when it fell asleep.
+- **asyncio** uses a `Future`-based model where task scheduling is performed by the event loop
+- **trio** uses a Task-centric model where scheduling happens inside synchronization primitives
 
-`CoroStart` works by intercepting a `Future` being passed up via the `await` protocol to
-the event loop to perform the task scheduling. If any part of the task scheduling has happened
-before this, and the _continuation_ happens on a different `Task` then things may break
-in various ways. For `asyncio`, the event loop never sees the `Future` object until
-`as_coroutine()` has been called and awaited, and so if this happens in a new task, all is good.
+**Impact on eager execution:**
+
+When `CoroStart` is used with Tasks (such as in `EagerTaskGroup`), it works by intercepting a `Future`
+being passed up via the `await` protocol __before__ it reaches the event loop. This allows asynkit to
+schedule the continuation in a new Task context.
+
+This approach works perfectly with **asyncio** because:
+
+- The event loop never sees the `Future` until `as_coroutine()` has been called and awaited
+- All task scheduling happens at the event loop level
+- Resuming in a different Task context works seamlessly
+
+However, **trio** performs Task-based validation both before sleeping and upon waking:
+
+- Synchronization primitives like `Event.wait()` or `sleep()` record which Task called them
+- Upon waking, trio validates that the same Task is resuming
+- If eager execution causes the continuation to run in a different Task, trio detects this and raises errors
+
+**Cancel scope corruption:**
+
+Additionally, trio's cancel scopes track Task identity. When eager execution crosses Task boundaries,
+cancel scopes may become corrupted, leading to assertion errors.
+
+**Recommendation:** Use the `asyncio` backend with `anyio` to access asynkit's eager execution features.
+The non-eager features of asynkit work with both backends.
 
 ## Experimental features
 
