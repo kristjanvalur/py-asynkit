@@ -1,6 +1,6 @@
 # Eager Task Execution: Python 3.12+ vs asynkit
 
-This document compares Python's built-in eager task execution (introduced in Python 3.12) with asynkit's eager execution features, explaining their similarities, differences, and when to use each approach.
+Did you know Python 3.12 introduced native eager task execution? Here's how it compares with asynkit's eager execution features, which have been solving this problem since 2021.
 
 ## Timeline and History
 
@@ -94,7 +94,7 @@ async def main():
 asyncio.run(main())
 ```
 
-This approach is beneficial for applications where you want to optimize the execution model wholesale, enabling eager execution for all tasks throughout your application.
+Use this when you want to optimize the execution model wholesale, enabling eager execution for all tasks throughout your application.
 
 **2. Per-Task eager_start Parameter** - Selective eager execution for specific tasks:
 
@@ -118,7 +118,7 @@ async def main():
 asyncio.run(main())
 ```
 
-This provides fine-grained control, allowing you to selectively make specific tasks eager while keeping others lazy, without changing the global task factory.
+Use this for fine-grained control, selectively making specific tasks eager while keeping others lazy, without changing the global task factory.
 
 ### Limitations
 
