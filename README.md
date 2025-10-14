@@ -25,7 +25,7 @@ pip install asynkit
 
 ### `eager()` - lower latency IO
 
-**Note:** Python 3.12+ introduced native eager task execution via `asyncio.eager_task_factory`. See [docs/eager_tasks.md](docs/eager_tasks.md) for a detailed comparison of Python's built-in eager tasks and asynkit's `eager()` feature.
+> **Note:** Python 3.12+ introduced native eager task execution via `asyncio.eager_task_factory`. See [docs/eager_tasks.md](docs/eager_tasks.md) for a detailed comparison of Python's built-in eager tasks and asynkit's `eager()` feature.
 
 Did you ever wish that your _coroutines_ started right away, and only returned control to
 the caller once they become blocked? Like the way the `async` and `await` keywords work in the __C#__ language?
@@ -674,7 +674,7 @@ with asyncio.Runner(loop_factory=asynkit.scheduling_loop_factory) as runner:
 
 #### Event Loop Policy (Legacy)
 
-**Note:** Event loop policies are deprecated as of Python 3.14 and will be removed in Python 3.16.
+> **Note:** Event loop policies are deprecated as of Python 3.14 and will be removed in Python 3.16.
 
 For compatibility with Python 3.10-3.11, or for code that hasn't migrated away from the policy system, a policy class is provided:
 
@@ -910,10 +910,10 @@ Some features are currently available experimentally. They may work only on some
 
 **See [docs/task_interruption.md](docs/task_interruption.md) for detailed documentation.**
 
-**Note:** Task interruption with `_PyTask` objects does not work on Python 3.14.0 due to a bug
-in `asyncio.current_task()` that prevents it from recognizing tasks created by custom task factories.
-This affects the `create_pytask()` function and any code using it.
-C Tasks (from `asyncio.create_task()`) have limited interrupt support.
+> **Note:** Task interruption with `_PyTask` objects does not work on Python 3.14.0 due to a bug
+> in `asyncio.current_task()` that prevents it from recognizing tasks created by custom task factories.
+> This affects the `create_pytask()` function and any code using it.
+> C Tasks (from `asyncio.create_task()`) have limited interrupt support.
 
 Methods are provided to raise exceptions on a `Task`. This is somewhat similar to
 `task.cancel()` but different:
