@@ -906,6 +906,8 @@ Some features are currently available experimentally. They may work only on some
 
 ### Task Interruption
 
+**See [docs/task_interruption.md](docs/task_interruption.md) for detailed documentation.**
+
 **Note:** Task interruption with `_PyTask` objects does not work on Python 3.14.0 due to a bug
 in `asyncio.current_task()` that prevents it from recognizing tasks created by custom task factories.
 This affects the `create_pytask()` function and any code using it.
