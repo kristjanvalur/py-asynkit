@@ -4,7 +4,7 @@ In version 3.12, Python introduced native eager task execution. Here's how it co
 
 ## Timeline and History
 
-**asynkit's eager execution** was developed and released in **2021**, predating Python's native support by about two years. It was designed to address the latency issues in asyncio by allowing coroutines to start executing immediately.
+**asynkit's eager execution** was developed and released in **2022**, predating Python's native support by more than a year. It was designed to address the latency issues in asyncio by allowing coroutines to start executing immediately.
 
 **Python 3.12's eager_task_factory** was released in **October 2023**, providing native support for eager task execution. This feature was developed based on similar concepts and the success of libraries like asynkit that demonstrated the value of eager execution.
 
