@@ -1,6 +1,6 @@
 # Eager Task Execution: Python 3.12+ vs asynkit
 
-Did you know Python 3.12 introduced native eager task execution? Here's how it compares with asynkit's eager execution features, which have been solving this problem since 2021.
+In version 3.12, Python introduced native eager task execution. Here's how it compares with asynkit's eager execution features, which have been solving this problem since 2021.
 
 ## Timeline and History
 
@@ -174,6 +174,12 @@ async def my_complex_thing():
 3. **No Task When Not Needed**: If coroutine completes synchronously, returns a lightweight future instead of a Task
 4. **Context Management**: `eager_ctx()` for automatic cancellation on error
 5. **Python 3.10+ Support**: Works on older Python versions
+
+### Limitations
+
+**Context Behavior**: The coroutine runs in the context of the parent Task until it blocks. This means `asyncio.current_task()` will return different values before and after the coroutine blocks for the first time.
+
+However, since asynkit's approach is coroutine-centric rather than Task-centric, this is generally not an issue. Coroutines designed to be eagerly executed don't necessarily expect to run in their own Task from the start. Unless your coroutines specifically rely on `current_task()` returning a consistent value, this difference in execution context won't affect their behavior.
 
 ## Detailed Comparison
 
