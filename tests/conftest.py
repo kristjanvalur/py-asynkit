@@ -30,6 +30,10 @@ def pytest_configure(config):
         "trio: marks tests that require trio backend "
         "(automatically skipped when trio is unavailable or incompatible)",
     )
+    config.addinivalue_line(
+        "markers",
+        "eager_tasks: marks tests running with Python 3.12+ eager_task_factory",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
