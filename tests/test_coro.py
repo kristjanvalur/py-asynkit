@@ -669,7 +669,7 @@ class TestCoroAwait:
             pytest.skip(
                 "Cancellation timing test not applicable with eager task factory"
             )
-        
+
         async def func():
             await sleep(0)
 
@@ -687,7 +687,7 @@ class TestCoroAwait:
             pytest.skip(
                 "Cancellation timing test not applicable with eager task factory"
             )
-        
+
         async def func(a):
             try:
                 await sleep(0)
