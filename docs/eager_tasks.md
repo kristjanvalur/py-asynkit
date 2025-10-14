@@ -2,6 +2,12 @@
 
 This document compares Python's built-in eager task execution (introduced in Python 3.12) with asynkit's eager execution features, explaining their similarities, differences, and when to use each approach.
 
+## Timeline and History
+
+**asynkit's eager execution** was developed and released in **2021**, predating Python's native support by about two years. It was designed to address the latency issues in asyncio by allowing coroutines to start executing immediately.
+
+**Python 3.12's eager_task_factory** was released in **October 2023**, providing native support for eager task execution. This feature was developed based on similar concepts and the success of libraries like asynkit that demonstrated the value of eager execution.
+
 ## Overview
 
 Both Python's `asyncio.eager_task_factory` and asynkit's `eager()` address the same fundamental problem: reducing latency by starting coroutines immediately rather than deferring execution to the next event loop iteration. However, they take different approaches and offer different levels of control.
@@ -54,10 +60,36 @@ asyncio.run(main())
 
 **Performance Impact**: Tests have shown up to 50% performance improvements in async-heavy workloads, primarily by eliminating the overhead of unnecessary event loop scheduling for short-lived coroutines.
 
+### Alternative: eager_start Parameter (Python 3.12+)
+
+Starting with Python 3.12, you can also pass `eager_start=True` directly to `create_task()`:
+
+```python
+import asyncio
+
+
+async def my_coroutine():
+    print("Starting immediately!")
+    await asyncio.sleep(1)
+    return "done"
+
+
+async def main():
+    # Create a single eager task without changing the global factory
+    task = asyncio.create_task(my_coroutine(), eager_start=True)
+    print("Task created")
+    await task
+
+
+asyncio.run(main())
+```
+
+This provides more fine-grained control than setting a global task factory, allowing you to selectively make specific tasks eager while keeping others lazy.
+
 ### Limitations
 
-1. **Global Setting**: Affects **all** task creation via `create_task()` in the event loop
-2. **All-or-Nothing**: Cannot selectively apply eager execution to specific tasks
+1. **Global Setting**: Using `set_task_factory()` affects **all** task creation via `create_task()` in the event loop
+2. **Selective Control**: The `eager_start` parameter (Python 3.12+) allows per-task control but still always creates a Task object
 3. **Compatibility**: May break code that relies on deferred task execution semantics
 4. **Python 3.12+ Only**: Not available in earlier Python versions
 
@@ -65,7 +97,9 @@ asyncio.run(main())
 
 ### Introduction
 
-asynkit provides eager execution through the `eager()` function, which has been available since the library's inception and works with Python 3.10+. It offers more granular control and additional features beyond Python's built-in support.
+asynkit provides eager execution through the `eager()` function, which has been available since the library's initial release in 2021 and originally worked with Python 3.8+. It offers more granular control and additional features beyond Python's built-in support.
+
+**Note**: As of version 0.13.0, asynkit requires Python 3.10+, but the eager execution feature has been available since the beginning with backward compatibility.
 
 ### How It Works
 
@@ -246,7 +280,7 @@ In this example, asynkit's approach is more efficient for cache hits because it 
 
 ## Depth-First Execution
 
-One of asynkit's key design principles is **depth-first execution** - maintaining synchronous execution order as much as possible:
+Both Python's eager tasks and asynkit's `eager()` provide **depth-first execution** - maintaining synchronous execution order as much as possible. This is a key benefit of eager execution in general:
 
 ```python
 import asynkit
@@ -282,9 +316,16 @@ asyncio.run(caller(asyncio.create_task))
 # With asynkit.eager (depth-first)
 asyncio.run(caller(asynkit.eager))
 # log == ["a", 1, "b", "c", 2]
+
+# With Python's eager_task_factory (also depth-first)
+loop = asyncio.new_event_loop()
+loop.set_task_factory(asyncio.eager_task_factory)
+asyncio.set_event_loop(loop)
+asyncio.run(caller(asyncio.create_task))
+# log == ["a", 1, "b", "c", 2]
 ```
 
-Notice how `asynkit.eager` maintains the natural execution order - `test()` starts immediately and runs until it blocks, then control returns to the caller. Python's `eager_task_factory` provides similar behavior.
+Notice how both eager approaches (`asynkit.eager` and Python's `eager_task_factory`) maintain the natural execution order - `test()` starts immediately and runs until it blocks, then control returns to the caller. This depth-first behavior is what makes eager execution valuable for reducing latency.
 
 ## When to Use Each
 
@@ -459,8 +500,8 @@ async def check_var():
 
 Python 3.12's `eager_task_factory` and asynkit's `eager()` both provide valuable optimizations for async code, but serve different use cases:
 
-- **Python's eager_task_factory**: Global optimization, best for Python 3.12+ applications with many short-lived tasks
-- **asynkit's eager()**: Targeted optimization, works on Python 3.10+, provides finer control and avoids Task creation overhead
+- **Python's eager_task_factory**: Global optimization, best for Python 3.12+ applications with many short-lived tasks. The `eager_start` parameter offers selective control.
+- **asynkit's eager()**: Targeted optimization, originally supported Python 3.8+ (now requires Python 3.10+ as of v0.13.0), provides finer control and avoids Task creation overhead
 
 Choose based on your Python version requirements, performance goals, and whether you need global or selective eager execution. In many cases, using both together can provide the best results.
 
