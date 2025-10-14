@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import sys
 import types
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, copy_context
@@ -623,9 +624,30 @@ class TestCoroAwait:
     def wrap(self, coro):
         return asynkit.coroutine.coro_await(coro)
 
-    @pytest.fixture
-    def anyio_backend(self):
-        return "asyncio"
+    @pytest.fixture(
+        params=[
+            pytest.param("regular", id="regular"),
+            pytest.param("eager", id="eager", marks=pytest.mark.eager_tasks),
+        ]
+    )
+    def anyio_backend(self, request):
+        if request.param == "eager":
+            if sys.version_info < (3, 12):
+                pytest.skip("Eager task factory requires Python 3.12+")
+
+            # Use default event loop with eager task factory
+            def loop_factory():
+                loop = asyncio.new_event_loop()
+                loop.set_task_factory(asyncio.eager_task_factory)
+                return loop
+
+            return ("asyncio", {"loop_factory": loop_factory})
+        else:
+            return "asyncio"
+
+    def is_eager_mode(self, request):
+        """Check if test is running with eager task factory"""
+        return any(mark.name == "eager_tasks" for mark in request.node.iter_markers())
 
     async def test_return_nb(self):
         async def func(a):
@@ -641,7 +663,13 @@ class TestCoroAwait:
         with pytest.raises(ZeroDivisionError):
             await self.wrap(func())
 
-    async def test_coro_cancel(self):
+    async def test_coro_cancel(self, request):
+        # Skip for eager mode - task completes synchronously before cancellation
+        if self.is_eager_mode(request):
+            pytest.skip(
+                "Cancellation timing test not applicable with eager task factory"
+            )
+
         async def func():
             await sleep(0)
 
@@ -653,7 +681,13 @@ class TestCoroAwait:
         with pytest.raises(asyncio.CancelledError):
             await task
 
-    async def test_coro_handle_cancel(self):
+    async def test_coro_handle_cancel(self, request):
+        # Skip for eager mode - task completes synchronously before cancellation
+        if self.is_eager_mode(request):
+            pytest.skip(
+                "Cancellation timing test not applicable with eager task factory"
+            )
+
         async def func(a):
             try:
                 await sleep(0)

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Testing
+
+- **Added Python 3.12+ eager task factory testing support**:
+  - Parametrized `TestCoroAwait` class to run with both standard and eager task execution modes
+  - Tests verify that `coro_await()` wrapper works correctly with `asyncio.eager_task_factory`
+  - Automatically skips eager mode tests on Python < 3.12
+  - Added `eager_tasks` pytest marker for test identification
+  - Documentation in `tests/EAGER_TASK_TESTING.md` explains scope and limitations
+
 ## [0.13.0] - 2025
 
 ### Breaking Changes
