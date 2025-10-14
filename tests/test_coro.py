@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import sys
 import types
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, copy_context
@@ -623,9 +624,20 @@ class TestCoroAwait:
     def wrap(self, coro):
         return asynkit.coroutine.coro_await(coro)
 
-    @pytest.fixture
-    def anyio_backend(self):
-        return "asyncio"
+    @pytest.fixture(params=["regular", "eager"])
+    def anyio_backend(self, request):
+        if request.param == "eager":
+            if sys.version_info < (3, 12):
+                pytest.skip("Eager task factory requires Python 3.12+")
+            # Use default event loop with eager task factory
+            def loop_factory():
+                loop = asyncio.new_event_loop()
+                loop.set_task_factory(asyncio.eager_task_factory)
+                return loop
+            
+            return ("asyncio", {"loop_factory": loop_factory})
+        else:
+            return "asyncio"
 
     async def test_return_nb(self):
         async def func(a):

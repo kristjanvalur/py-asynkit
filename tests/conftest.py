@@ -91,12 +91,17 @@ def scheduling_loop_type(request):
 
 # loop policy for pytest-anyio plugin
 class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
-    def __init__(self, request):
+    def __init__(self, request, eager_tasks=False):
         super().__init__()
         self.request = request
+        self.eager_tasks = eager_tasks
 
     def new_event_loop(self):
-        return scheduling_loop_type(self.request)()
+        loop = scheduling_loop_type(self.request)()
+        # Set eager task factory if Python 3.12+ and requested
+        if self.eager_tasks and sys.version_info >= (3, 12):
+            loop.set_task_factory(asyncio.eager_task_factory)
+        return loop
 
 
 def make_loop_factory(loop_policy):
@@ -109,3 +114,18 @@ def make_loop_factory(loop_policy):
         return loop_policy.new_event_loop()
 
     return loop_factory
+
+
+def make_anyio_backend(request, eager_tasks=False):
+    """
+    Create an anyio backend configuration with optional eager task factory.
+    
+    Args:
+        request: pytest request object
+        eager_tasks: if True and Python 3.12+, use eager_task_factory
+    
+    Returns:
+        tuple: (backend_name, backend_options) for anyio
+    """
+    policy = SchedulingEventLoopPolicy(request, eager_tasks=eager_tasks)
+    return ("asyncio", {"loop_factory": make_loop_factory(policy)})
