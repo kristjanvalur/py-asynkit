@@ -24,7 +24,7 @@ Both Python's `asyncio.eager_task_factory` and asynkit's `eager()` address the s
 
 Python 3.12 introduced native support for eager task execution through the `asyncio.eager_task_factory`. This feature was developed to optimize asyncio performance and improve the predictability of task scheduling.
 
-### Key References
+### References
 
 - **GitHub Issue**: [#97696 - Add eager task creation API to asyncio](https://github.com/python/cpython/issues/97696)
 - **Performance Discussion**: [#104144 - Leverage eager tasks to optimize asyncio gather & TaskGroups](https://github.com/python/cpython/issues/104144)
