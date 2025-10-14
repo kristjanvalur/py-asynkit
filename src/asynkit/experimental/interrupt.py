@@ -25,7 +25,7 @@ __all__ = [
 
 _is_310 = sys.version_info >= (3, 10)
 
-# Crate a python Task.  We need access to the __step method and this is hidden
+# Create a python Task.  We need access to the __step method and this is hidden
 # in the C implementation from _asyncio module
 if hasattr(asyncio.tasks, "_PyTask"):
     PyTask = asyncio.tasks._PyTask
@@ -116,7 +116,7 @@ def task_throw(task: TaskAny, exception: BaseException) -> None:
             # it is blocked on a future.
             # we remove ourselves from the future's callback list.
             # this way, we can stop waiting for it, without cancelling it,
-            # which would would have side effects.
+            # which would have side effects.
             wakeup_method = task._Task__wakeup  # type: ignore[attr-defined]
             fut_waiter.remove_done_callback(wakeup_method)
         else:
@@ -147,7 +147,7 @@ def task_throw(task: TaskAny, exception: BaseException) -> None:
         # for C tasks, we cannot clear it.  but it is fine, it will be cleared
         # later by the task's __step method, and we are no longer in its callback list
         # however in the mean time, the invariant that _fut_waiter is None or done()
-        # while the task is blocked, no longer holds!  so we should really make
+        # while the task is runnable, no longer holds!  so we should really make
         # sure this task is switched to immediately!
         task._fut_waiter = None  # type: ignore[attr-defined]
     task_loop.call_soon(  # type: ignore[call-arg]

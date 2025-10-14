@@ -200,6 +200,114 @@ For runnable tasks:
 
 **C tasks** (`_CTask`): Partial support. Can interrupt tasks blocked on futures, but cannot interrupt tasks in the ready queue due to `TaskStepMethWrapper` limitations.
 
+## Technical Details
+
+<details>
+<summary><strong>Click to expand: Deep dive into asyncio internals and interrupt implementation</strong></summary>
+
+This section provides detailed technical information about the coroutine state invariant and the specific challenges with C task interruption. These details are useful for understanding the implementation but are not necessary for using the API.
+
+### The Coroutine State Invariant (Corrected)
+
+The asyncio documentation and comments in `asyncio.tasks.py` describe a state invariant for tasks:
+
+> **Documented invariant (INCORRECT):**
+>
+> - Either `_fut_waiter` is `None`, and `_step()` is scheduled;
+> - or `_fut_waiter` is some Future, and `_step()` is *not* scheduled.
+
+However, this invariant is **incorrect**. The actual behavior is more nuanced:
+
+> **Actual invariant (CORRECT):**
+>
+> - Either `_fut_waiter` is `None`, and `_step()` is scheduled;
+> - or `_fut_waiter` is some Future with `done() == False`, and `_step()` is *not* scheduled;
+> - **or `_fut_waiter` is some Future with `done() == True`, and `_step()` (or `_wakeup()`) *is* scheduled.**
+
+The key insight is that `_fut_waiter` **can** be not `None` with `done() == True` when the task is runnable.
+
+**Why this matters:**
+
+When a future completes, it schedules its "done" callbacks to be called "soon". The `__wakeup()` callback is one such callback that eventually calls `__step()`. Until `__wakeup()`/`__step()` runs, `_fut_waiter` remains set to the completed future.
+
+This means there's a window where:
+
+- The future is done (`fut_waiter.done() == True`)
+- The task is runnable (has `__wakeup` or `__step` scheduled)
+- But `_fut_waiter` is still set (not yet cleared to `None`)
+
+This intermediate state is normal asyncio behavior, not a bug. The `_fut_waiter` gets cleared when the task actually starts executing.
+
+### C Task Interruption Challenges
+
+Python tasks (`_PyTask`) can be interrupted reliably because we have direct access to their `__step` and `__wakeup` methods. C tasks (`_CTask`) from the `_asyncio` module have these methods implemented in C, making them inaccessible from Python code.
+
+#### Challenge 1: Cannot Create New Callbacks
+
+For C tasks, we cannot directly call `__step(exception)` or create new bound methods. Instead, we must **reuse existing scheduled callbacks**:
+
+1. **For blocked tasks**: We find the `__wakeup` callback registered on the future and reuse it
+
+   - We remove it from the future's callback list
+   - We create a "fake" done future with the exception set
+   - We call the reused `__wakeup` with this fake future as an argument
+
+2. **For runnable tasks**: We find the scheduled `__step` or `__wakeup` handle in the ready queue
+
+   - We extract the callback from the handle
+   - We try to reuse it with our exception
+
+#### Challenge 2: TaskStepMethWrapper Cannot Take Arguments
+
+When a C task is in the ready queue with a plain `__step` scheduled (not `__wakeup`), the callback is wrapped in a `TaskStepMethWrapper`. This wrapper has a critical limitation: **it cannot accept arguments when called**.
+
+This means:
+
+- We cannot pass an exception to it
+- We cannot modify it to inject an exception
+- We cannot create a new one (it's a C implementation detail)
+
+**Result**: C tasks with `TaskStepMethWrapper` in the ready queue **cannot be interrupted** at all. The `task_throw()` function will raise `RuntimeError` in this case.
+
+**When does this occur?**
+
+- Freshly created C tasks that haven't started executing
+- C tasks executing `await asyncio.sleep(0)` (yields with plain `__step`)
+- C tasks that have just been made runnable but haven't executed yet
+
+#### Challenge 3: Cannot Clear \_fut_waiter for C Tasks
+
+For Python tasks, we can clear `_fut_waiter` immediately when interrupting:
+
+```python
+task._fut_waiter = None  # Only possible for Python tasks
+```
+
+For C tasks, this attribute is managed by C code and we cannot safely clear it from Python. This creates a temporary inconsistency:
+
+- The C task has been removed from the future's callback list
+- The C task has been rescheduled with an exception
+- But `_fut_waiter` still points to a valid, not-done Future
+
+This violates the normal asyncio invariant. The `_fut_waiter` **will** get cleared when the interrupted task starts executing, but until then:
+
+- Methods like `task_is_blocked()` will return incorrect values
+- The task appears blocked when it's actually runnable
+
+**Mitigation**: Use `task_interrupt()` instead of `task_throw()`. Since `task_interrupt()` immediately switches to the target task, there's no window where other code can observe the task in this inconsistent state.
+
+### Why Python Tasks Are Needed for Full Support
+
+Given these challenges, reliable task interruption requires:
+
+1. **Access to `__step` method**: To directly schedule the task with an exception
+2. **Ability to clear `_fut_waiter`**: To maintain state invariants
+3. **No `TaskStepMethWrapper` limitations**: To handle all task states
+
+Python tasks (`_PyTask`) provide all of these. Use `create_pytask()` to ensure your tasks can be reliably interrupted in all situations.
+
+</details>
+
 ## Limitations and Caveats
 
 ### Cannot Interrupt
