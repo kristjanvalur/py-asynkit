@@ -624,8 +624,12 @@ class TestCoroAwait:
     def wrap(self, coro):
         return asynkit.coroutine.coro_await(coro)
 
-    @pytest.fixture(params=[pytest.param("regular", id="regular"), 
-                            pytest.param("eager", id="eager", marks=pytest.mark.eager_tasks)])
+    @pytest.fixture(
+        params=[
+            pytest.param("regular", id="regular"),
+            pytest.param("eager", id="eager", marks=pytest.mark.eager_tasks),
+        ]
+    )
     def anyio_backend(self, request):
         if request.param == "eager":
             if sys.version_info < (3, 12):
@@ -661,7 +665,9 @@ class TestCoroAwait:
     async def test_coro_cancel(self, request):
         # Skip for eager mode - task completes synchronously before cancellation
         if self.is_eager_mode(request):
-            pytest.skip("Cancellation timing test not applicable with eager task factory")
+            pytest.skip(
+                "Cancellation timing test not applicable with eager task factory"
+            )
         
         async def func():
             await sleep(0)
@@ -677,7 +683,9 @@ class TestCoroAwait:
     async def test_coro_handle_cancel(self, request):
         # Skip for eager mode - task completes synchronously before cancellation
         if self.is_eager_mode(request):
-            pytest.skip("Cancellation timing test not applicable with eager task factory")
+            pytest.skip(
+                "Cancellation timing test not applicable with eager task factory"
+            )
         
         async def func(a):
             try:
