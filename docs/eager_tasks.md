@@ -1,6 +1,6 @@
 # Eager Task Execution: Python 3.12+ vs asynkit
 
-In version 3.12, Python introduced native eager task execution. Here's how it compares with asynkit's eager execution features, which have been solving this problem since 2021.
+In version 3.12, Python introduced native eager task execution. Here's how it compares with asynkit's eager execution features, which have been solving this problem since 2022.
 
 ## Timeline and History
 
@@ -130,7 +130,7 @@ Use this for fine-grained control, selectively making specific tasks eager while
 
 ### Introduction
 
-asynkit provides eager execution through the `eager()` function, which has been available since the library's initial release in 2021 and originally worked with Python 3.8+. It offers more granular control and additional features beyond Python's built-in support.
+asynkit provides eager execution through the `eager()` function, which has been available since the library's initial release in 2022 and originally worked with Python 3.8+. It offers more granular control and additional features beyond Python's built-in support.
 
 **Note**: As of version 0.13.0, asynkit requires Python 3.10+, but the eager execution feature has been available since the beginning with backward compatibility.
 
