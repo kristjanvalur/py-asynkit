@@ -12,6 +12,12 @@ This document compares Python's built-in eager task execution (introduced in Pyt
 
 Both Python's `asyncio.eager_task_factory` and asynkit's `eager()` address the same fundamental problem: reducing latency by starting coroutines immediately rather than deferring execution to the next event loop iteration. However, they take different approaches and offer different levels of control.
 
+### Key Philosophical Difference
+
+- **Python's approach is Task-centric**: Eager execution is implemented at the Task level. Whether using `set_task_factory(eager_task_factory)` or the `eager_start` parameter, the focus is on making Task objects execute eagerly.
+
+- **asynkit's approach is coroutine-centric**: Eager execution happens at the coroutine level. The `eager()` function starts a coroutine immediately and only creates a Task if the coroutine blocks. If the coroutine completes synchronously, no Task is created at all.
+
 ## Python's Built-in Eager Tasks (Python 3.12+)
 
 ### Introduction
@@ -60,9 +66,37 @@ asyncio.run(main())
 
 **Performance Impact**: Tests have shown up to 50% performance improvements in async-heavy workloads, primarily by eliminating the overhead of unnecessary event loop scheduling for short-lived coroutines.
 
-### Alternative: eager_start Parameter (Python 3.12+)
+### Two Approaches to Enable Eager Execution
 
-Starting with Python 3.12, you can also pass `eager_start=True` directly to `create_task()`:
+Python 3.12 provides two ways to enable eager task execution:
+
+**1. Global Task Factory** - Enables eager execution for all tasks in the event loop:
+
+```python
+import asyncio
+
+# Set the eager task factory globally
+asyncio.get_event_loop().set_task_factory(asyncio.eager_task_factory)
+
+
+async def my_coroutine():
+    print("Starting immediately!")
+    await asyncio.sleep(1)
+    return "done"
+
+
+async def main():
+    # All tasks now start eagerly
+    task = asyncio.create_task(my_coroutine())
+    await task
+
+
+asyncio.run(main())
+```
+
+This approach is beneficial for applications where you want to optimize the execution model wholesale, enabling eager execution for all tasks throughout your application.
+
+**2. Per-Task eager_start Parameter** - Selective eager execution for specific tasks:
 
 ```python
 import asyncio
@@ -75,7 +109,7 @@ async def my_coroutine():
 
 
 async def main():
-    # Create a single eager task without changing the global factory
+    # Only this specific task starts eagerly
     task = asyncio.create_task(my_coroutine(), eager_start=True)
     print("Task created")
     await task
@@ -84,14 +118,13 @@ async def main():
 asyncio.run(main())
 ```
 
-This provides more fine-grained control than setting a global task factory, allowing you to selectively make specific tasks eager while keeping others lazy.
+This provides fine-grained control, allowing you to selectively make specific tasks eager while keeping others lazy, without changing the global task factory.
 
 ### Limitations
 
-1. **Global Setting**: Using `set_task_factory()` affects **all** task creation via `create_task()` in the event loop
-2. **Selective Control**: The `eager_start` parameter (Python 3.12+) allows per-task control but still always creates a Task object
-3. **Compatibility**: May break code that relies on deferred task execution semantics
-4. **Python 3.12+ Only**: Not available in earlier Python versions
+1. **Both approaches always create a Task object**: Even if the coroutine completes synchronously, a Task is created
+2. **Compatibility**: May break code that relies on deferred task execution semantics
+3. **Python 3.12+ Only**: Not available in earlier Python versions
 
 ## asynkit's Eager Execution
 
