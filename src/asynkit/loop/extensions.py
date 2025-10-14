@@ -48,7 +48,7 @@ def call_pos(
     context: Context | None = None,
     loop: AbstractEventLoop | None = None,
 ) -> Handle:
-    """Arrange for a callback to be made at position 'pos' near the the head of
+    """Arrange for a callback to be made at position 'pos' near the head of
     the callable queue.  'position' is typically a low number, 0 or 1, where 0
     means that the callback will be called __immediately__ after the currently
     running callback.

@@ -217,7 +217,7 @@ class CoroStart(Awaitable[T_co]):
 
         # yield up the initial future from `coro_start`.
         # This is similar to how `yield from` is defined (see pep-380)
-        # except that it uses a coroutines's send() and throw() methods.
+        # except that it uses a coroutine's send() and throw() methods.
         while True:
             try:
                 in_value = yield out_value

@@ -25,6 +25,8 @@ pip install asynkit
 
 ### `eager()` - lower latency IO
 
+**Note:** Python 3.12+ introduced native eager task execution via `asyncio.eager_task_factory`. See [docs/eager_tasks.md](docs/eager_tasks.md) for a detailed comparison of Python's built-in eager tasks and asynkit's `eager()` feature.
+
 Did you ever wish that your _coroutines_ started right away, and only returned control to
 the caller once they become blocked? Like the way the `async` and `await` keywords work in the __C#__ language?
 
@@ -905,6 +907,8 @@ The non-eager features of asynkit work with both backends.
 Some features are currently available experimentally. They may work only on some platforms or be experimental in nature, not stable or mature enough to be officially part of the library.
 
 ### Task Interruption
+
+**See [docs/task_interruption.md](docs/task_interruption.md) for detailed documentation.**
 
 **Note:** Task interruption with `_PyTask` objects does not work on Python 3.14.0 due to a bug
 in `asyncio.current_task()` that prevents it from recognizing tasks created by custom task factories.

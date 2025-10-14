@@ -74,7 +74,7 @@ class AbstractSchedulingLoop(ABC):
         *args: Any,
         context: Context | None = None,
     ) -> Handle:
-        """Arrange for a callback to be inserted at position 'pos' near the the head of
+        """Arrange for a callback to be inserted at position 'pos' near the head of
         the queue to be called soon.  'position' is typically a low number, 0 or 1.
         This is effectively the same as calling
         `call_soon()`, `queue_remove()` and `queue_insert_pos()` in turn.
