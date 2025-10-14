@@ -634,12 +634,13 @@ class TestCoroAwait:
         if request.param == "eager":
             if sys.version_info < (3, 12):
                 pytest.skip("Eager task factory requires Python 3.12+")
+
             # Use default event loop with eager task factory
             def loop_factory():
                 loop = asyncio.new_event_loop()
                 loop.set_task_factory(asyncio.eager_task_factory)
                 return loop
-            
+
             return ("asyncio", {"loop_factory": loop_factory})
         else:
             return "asyncio"
