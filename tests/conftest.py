@@ -121,13 +121,12 @@ def make_loop_factory(loop_policy):
 
 
 def make_anyio_backend(request, eager_tasks=False):
-    """
-    Create an anyio backend configuration with optional eager task factory.
-    
+    """Create an anyio backend configuration with optional eager task factory.
+
     Args:
         request: pytest request object
         eager_tasks: if True and Python 3.12+, use eager_task_factory
-    
+
     Returns:
         tuple: (backend_name, backend_options) for anyio
     """
