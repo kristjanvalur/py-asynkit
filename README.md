@@ -709,7 +709,7 @@ All tasks are treated equally.
 
 ### The `asynkit.experimental.priority` module
 
-- __Note__: This is currently an __experimental__ feature.
+> **Note:** This is currently an __experimental__ feature.
 
 In pre-emptive system, such as scheduling of `threads` or `processes` there is usually some sort of `priority` involved too,
 to allow designating some tasks as more important than others, thus requiring more rapid servicing, and others as having
