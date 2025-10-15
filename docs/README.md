@@ -7,13 +7,25 @@ This folder contains documentation for developers and maintainers of py-asynkit.
 ### User Documentation Planning
 - **[README_RESTRUCTURING_RECOMMENDATIONS.md](README_RESTRUCTURING_RECOMMENDATIONS.md)**: Comprehensive recommendations for improving README.md structure
   - Feature-first organization approach
-  - Guidance on using backticks in headlines (with examples from popular libraries)
-  - Emoji usage recommendations for Note sections
+  - Guidance on using backticks in headlines (with examples from popular libraries like httpx, attrs, pydantic, rich)
+  - Emoji usage recommendations for Note sections (with examples from FastAPI, Pydantic V2)
   - Implementation priorities
 - **[README_PROPOSED_TOP_SECTION.md](README_PROPOSED_TOP_SECTION.md)**: Concrete examples of improved README top section
   - Detailed version with code examples
   - Concise version for quick scanning
   - Hybrid approach recommendation
+- **[README_EMOJI_EXAMPLES.md](README_EMOJI_EXAMPLES.md)**: Before/after examples of emoji additions to Note sections
+  - All 4 Note blocks with suggested emojis
+  - Quick-win improvement demonstration
+- **[README_IMPLEMENTATION_GUIDE.md](README_IMPLEMENTATION_GUIDE.md)**: Step-by-step implementation guide
+  - Prioritized changes with time estimates
+  - Exact line numbers and diffs
+  - Testing and rollback procedures
+- **[README_VISUAL_COMPARISON.md](README_VISUAL_COMPARISON.md)**: Side-by-side visual comparisons
+  - Before/after structure comparison
+  - Scannability analysis
+  - User scenario testing
+  - Impact assessment
 
 ### Technical Documentation
 - **[MIGRATION_TO_UV.md](MIGRATION_TO_UV.md)**: Guide for the Poetry to uv migration, including:
