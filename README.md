@@ -2,8 +2,7 @@
 
 [![CI](https://github.com/kristjanvalur/py-asynkit/actions/workflows/ci.yml/badge.svg)](https://github.com/kristjanvalur/py-asynkit/actions/workflows/ci.yml)
 
-This module provides some handy tools for those wishing to have better control over the
-way Python's `asyncio` module does things.
+**asynkit** provides advanced control over Python's `asyncio` module, offering tools for eager execution, fine-grained scheduling, and powerful coroutine manipulation.
 
 - Helper tools for controlling coroutine execution, such as [`CoroStart`](#corostart) and [`Monitor`](#monitor)
 - Utility classes such as [`GeneratorObject`](#generatorobject)
@@ -21,11 +20,19 @@ way Python's `asyncio` module does things.
 pip install asynkit
 ```
 
+## Key Features
+
+- 🚀 **[Eager Execution](#eager)**: Start coroutines immediately, not when awaited
+- ⚡ **[Advanced Scheduling](#scheduling-tools)**: Priority tasks, queue control, task switching
+- 🔧 **[Coroutine Control](#coroutine-tools)**: Low-level inspection and manipulation
+- 🔬 **[Experimental Features](#experimental-features)**: Task interruption, custom timeouts
+- 🔌 **Backend Support**: Full `asyncio` and `anyio` support, limited `trio` support
+
 ## Coroutine Tools
 
 ### `eager()` - lower latency IO
 
-> **Note:** Python 3.12+ introduced native eager task execution via `asyncio.eager_task_factory`. See [docs/eager_tasks.md](docs/eager_tasks.md) for a detailed comparison of Python's built-in eager tasks and asynkit's `eager()` feature.
+> ℹ️ **Note:** Python 3.12+ introduced native eager task execution via `asyncio.eager_task_factory`. See [docs/eager_tasks.md](docs/eager_tasks.md) for a detailed comparison of Python's built-in eager tasks and asynkit's `eager()` feature.
 
 Did you ever wish that your _coroutines_ started right away, and only returned control to
 the caller once they become blocked? Like the way the `async` and `await` keywords work in the __C#__ language?
@@ -674,7 +681,7 @@ with asyncio.Runner(loop_factory=asynkit.scheduling_loop_factory) as runner:
 
 #### Event Loop Policy (Legacy)
 
-> **Note:** Event loop policies are deprecated as of Python 3.14 and will be removed in Python 3.16.
+> ⚠️ **Note:** Event loop policies are deprecated as of Python 3.14 and will be removed in Python 3.16.
 
 For compatibility with Python 3.10-3.11, or for code that hasn't migrated away from the policy system, a policy class is provided:
 
@@ -709,7 +716,7 @@ All tasks are treated equally.
 
 ### The `asynkit.experimental.priority` module
 
-> **Note:** This is currently an __experimental__ feature.
+> 🧪 **Note:** This is currently an experimental feature.
 
 In pre-emptive system, such as scheduling of `threads` or `processes` there is usually some sort of `priority` involved too,
 to allow designating some tasks as more important than others, thus requiring more rapid servicing, and others as having
@@ -910,7 +917,7 @@ Some features are currently available experimentally. They may work only on some
 
 **See [docs/task_interruption.md](docs/task_interruption.md) for detailed documentation.**
 
-> **Note:** Task interruption with `_PyTask` objects does not work on Python 3.14.0 due to a bug
+> ⚠️ **Note:** Task interruption with `_PyTask` objects does not work on Python 3.14.0 due to a bug
 > in `asyncio.current_task()` that prevents it from recognizing tasks created by custom task factories.
 > This affects the `create_pytask()` function and any code using it.
 > C Tasks (from `asyncio.create_task()`) have limited interrupt support.
