@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.1] - 2025
+
+### Bug Fixes
+
+- **Fixed Python 3.14 PyTask compatibility**: Added `patch_pytask()` function to synchronize C and Python asyncio implementations
+  - Python 3.14 separates C (`_c_*`) and Python (`_py_*`) implementations of core asyncio functions
+  - PyTasks require both implementations synchronized for proper `current_task()` behavior
+  - `patch_pytask()` is automatically called by `create_pytask()` when needed
+  - Removes the Python 3.14 limitation from the experimental interrupt module
+  - All 30 pytask tests now pass on Python 3.14.0rc2
+
+### Code Modernization
+
+- **Improved import organization**: Moved `patch_pytask` import to module level in interrupt.py
+- **Enhanced type annotations**: Added proper type ignore comments for Python 3.14-specific asyncio attributes
+
 ### Testing
 
 - **Added Python 3.12+ eager task factory testing support**:
@@ -25,16 +41,13 @@ All notable changes to this project will be documented in this file.
   - Updated anyio from 3.6.2 → 4.11.0
   - Updated trio from 0.21.0 → 0.31.0 (now supports Python 3.13+)
   - All 537 tests passing on Python 3.13.8
-- **Added Python 3.14 support (with limitations)**: Python 3.14.0 is now supported with known limitations
+- **Added Python 3.14 support**: Python 3.14.0 is now fully supported
   - Updated `task_factory` signature to accept `**kwargs` parameter (new in Python 3.14)
   - All core features work correctly on Python 3.14
-  - **Known Issue**: Experimental `interrupt` module has limited functionality on Python 3.14.0
-    - `create_pytask()` function affected by a bug in `asyncio.current_task()`
-    - Python 3.14.0's `current_task()` does not recognize tasks created by custom task factories
-    - Tests for `_PyTask` interruption are marked as xfail on Python 3.14
-    - C Task interruption still has the same partial support as before
-    - Bug has been reported to Python core team with minimal reproduction test case
-    - Users requiring full interrupt functionality should use Python 3.10-3.13
+  - **Previous Known Issue (Now Resolved)**: Experimental `interrupt` module initially had limited functionality on Python 3.14.0
+    - Issue was due to separated C and Python asyncio implementations requiring synchronization
+    - **Fixed in v0.13.1**: Added `patch_pytask()` compatibility function for full PyTask support
+    - C Task interruption has the same partial support as all Python versions
 - **Added PyPy 3.11 support**: Upgraded PyPy testing from 3.10 to 3.11
 - **Added GraalPy 3.12 support**: GraalPy is now tested in CI to verify compatibility
 

@@ -69,7 +69,7 @@ task = create_pytask(my_coroutine(), name="worker")
 
 **Why needed**: Python tasks expose the internal methods required for precise interruption. C tasks (from `asyncio.create_task()`) have limited interrupt support.
 
-**Limitation (Python 3.14)**: Due to an upstream bug in Python 3.14.0, `create_pytask()` is affected by `asyncio.current_task()` not properly tracking tasks from custom factories. Use Python 3.10-3.13 for full interrupt support.
+**Python 3.14 Compatibility**: `create_pytask()` automatically applies the `patch_pytask()` compatibility fix to synchronize C and Python asyncio implementations. This ensures full interrupt support on Python 3.14.0+.
 
 ### Interrupting Tasks
 
@@ -319,11 +319,21 @@ Python tasks (`_PyTask`) provide all of these. Use `create_pytask()` to ensure y
 
 ### Python 3.14 Compatibility
 
-Python 3.14.0 has a bug where `asyncio.current_task()` returns `None` for tasks created by custom task factories. This affects `create_pytask()` and breaks interrupt safety checks.
+Python 3.14.0 separates C and Python asyncio implementations, requiring synchronization for PyTasks to work properly. The `patch_pytask()` function addresses this by ensuring both implementations are consistent.
 
-**Workaround**: Use Python 3.10-3.13 for full interrupt functionality.
+**Automatic Fix**: `create_pytask()` automatically applies the compatibility patch when needed.
 
-**Status**: Bug reported to Python core team with minimal reproduction.
+**Technical Details**: Python 3.14 has separate `_c_*` (C) and `_py_*` (Python) versions of core asyncio functions. PyTasks need both synchronized for proper `current_task()` behavior.
+
+### Official Python Limitation
+
+Python does not officially support running both Python-implemented (`_PyTask`) and C-implemented (`_CTask`) tasks together. In the presence of the `_asyncio` module, `_PyTask` objects are not supported by the Python core team.
+
+**Reference**: [CPython Issue #140050](https://github.com/python/cpython/issues/140050)
+
+**Implication**: The `create_pytask()` function and PyTask-based interruption exist in a compatibility gray area. While they work in practice and are essential for reliable task interruption, they are not officially endorsed by Python's asyncio maintainers.
+
+**Recommendation**: Use this functionality with awareness of its unofficial status. The implementation follows asyncio's internal protocols correctly, but future Python versions may affect compatibility.
 
 ### Experimental Status
 

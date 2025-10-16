@@ -1,5 +1,4 @@
 import asyncio
-import sys
 
 import pytest
 
@@ -10,14 +9,7 @@ This example demonstrates how to use the interrupt feature of the
 experimental package.
 """
 
-pytestmark = [
-    pytest.mark.anyio,
-    pytest.mark.xfail(
-        sys.version_info >= (3, 14),
-        reason="Python 3.14+ has issues with PyTasks and asyncio.current_task()",
-        strict=False,
-    ),
-]
+pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture
