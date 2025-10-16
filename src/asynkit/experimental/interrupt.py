@@ -8,6 +8,7 @@ from asyncio import AbstractEventLoop
 from collections.abc import AsyncIterator, Coroutine
 from typing import Any, Literal
 
+from asynkit.compat import patch_pytask
 from asynkit.loop.extensions import AbstractSchedulingLoop, get_scheduling_loop
 from asynkit.loop.types import FutureAny, TaskAny
 from asynkit.scheduling import task_switch
@@ -39,14 +40,15 @@ def task_factory(loop, coro, **kwargs):  # type: ignore[no-untyped-def]
 
 
 def create_pytask(
-    coro: Coroutine[Any, Any, Any], *, name: str | None = None
+    coro: Coroutine[Any, Any, Any], *, name: str | None = None, **kwargs: Any
 ) -> TaskAny:
     """Create a Python-implemented task for the given coroutine."""
+    patch_pytask()
     loop = asyncio.get_running_loop()
     old_factory = loop.get_task_factory()
     loop.set_task_factory(task_factory)
     try:
-        task = loop.create_task(coro, name=name)
+        task = loop.create_task(coro, name=name, **kwargs)  # type: ignore[call-arg]
     finally:
         loop.set_task_factory(old_factory)
     return task

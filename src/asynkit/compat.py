@@ -9,6 +9,7 @@ from weakref import ReferenceType
 
 # Python version checks
 PY_311 = sys.version_info >= (3, 11)
+PY_314 = sys.version_info >= (3, 14)
 
 T = TypeVar("T")
 
@@ -24,3 +25,87 @@ else:
     _TaskAny = asyncio.Task
     FutureBool = asyncio.Future
     ReferenceTypeTaskAny = ReferenceType
+
+
+# PyTask compatibility patches for Python 3.14+
+# In Python 3.14, asyncio separates C and Python implementations of key functions.
+# PyTasks need both implementations synchronized for proper current_task() behavior.
+
+if PY_314:
+    from asyncio import AbstractEventLoop
+    from asyncio.events import _get_running_loop as _c__get_running_loop
+    from asyncio.events import (  # type: ignore[attr-defined]
+        _py__get_running_loop,
+        _py__set_running_loop,
+    )
+    from asyncio.events import _set_running_loop as _c__set_running_loop
+    from asyncio.tasks import _enter_task as _c__enter_task
+    from asyncio.tasks import _leave_task as _c__leave_task
+    from asyncio.tasks import (  # type: ignore[attr-defined]
+        _py_enter_task,
+        _py_leave_task,
+        _py_swap_current_task,
+    )
+    from asyncio.tasks import (
+        _swap_current_task as _c__swap_current_task,  # type: ignore[attr-defined]
+    )
+
+    if _c__get_running_loop is _py__get_running_loop:  # pragma: no cover
+        _c__get_running_loop = None  # type: ignore[assignment]
+        _c__set_running_loop = None  # type: ignore[assignment]
+        _c__swap_current_task = None  # type: ignore[assignment]
+        _c__enter_task = None  # type: ignore[assignment]
+        _c__leave_task = None  # type: ignore[assignment]
+
+    # Store original functions to avoid recursion
+    _orig_py__get_running_loop = _py__get_running_loop
+    _orig_py__set_running_loop = _py__set_running_loop
+    _orig_py_swap_current_task = _py_swap_current_task
+    _orig_py_enter_task = _py_enter_task
+    _orig_py_leave_task = _py_leave_task
+
+    # Combined functions that call both Python and C implementations
+
+    def _py_c_set_running_loop(loop: AbstractEventLoop) -> None:
+        _orig_py__set_running_loop(loop)
+        _c__set_running_loop(loop)  # type: ignore[misc]
+
+    def _py_c_get_running_loop() -> AbstractEventLoop:
+        return _c__get_running_loop()  # type: ignore[misc]
+
+    def _py_c_swap_current_task(task: _TaskAny) -> _TaskAny | None:
+        prev = _orig_py_swap_current_task(task)
+        _c__swap_current_task(task)  # type: ignore[misc]
+        return prev  # type: ignore[no-any-return]
+
+    def _py_c_enter_task(loop: AbstractEventLoop, task: _TaskAny) -> None:
+        _orig_py_enter_task(loop, task)
+        _c__enter_task(loop, task)  # type: ignore[misc]
+
+    def _py_c_leave_task(loop: AbstractEventLoop, task: _TaskAny) -> None:
+        _orig_py_leave_task(loop, task)
+        _c__leave_task(loop, task)  # type: ignore[misc]
+
+    def patch_pytask() -> None:
+        """Patch asyncio to synchronize Python and C implementations for PyTask.
+
+        This is needed for Python 3.14+ where asyncio separates C and Python
+        implementations of key functions. PyTasks require both synchronized for
+        proper current_task().
+        """
+        if _c__get_running_loop is None:
+            return  # no C implementation available, skip patching
+        if asyncio.events._get_running_loop is _py_c_get_running_loop:  # type: ignore[comparison-overlap]
+            return  # already patched
+        asyncio.events._get_running_loop = _py_c_get_running_loop  # type: ignore[assignment]
+        asyncio.events._set_running_loop = _py_c_set_running_loop  # type: ignore[assignment]
+        # patch the _py_* variants that PyTask.__step calls directly
+        asyncio.tasks._py_enter_task = _py_c_enter_task  # type: ignore[assignment,attr-defined]
+        asyncio.tasks._py_leave_task = _py_c_leave_task  # type: ignore[assignment,attr-defined]
+        asyncio.tasks._py_swap_current_task = _py_c_swap_current_task  # type: ignore[assignment,attr-defined]
+
+else:
+
+    def patch_pytask() -> None:
+        """No-op for Python versions < 3.14."""
+        pass
