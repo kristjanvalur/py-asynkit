@@ -30,7 +30,7 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/kristjanvalur/py-asynkit"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "mypy>=0.991",
     "pytest>=7.1.1",
@@ -41,6 +41,8 @@ dev = [
     "mdformat>=0.7.0",
     "mdformat-ruff>=0.1.0",
 ]
+
+[project.optional-dependencies]
 # trio 0.31.0 supports Python 3.13+
 trio = [
     "trio>=0.31.0",

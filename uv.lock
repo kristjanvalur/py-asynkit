@@ -26,6 +26,11 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+trio = [
+    { name = "trio" },
+]
+
+[package.dev-dependencies]
 dev = [
     { name = "anyio" },
     { name = "mdformat" },
@@ -36,24 +41,25 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
-trio = [
-    { name = "trio" },
-]
 
 [package.metadata]
 requires-dist = [
-    { name = "anyio", marker = "extra == 'dev'", specifier = ">=4.0.0" },
-    { name = "mdformat", marker = "extra == 'dev'", specifier = ">=0.7.0" },
-    { name = "mdformat-ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=0.991" },
-    { name = "poethepoet", marker = "extra == 'dev'", specifier = ">=0.29.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.1.1" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=3.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
     { name = "trio", marker = "extra == 'trio'", specifier = ">=0.31.0" },
     { name = "typing-extensions", specifier = ">=4.4.0" },
 ]
-provides-extras = ["dev", "trio"]
+provides-extras = ["trio"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "anyio", specifier = ">=4.0.0" },
+    { name = "mdformat", specifier = ">=0.7.0" },
+    { name = "mdformat-ruff", specifier = ">=0.1.0" },
+    { name = "mypy", specifier = ">=0.991" },
+    { name = "poethepoet", specifier = ">=0.29.0" },
+    { name = "pytest", specifier = ">=7.1.1" },
+    { name = "pytest-cov", specifier = ">=3.0.0" },
+    { name = "ruff", specifier = ">=0.4.0" },
+]
 
 [[package]]
 name = "attrs"
