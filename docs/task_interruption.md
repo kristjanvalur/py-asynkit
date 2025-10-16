@@ -151,7 +151,11 @@ Interrupt exceptions inherit from `CancelledError` because asyncio synchronizati
 
 ### InterruptCondition
 
-Standard `asyncio.Condition` doesn't properly handle exceptions other than `CancelledError` during lock re-acquisition. Use `InterruptCondition` when working with interrupts:
+Standard `asyncio.Condition` in Python 3.12 and earlier has a buggy implementation that doesn't properly handle `CancelledError` subclasses during lock re-acquisition in the `wait()` method. This was fixed in Python 3.13+.
+
+`InterruptCondition` provides compatibility across Python versions:
+- **Python 3.13+**: Simply an alias to `asyncio.Condition` for optimal performance
+- **Python < 3.13**: Custom implementation with proper `CancelledError` subclass handling
 
 ```python
 from asynkit.experimental import InterruptCondition
@@ -454,10 +458,10 @@ task_throw(task, exc2)  # Overwrites exc1
 ### Use InterruptCondition
 
 ```python
-# Good - handles interrupts correctly
+# Good - handles interrupts correctly across Python versions
 condition = InterruptCondition()
 
-# Limited - only handles plain CancelledError
+# Limited - buggy on Python < 3.13 for CancelledError subclasses
 condition = asyncio.Condition()
 ```
 

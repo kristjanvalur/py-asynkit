@@ -1,4 +1,5 @@
 import asyncio
+import sys
 
 import pytest
 
@@ -525,7 +526,10 @@ class TestInterrupt:
         assert task_is_runnable(task2)
         assert await task2 == 1
 
-    @pytest.mark.xfail(reason="regular condition can only deal with 'CancelledError'")
+    @pytest.mark.xfail(
+        sys.version_info < (3, 13),
+        reason="regular condition can only deal with 'CancelledError' on Python < 3.13"
+    )
     async def test_cancelled_condition_wait_acquire_regular(self, ctask):
         await self._cancelled_condition_wait_acquire(ctask, asyncio.Condition())
 

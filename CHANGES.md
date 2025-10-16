@@ -20,6 +20,14 @@ All notable changes to this project will be documented in this file.
 - **Improved import organization**: Moved `patch_pytask` import to module level in interrupt.py
 - **Enhanced type annotations**: Added proper type ignore comments for Python 3.14-specific asyncio attributes
 
+### Performance Optimizations
+
+- **Optimized InterruptCondition for Python 3.13+**: Moved `InterruptCondition` to `compat` module with version-specific implementation
+  - On Python 3.13+: `InterruptCondition` is now an alias to `asyncio.Condition` for optimal performance
+  - On Python < 3.13: Uses custom class with enhanced exception handling for `CancelledError` subclasses
+  - Python 3.13+ fixed the bug where `asyncio.Condition.wait()` didn't properly handle `CancelledError` subclasses
+  - Maintains full backward compatibility while improving performance on newer Python versions
+
 ### Testing
 
 - **Added Python 3.12+ eager task factory testing support**:

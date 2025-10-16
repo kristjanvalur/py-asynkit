@@ -945,8 +945,14 @@ Please note the following cases:
    Therefore, we provide a base class, `InterruptError`, deriving from `CancelledError` which
    should be used for interrupts in general.
 
-   However, currently `asyncio.Condition` will not correctly pass on such a subclass
-   for `wait()` in all cases, so a safer version, `InterruptCondition` class, is provided.
+   However, `asyncio.Condition` in Python 3.12 and earlier has a buggy implementation that will not 
+   correctly pass on such subclasses during `wait()` in all cases. The finally block that re-acquires 
+   the lock only catches `CancelledError`, not its subclasses. This was fixed in Python 3.13+ with 
+   improved exception handling that properly catches `CancelledError` and subclasses.
+   
+   For compatibility with older Python versions, a safer `InterruptCondition` class is provided that 
+   handles `CancelledError` subclasses correctly. On Python 3.13+, `InterruptCondition` is simply 
+   an alias to the standard `asyncio.Condition` for optimal performance.
 
 2. Even subclasses of `CancelledError` will be converted to a new `CancelledError`
    instance when not handled in a task, and awaited.

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from weakref import ReferenceType
 
 """Compatibility routines for earlier asyncio versions"""
+
+__all__ = ["InterruptCondition", "patch_pytask"]
 
 # Python version checks
 PY_311 = sys.version_info >= (3, 11)
@@ -109,3 +111,66 @@ else:
     def patch_pytask() -> None:
         """No-op for Python versions < 3.14."""
         pass
+
+
+# InterruptCondition compatibility
+# Python 3.13+ handles CancelledError subclasses properly in Condition.wait()
+if sys.version_info >= (3, 13):
+    InterruptCondition = asyncio.Condition
+else:
+    class InterruptCondition(asyncio.Condition):
+        """
+        A class which fixes the lack of support in asyncio.Condition for arbitrary
+        exceptions being raised during the lock.acquire() call in wait().
+        """
+
+        LockType = asyncio.Lock
+
+        def __init__(self, lock: Any = None) -> None:
+            if lock is None:  # pragma: no branch
+                lock = self.LockType()
+            super().__init__(lock)
+
+        async def wait(self) -> Literal[True]:  # pragma: no cover
+            """Wait until notified.
+
+            If the calling coroutine has not acquired the lock when this
+            method is called, a RuntimeError is raised.
+
+            This method releases the underlying lock, and then blocks
+            until it is awakened by a notify() or notify_all() call for
+            the same condition variable in another coroutine.  Once
+            awakened, it re-acquires the lock and returns True.
+            """
+            if not self.locked():
+                raise RuntimeError("cannot wait on un-acquired lock")
+
+            self.release()
+            try:
+                # _get_loop() is available from asyncio.Condition's _LoopBoundMixin base
+                fut = self._get_loop().create_future()  # type: ignore[attr-defined]
+                self._waiters.append(fut)  # type: ignore[attr-defined]
+                try:
+                    await fut
+                    return True
+                finally:
+                    self._waiters.remove(fut)  # type: ignore[attr-defined]
+
+            finally:
+                # Must reacquire lock even if wait is cancelled.  We only
+                # catch CancelledError (and subclasses) so that we don't get in the way
+                # of KeyboardInterrupts or SystemExits or other serious errors.
+                err = None
+                while True:
+                    try:
+                        await self.acquire()
+                        break
+                    except asyncio.CancelledError as e:
+                        err = e
+
+                if err is not None:
+                    try:
+                        # re-raise the actual error caught
+                        raise err
+                    finally:
+                        err = None  # break ref cycle
