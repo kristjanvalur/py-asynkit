@@ -92,9 +92,11 @@ include = [
 python_files = [
     "test_*.py",
     "example_*.py",
+    "middleware.py",
 ]
 testpaths = [
     "tests",
+    "examples",
 ]
 filterwarnings = [
     'ignore:You seem to already have a custom sys.excepthook:RuntimeWarning'
