@@ -25,7 +25,7 @@ All notable changes to this project will be documented in this file.
 - **Optimized InterruptCondition for Python 3.13+**: Moved `InterruptCondition` to `compat` module with version-specific implementation
   - On Python 3.13+: `InterruptCondition` is now an alias to `asyncio.Condition` for optimal performance
   - On Python < 3.13: Uses custom class with enhanced exception handling for `CancelledError` subclasses
-  - Python 3.13+ fixed the bug where `asyncio.Condition.wait()` didn't properly handle `CancelledError` subclasses
+  - Python 3.13+ fixed the bug where `asyncio.Condition.wait()` didn't properly handle `CancelledError` subclasses ([CPython PR #112201](https://github.com/python/cpython/pull/112201))
   - Maintains full backward compatibility while improving performance on newer Python versions
 
 ### Testing

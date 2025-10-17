@@ -948,7 +948,8 @@ Please note the following cases:
    However, `asyncio.Condition` in Python 3.12 and earlier has a buggy implementation that will not 
    correctly pass on such subclasses during `wait()` in all cases. The finally block that re-acquires 
    the lock only catches `CancelledError`, not its subclasses. This was fixed in Python 3.13+ with 
-   improved exception handling that properly catches `CancelledError` and subclasses.
+   improved exception handling that properly catches `CancelledError` and subclasses 
+   ([CPython PR #112201](https://github.com/python/cpython/pull/112201)).
    
    For compatibility with older Python versions, a safer `InterruptCondition` class is provided that 
    handles `CancelledError` subclasses correctly. On Python 3.13+, `InterruptCondition` is simply 
