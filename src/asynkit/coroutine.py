@@ -39,7 +39,7 @@ __all__ = [
     "func_eager",
     "eager",
     "eager_ctx",
-    "create_eager_task_factory",
+    "create_eager_factory",
     "coro_get_frame",
     "coro_is_new",
     "coro_is_suspended",
@@ -516,7 +516,7 @@ class TaskLikeFuture(Future[T]):
         self._context = context
 
 
-def create_eager_task_factory(
+def create_eager_factory(
     inner_factory: Callable[..., Task[Any]] | None = None,
 ) -> Callable[..., Any]:
     """

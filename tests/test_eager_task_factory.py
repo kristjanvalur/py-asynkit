@@ -1,4 +1,4 @@
-"""Tests for create_eager_task_factory functionality."""
+"""Tests for create_eager_factory functionality."""
 
 import asyncio
 from unittest.mock import Mock, patch
@@ -8,8 +8,8 @@ import pytest
 import asynkit
 
 
-class TestEagerTaskFactory:
-    """Test the create_eager_task_factory function."""
+class TestEagerFactory:
+    """Test the create_eager_factory function."""
 
     pytestmark = pytest.mark.anyio
 
@@ -26,14 +26,14 @@ class TestEagerTaskFactory:
         assert hasattr(loop, 'get_task_factory'), "get_task_factory not available"
         loop.close()
 
-    async def test_eager_task_factory_returns_future_when_sync(self):
+    async def test_eager_factory_returns_future_when_sync(self):
         """Test that factory returns Future when coroutine completes synchronously."""
 
         async def sync_coro():
             return "completed_sync"
 
         # Create our eager task factory
-        factory = asynkit.create_eager_task_factory()
+        factory = asynkit.create_eager_factory()
 
         # Set it on the loop
         loop = asyncio.get_running_loop()
@@ -55,15 +55,15 @@ class TestEagerTaskFactory:
         finally:
             loop.set_task_factory(old_factory)
 
-    async def test_eager_task_factory_returns_task_when_async(self):
+    async def test_eager_factory_returns_task_when_async(self):
         """Test that factory returns Task when coroutine blocks."""
 
         async def async_coro():
-            await asyncio.sleep(0.01)  # Small delay to force async behavior
+            await asyncio.sleep(0.01)  # Small delay to ensure it blocks
             return "completed_async"
 
         # Create our eager task factory
-        factory = asynkit.create_eager_task_factory()
+        factory = asynkit.create_eager_factory()
 
         # Set it on the loop
         loop = asyncio.get_running_loop()
@@ -86,7 +86,7 @@ class TestEagerTaskFactory:
         finally:
             loop.set_task_factory(old_factory)
 
-    async def test_eager_task_factory_with_previous_factory(self):
+    async def test_eager_factory_with_previous_factory(self):
         """Test that factory properly delegates to inner factory when coroutine
         blocks."""
 
@@ -104,7 +104,7 @@ class TestEagerTaskFactory:
             return "completed"
 
         # Create our eager task factory with the mock as inner factory
-        factory = asynkit.create_eager_task_factory(mock_factory)
+        factory = asynkit.create_eager_factory(mock_factory)
 
         # Set it on the loop
         loop = asyncio.get_running_loop()
@@ -121,7 +121,7 @@ class TestEagerTaskFactory:
         finally:
             loop.set_task_factory(old_factory)
 
-    async def test_eager_task_factory_with_no_previous_factory(self):
+    async def test_eager_factory_with_no_previous_factory(self):
         """Test that factory creates Task directly when no inner factory exists."""
 
         async def async_coro():
@@ -133,7 +133,7 @@ class TestEagerTaskFactory:
         loop.set_task_factory(None)
 
         # Create our eager task factory (should get None as previous)
-        factory = asynkit.create_eager_task_factory()
+        factory = asynkit.create_eager_factory()
         loop.set_task_factory(factory)
 
         try:
@@ -150,7 +150,7 @@ class TestEagerTaskFactory:
         finally:
             loop.set_task_factory(None)
 
-    async def test_eager_task_factory_preserves_kwargs(self):
+    async def test_eager_factory_preserves_kwargs(self):
         """Test that factory preserves kwargs like name when delegating.
         
         Note: asyncio.create_task() handles 'name' internally via set_name(),
@@ -170,7 +170,7 @@ class TestEagerTaskFactory:
             return "completed"
 
         # Create our eager task factory with the recording factory
-        factory = asynkit.create_eager_task_factory(recording_factory)
+        factory = asynkit.create_eager_factory(recording_factory)
 
         # Set it on the loop
         loop = asyncio.get_running_loop()
@@ -193,14 +193,14 @@ class TestEagerTaskFactory:
         finally:
             loop.set_task_factory(old_factory)
     
-    async def test_eager_task_factory_exception_handling(self):
+    async def test_eager_factory_exception_handling(self):
         """Test that factory handles exceptions properly."""
 
         async def failing_coro():
             raise ValueError("test error")
 
         # Create our eager task factory
-        factory = asynkit.create_eager_task_factory()
+        factory = asynkit.create_eager_factory()
 
         # Set it on the loop
         loop = asyncio.get_running_loop()
@@ -232,7 +232,7 @@ class TestEagerTaskFactory:
             return "async"
 
         # Create our eager task factory
-        factory = asynkit.create_eager_task_factory()
+        factory = asynkit.create_eager_factory()
 
         # Set it on the loop
         loop = asyncio.get_running_loop()
@@ -272,7 +272,7 @@ class TestEagerTaskFactory:
                 return "sync_result"
             
             # Create eager task factory
-            factory = asynkit.create_eager_task_factory()
+            factory = asynkit.create_eager_factory()
             
             loop = asyncio.get_running_loop()
             old_factory = loop.get_task_factory()
@@ -314,7 +314,7 @@ class TestEagerTaskFactory:
                 return "blocking_result"
             
             # Create eager task factory
-            factory = asynkit.create_eager_task_factory()
+            factory = asynkit.create_eager_factory()
             
             loop = asyncio.get_running_loop()
             old_factory = loop.get_task_factory()
