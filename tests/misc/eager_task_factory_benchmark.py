@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Performance comparison between asynkit's eager task factory and 
+Performance comparison between asynkit's eager task factory and
 Python 3.12's native eager_task_factory.
 
 This test measures:
@@ -28,14 +28,14 @@ async def latency_test_coro(creation_time: float) -> str:
     """Coroutine for latency testing - records time to first yield."""
     # Record the time when we start executing (immediately with eager)
     start_execution_time = time.perf_counter()
-    
+
     # Some immediate work before yielding
     result = "immediate_work_done"
-    
+
     # Record latency from creation to first yield
     latency = start_execution_time - creation_time
     latency_measurements.append(latency)
-    
+
     await asyncio.sleep(0)  # First yield point
     return result
 
@@ -72,17 +72,17 @@ class PerformanceTest:
         """Measure latency from create_task() to first yield point."""
         global latency_measurements
         latency_measurements.clear()  # Reset measurements
-        
+
         tasks = []
         for _ in range(num_iterations):
             # Record creation time and pass it to the coroutine
             creation_time = time.perf_counter()
             task = asyncio.create_task(latency_test_coro(creation_time))
             tasks.append(task)
-        
+
         # Wait for all tasks to complete
         await asyncio.gather(*tasks)
-        
+
         # Return the collected latency measurements
         return latency_measurements.copy()
 
@@ -156,19 +156,19 @@ class PerformanceTest:
 async def compare_eager_start_parameter():
     """Test Python 3.12's per-task eager_start parameter if available."""
     import inspect
-    
+
     # Check if eager_start parameter is available
     sig = inspect.signature(asyncio.create_task)
-    if 'eager_start' not in sig.parameters:
+    if "eager_start" not in sig.parameters:
         print("\n=== Python 3.12 eager_start Parameter ===")
         print("  eager_start parameter not available in this Python version")
         print("  (eager_start was added in Python 3.12.0a7+)")
         return
-    
+
     print("\n=== Testing Python 3.12 eager_start Parameter ===")
-    
+
     global latency_measurements
-    
+
     # Test with eager_start=True
     latency_measurements.clear()
     creation_time = time.perf_counter()
@@ -187,12 +187,14 @@ async def compare_eager_start_parameter():
     print(f"  eager_start=False latency: {lazy_latency * 1_000_000:.2f} μs")
     if lazy_latency > 0:
         print(f"  Speedup: {lazy_latency / eager_latency:.1f}x")
+
+
 async def test_asynkit_create_task_eager():
     """Test asynkit's create_task with eager_start=True."""
     print("\n=== Testing asynkit.create_task(eager_start=True) ===")
-    
+
     global latency_measurements
-    
+
     # Test with eager_start=True
     latency_measurements.clear()
     creation_time = time.perf_counter()
@@ -272,7 +274,7 @@ async def main():
         baseline_latency = results[0]["latency"]["mean"]
         python_latency = python_eager["latency"]["mean"]
         asynkit_latency = asynkit_eager["latency"]["mean"]
-        
+
         print(
             f"  Python 3.12 eager latency improvement: "
             f"{baseline_latency / python_latency:.1f}x"
