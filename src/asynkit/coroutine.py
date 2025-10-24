@@ -5,7 +5,7 @@ import contextlib
 import functools
 import inspect
 import types
-from asyncio import Future
+from asyncio import Future, Task
 from collections.abc import (
     AsyncGenerator,
     AsyncIterable,
@@ -39,6 +39,7 @@ __all__ = [
     "func_eager",
     "eager",
     "eager_ctx",
+    "create_eager_task_factory",
     "coro_get_frame",
     "coro_is_new",
     "coro_is_suspended",
@@ -474,6 +475,35 @@ def eager_ctx(
     """Create an eager task and return a context manager that will cancel it on exit."""
     e = coro_eager(coro, create_task=create_task)
     return cancelling(e, msg=msg)
+
+
+def create_eager_task_factory(
+    inner_factory: Callable[..., Task[Any]] | None = None,
+) -> Callable[..., Any]:
+    """
+    Experimental. create a task factory that uses our 'eager' mechanism for all tasks
+    """
+    inner_factory = inner_factory or asyncio.get_running_loop().get_task_factory()
+
+    def factory(
+        loop: asyncio.AbstractEventLoop, coro: Coroutine[Any, Any, Any], **kwargs: Any
+    ) -> Any:
+        # an actual task_factory, corresponding to the signature of
+        # AbstractEventLoop.set_task_factory()
+        # however, it will not always return a Task, it may return a future.
+        # we hope that the event loop that calls it won't mind.
+        # kwargs.pop("eager_start", None)  # incompatible with the standard eager.
+
+        def create_task(coro: Coroutine[Any, Any, T]) -> CAwaitable[T]:
+            # when creating the task for the coro continuation, use the previous factory
+            if inner_factory is not None:
+                return inner_factory(loop, coro, **kwargs)
+            else:
+                return asyncio.Task(coro, loop=loop, **kwargs)
+
+        return eager(coro, create_task=create_task)
+
+    return factory
 
 
 def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
