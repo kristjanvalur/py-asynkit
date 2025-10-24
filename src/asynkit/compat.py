@@ -48,9 +48,15 @@ if PY_314:
         _py_leave_task,
         _py_swap_current_task,
     )
-    from asyncio.tasks import (
-        _swap_current_task as _c__swap_current_task,  # type: ignore[attr-defined]
-    )
+
+    try:
+        # _swap_current_task only exists in Python 3.14+
+        from asyncio.tasks import (  # type: ignore[attr-defined,import-not-found]
+            _swap_current_task as _c__swap_current_task,
+        )
+    except ImportError:
+        # Fallback for Python < 3.14
+        _c__swap_current_task = None  # type: ignore[assignment]
 
     if _c__get_running_loop is _py__get_running_loop:  # pragma: no cover
         _c__get_running_loop = None  # type: ignore[assignment]

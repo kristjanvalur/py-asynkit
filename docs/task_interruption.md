@@ -36,8 +36,8 @@ When `await task_interrupt()` returns, the exception has already been raised on 
 With `task_interrupt()`, it's possible to reason about program flow in ways that asynchronous exception delivery cannot support. We know that:
 
 1. **No intermediate tasks run** - No other tasks execute between calling `task_interrupt()` and the exception being raised on the target
-1. **Deterministic delivery** - Control only returns after the exception has been raised
-1. **No ambiguous state** - The task never exists in a state of "waiting to wake up with an exception"
+2. **Deterministic delivery** - Control only returns after the exception has been raised
+3. **No ambiguous state** - The task never exists in a state of "waiting to wake up with an exception"
 
 This eliminates several classes of bugs:
 
@@ -184,9 +184,9 @@ Tasks exist in one of several states:
 ### Interruption Algorithm
 
 1. **Locate the task**: Find it in the ready queue or in a future's callback list
-1. **Unhook**: Remove from ready queue or future callbacks
-1. **Inject**: Schedule the task with the exception as argument
-1. **Execute**: For `task_interrupt()`, immediately switch to the task
+2. **Unhook**: Remove from ready queue or future callbacks
+3. **Inject**: Schedule the task with the exception as argument
+4. **Execute**: For `task_interrupt()`, immediately switch to the task
 
 For blocked tasks:
 
@@ -257,7 +257,7 @@ For C tasks, we cannot directly call `__step(exception)` or create new bound met
    - We create a "fake" done future with the exception set
    - We call the reused `__wakeup` with this fake future as an argument
 
-1. **For runnable tasks**: We find the scheduled `__step` or `__wakeup` handle in the ready queue
+2. **For runnable tasks**: We find the scheduled `__step` or `__wakeup` handle in the ready queue
 
    - We extract the callback from the handle
    - We try to reuse it with our exception
@@ -306,8 +306,8 @@ This violates the normal asyncio invariant. The `_fut_waiter` **will** get clear
 Given these challenges, reliable task interruption requires:
 
 1. **Access to `__step` method**: To directly schedule the task with an exception
-1. **Ability to clear `_fut_waiter`**: To maintain state invariants
-1. **No `TaskStepMethWrapper` limitations**: To handle all task states
+2. **Ability to clear `_fut_waiter`**: To maintain state invariants
+3. **No `TaskStepMethWrapper` limitations**: To handle all task states
 
 Python tasks (`_PyTask`) provide all of these. Use `create_pytask()` to ensure your tasks can be reliably interrupted in all situations.
 

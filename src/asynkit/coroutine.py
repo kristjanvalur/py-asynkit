@@ -488,7 +488,7 @@ class TaskLikeFuture(Future[T]):
     """
 
     def __init__(
-        self, 
+        self,
         future: Future[T] | None = None,
         *,
         name: str | None = None,
@@ -505,7 +505,7 @@ class TaskLikeFuture(Future[T]):
                     self.cancel()
                 elif future.exception() is not None:
                     exc = future.exception()
-                    assert exc is not None  # type: ignore # we just checked it's not None
+                    assert exc is not None  # we just checked it's not None
                     self.set_exception(exc)
                 else:
                     self.set_result(future.result())
@@ -577,9 +577,9 @@ def create_eager_factory(
 
     Notes:
         - This is a different mechanism from Python 3.12's native eager execution
-          feature. Python 3.12 provides `eager_start=True` parameter for 
-          `asyncio.create_task()` and `asyncio.eager_task_factory()`. Our 
-          implementation works on all Python versions but may not always create 
+          feature. Python 3.12 provides `eager_start=True` parameter for
+          `asyncio.create_task()` and `asyncio.eager_task_factory()`. Our
+          implementation works on all Python versions but may not always create
           a real Task - synchronous coroutines get a TaskLikeFuture instead.
         - All kwargs from asyncio.create_task() are properly forwarded to the
           inner factory when delegation occurs.
@@ -633,35 +633,35 @@ def create_task(
 ) -> CAwaitable[T]:
     """
     Create a task with optional eager execution, compatible with Python 3.12+ API.
-    
+
     This function provides the same interface as Python 3.12's asyncio.create_task()
     including the eager_start parameter, but works on all Python versions using
     asynkit's eager execution implementation.
-    
+
     Args:
         coro: The coroutine to wrap in a task
         name: Optional name for the task
         context: Optional context to run the coroutine in
-        eager_start: If True, apply eager execution. If False or None, 
+        eager_start: If True, apply eager execution. If False or None,
             delegate to standard asyncio.create_task()
         **kwargs: Additional arguments passed to asyncio.create_task()
-    
+
     Returns:
         Task or TaskLikeFuture: Returns asynkit's eager implementation when
         eager_start=True, otherwise returns standard asyncio.Task
-    
+
     Example:
         ```python
         import asynkit
-        
+
         # Use eager execution (asynkit implementation)
         task = asynkit.create_task(my_coro(), eager_start=True)
-        
+
         # Use standard asyncio behavior
         task = asynkit.create_task(my_coro(), eager_start=False)
         task = asynkit.create_task(my_coro())  # same as eager_start=False
         ```
-    
+
     Notes:
         - When eager_start=True, may return TaskLikeFuture instead of Task for
           synchronous completion, similar to create_eager_factory behavior
@@ -673,11 +673,13 @@ def create_task(
         def continuation_factory(c: Coroutine[Any, Any, T]) -> CAwaitable[T]:
             # Pass the context to the continuation task
             try:
-                return _create_task(c, name=name, context=context, **kwargs)
+                return _create_task(c, name=name, context=context, **kwargs)  # type: ignore[call-arg]
             except TypeError:
                 # Fallback for Python < 3.11 which doesn't support context parameter
+                # Note: The coroutine is already running in the correct context from
+                # coro_eager_task_helper, so we don't need to pass context here
                 return _create_task(c, name=name, **kwargs)
-        
+
         # Use the refactored function that handles both eager execution and wrapping
         return coro_eager_task_helper(
             coro, construct_task=continuation_factory, context=context, name=name
@@ -686,7 +688,7 @@ def create_task(
         # Delegate to standard asyncio.create_task()
         # Handle context parameter compatibility (added in Python 3.11)
         try:
-            return _create_task(coro, name=name, context=context, **kwargs)
+            return _create_task(coro, name=name, context=context, **kwargs)  # type: ignore[call-arg]
         except TypeError:
             # Fallback for Python < 3.11 which doesn't support context parameter
             if context is not None:
@@ -705,33 +707,40 @@ def coro_eager_task_helper(
 ) -> CAwaitable[T]:
     """
     Internal helper for eager execution with Task compatibility and context handling.
-    
+
     This function combines eager execution with TaskLikeFuture wrapping for
     synchronous completion, making it suitable for use in task factories and
     create_task implementations.
-    
+
     Args:
         coro: The coroutine to execute eagerly
         construct_task: Factory for creating continuation tasks when coroutine blocks
         context: Optional context to run the coroutine in
         name: Optional name for the task (applied to TaskLikeFuture for sync completion)
-    
+
     Returns:
         Task, TaskLikeFuture, or CAwaitable depending on execution path:
         - Sync completion: TaskLikeFuture with Task-like methods
         - Async completion: Result from construct_task (usually asyncio.Task)
     """
+    import sys
+
+    # In Python < 3.11, context parameter doesn't exist for create_task()
+    # so we ignore any provided context and let CoroStart manage its own
+    if sys.version_info < (3, 11):
+        context = None
+
     if context is not None:
         # Enter the context only for the initial start, then use None for CoroStart
         # This way the continuation won't try to re-enter the context
         def start_in_context() -> CoroStart[T]:
             return CoroStart(coro, context=None)
-        
+
         cs = context.run(start_in_context)
     else:
         # No explicit context - use copy_context() as before
         cs = CoroStart(coro, context=copy_context())
-    
+
     if cs.done():
         # Sync completion - wrap in TaskLikeFuture for Task compatibility
         return TaskLikeFuture(cs.as_future(), name=name, context=context)
