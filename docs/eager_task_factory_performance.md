@@ -14,6 +14,7 @@ While Python's native implementation has a performance edge, asynkit's implement
 ## Test Methodology
 
 ### Environment
+
 - **Python Version**: 3.12.11
 - **Platform**: Windows
 - **Test Date**: October 2025
@@ -23,18 +24,19 @@ While Python's native implementation has a performance edge, asynkit's implement
 The benchmark measures two key metrics:
 
 1. **Latency to First Yield**: Time from `create_task()` call until the coroutine reaches its first `await` point
-2. **Throughput**: Operations per second for tasks that repeatedly call `asyncio.sleep(0)`
+1. **Throughput**: Operations per second for tasks that repeatedly call `asyncio.sleep(0)`
 
 #### Latency Test Coroutine
+
 ```python
 async def latency_test_coro(creation_time: float) -> str:
     # Record when execution starts (immediately with eager)
     start_execution_time = time.perf_counter()
-    
+
     # Calculate latency from task creation to execution
     latency = start_execution_time - creation_time
     latency_measurements.append(latency)
-    
+
     # Some immediate work before yielding
     result = "immediate_work_done"
     await asyncio.sleep(0)  # First yield point
@@ -42,6 +44,7 @@ async def latency_test_coro(creation_time: float) -> str:
 ```
 
 #### Throughput Test
+
 - **100 tasks** each performing **100 sleep operations**
 - Total: **10,000 operations** per test run
 - Measures complete end-to-end execution time
@@ -71,7 +74,7 @@ async def latency_test_coro(creation_time: float) -> str:
 The most significant finding is the **enormous reduction in task startup latency**:
 
 - **Standard asyncio**: ~2.3 milliseconds (due to event loop scheduling)
-- **Eager implementations**: <2 microseconds (immediate execution)
+- **Eager implementations**: \<2 microseconds (immediate execution)
 
 This represents a **three orders of magnitude improvement** for task startup time.
 
@@ -102,24 +105,28 @@ Eager execution provides the most benefit for:
 ### Python 3.12 eager_task_factory
 
 **Advantages:**
+
 - Native C implementation provides optimal performance
 - More consistent latency characteristics
 - Integrated with asyncio internals
 - Global application via `loop.set_task_factory()`
 
 **Limitations:**
+
 - Requires Python 3.12+
 - All-or-nothing approach (affects all tasks)
 
 ### asynkit eager_task_factory
 
 **Advantages:**
+
 - **Cross-version compatibility** (Python 3.10+)
 - **Selective application** possible
 - **TaskLikeFuture optimization** for synchronous completion
 - **Same API** as Python 3.12 for easy migration
 
 **Tradeoffs:**
+
 - Pure Python implementation overhead
 - Slightly higher latency variance
 - ~65% slower than native (but still 1,493x faster than standard)
@@ -127,12 +134,14 @@ Eager execution provides the most benefit for:
 ## Usage Recommendations
 
 ### Use Python 3.12 eager_task_factory When:
+
 - Running Python 3.12+ exclusively
 - Seeking maximum performance
 - Applying eager execution globally
 - Working with high-frequency task creation
 
 ### Use asynkit eager_task_factory When:
+
 - Supporting Python 3.10 or 3.11
 - Needing selective eager execution
 - Wanting TaskLikeFuture optimizations
@@ -141,6 +150,7 @@ Eager execution provides the most benefit for:
 ### Code Examples
 
 #### Python 3.12 Setup
+
 ```python
 import asyncio
 
@@ -153,6 +163,7 @@ task = asyncio.create_task(my_coroutine())
 ```
 
 #### asynkit Setup
+
 ```python
 import asyncio
 import asynkit
@@ -178,6 +189,7 @@ uv run python tests/misc/eager_task_factory_benchmark.py
 ```
 
 The benchmark includes:
+
 - Multiple factory comparisons
 - Statistical analysis (mean, median, std dev)
 - Throughput measurements
@@ -187,13 +199,13 @@ The benchmark includes:
 
 1. **Eager execution provides massive benefits** for task startup latency (1,000x+ improvement)
 
-2. **Both implementations are highly effective** at eliminating event loop scheduling delays
+1. **Both implementations are highly effective** at eliminating event loop scheduling delays
 
-3. **asynkit provides excellent cross-version compatibility** while maintaining competitive performance
+1. **asynkit provides excellent cross-version compatibility** while maintaining competitive performance
 
-4. **The choice depends on your constraints**: Use Python 3.12 native for maximum performance, or asynkit for broader compatibility and selective application
+1. **The choice depends on your constraints**: Use Python 3.12 native for maximum performance, or asynkit for broader compatibility and selective application
 
-5. **Real-world impact**: For applications creating many short-lived tasks, eager execution can significantly reduce overall latency and improve responsiveness
+1. **Real-world impact**: For applications creating many short-lived tasks, eager execution can significantly reduce overall latency and improve responsiveness
 
 ## Future Considerations
 
@@ -202,6 +214,6 @@ The benchmark includes:
 - Evaluate performance impacts in production workloads
 - Track improvements in asynkit's implementation efficiency
 
----
+______________________________________________________________________
 
 *Performance data collected October 2025 using Python 3.12.11 on Windows. Results may vary across platforms and Python versions.*
