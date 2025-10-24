@@ -479,40 +479,42 @@ def eager_ctx(
 
 class TaskLikeFuture(Future[T]):
     """A Future subclass that supports Task-like methods for asyncio compatibility.
-    
+
     This is used when eager execution completes synchronously but asyncio expects
     a Task-like object that supports set_name(), get_name(), etc.
     """
-    
+
     def __init__(self, future: Future[T] | None = None) -> None:
         super().__init__()
         self._name: str | None = None
         self._context: Context | None = None
-        
+
         # Copy state from existing future if provided
         if future is not None:
             if future.done():
                 if future.cancelled():
                     self.cancel()
                 elif future.exception() is not None:
-                    self.set_exception(future.exception())
+                    exc = future.exception()
+                    assert exc is not None  # type: ignore # we just checked it's not None
+                    self.set_exception(exc)
                 else:
                     self.set_result(future.result())
-    
+
     def set_name(self, value: str) -> None:
         """Set the task name (Task compatibility method)."""
         self._name = value
-    
+
     def get_name(self) -> str:
         """Get the task name (Task compatibility method)."""
         return self._name or f"TaskLikeFuture-{id(self)}"
-    
+
     def get_context(self) -> Context:
         """Get the task context (Task compatibility method)."""
         return self._context or Context()
-    
+
     def set_context(self, context: Context) -> None:
-        """Set the task context (Task compatibility method).""" 
+        """Set the task context (Task compatibility method)."""
         self._context = context
 
 
@@ -520,9 +522,66 @@ def create_eager_factory(
     inner_factory: Callable[..., Task[Any]] | None = None,
 ) -> Callable[..., Any]:
     """
-    Experimental. create a task factory that uses our 'eager' mechanism for all tasks
+    Create a task factory that applies eager execution to all coroutines.
+
+    This function creates a task factory that can be set on an event loop to make
+    all coroutines created via `asyncio.create_task()` execute eagerly. Eager
+    execution means the coroutine starts immediately and runs until it blocks,
+    potentially completing synchronously without creating a Task.
+
+    Args:
+        inner_factory: Optional task factory to delegate to when coroutines
+            actually need to be scheduled. If None, falls back to creating
+            asyncio.Task instances directly.
+
+    Returns:
+        A task factory function with signature (loop, coro, **kwargs) ->
+        Task | TaskLikeFuture. The returned factory can be passed to
+        `loop.set_task_factory()`.
+
+        - If the coroutine completes synchronously: returns TaskLikeFuture
+        - If the coroutine blocks: returns Task (via inner_factory or asyncio.Task)
+
+    Example:
+        ```python
+        import asyncio
+        import asynkit
+
+        # Option 1: Simple usage (replaces any existing factory)
+        factory = asynkit.create_eager_factory()
+        loop = asyncio.get_running_loop()
+        loop.set_task_factory(factory)
+
+        # Option 2: Preserve existing factory by chaining
+        old_factory = loop.get_task_factory()
+        factory = asynkit.create_eager_factory(old_factory)
+        loop.set_task_factory(factory)
+
+        # Now all tasks created will execute eagerly
+        async def sync_coro():
+            return "completed"  # No await - completes immediately
+
+        task = asyncio.create_task(sync_coro())
+        assert task.done()  # True - completed synchronously!
+        result = await task  # "completed"
+        ```
+
+    Notes:
+        - The factory may return TaskLikeFuture instead of Task for synchronous
+          coroutines. TaskLikeFuture provides Task-compatible methods like
+          set_name(), get_name(), etc. for full asyncio compatibility.
+        - All kwargs from asyncio.create_task() are properly forwarded to the
+          inner factory when delegation occurs.
+        - This is experimental functionality that modifies global task creation
+          behavior for the entire event loop.
+        - If you want to preserve an existing task factory, explicitly pass it
+          as inner_factory rather than relying on automatic detection.
+
+    See Also:
+        - `eager()`: Apply eager execution to individual coroutines
+        - `coro_eager()`: Lower-level eager execution function
+        - `TaskLikeFuture`: Future subclass with Task-like methods
     """
-    inner_factory = inner_factory or asyncio.get_running_loop().get_task_factory()
 
     def factory(
         loop: asyncio.AbstractEventLoop, coro: Coroutine[Any, Any, Any], **kwargs: Any
@@ -542,12 +601,12 @@ def create_eager_factory(
                 return asyncio.Task(coro, loop=loop, **kwargs)
 
         result = eager(coro, create_task=create_task)
-        
+
         # If eager returns a Future (sync completion), convert to TaskLikeFuture
         # so asyncio can call set_name() and other Task methods on it
         if isinstance(result, Future) and not isinstance(result, Task):
             return TaskLikeFuture(result)
-        
+
         return result
 
     return factory

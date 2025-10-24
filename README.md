@@ -130,8 +130,8 @@ with eager_ctx(my_method()) as v:
 `coro_eager()` is the magic coroutine wrapper providing the __eager__ behaviour:
 
 1. It copies the current _context_
-2. It initializes a `CoroStart()` object for the coroutine, starting it in the copied context.
-3. If it subsequently is `done()` It returns `CoroStart.as_future()`, otherwise
+1. It initializes a `CoroStart()` object for the coroutine, starting it in the copied context.
+1. If it subsequently is `done()` It returns `CoroStart.as_future()`, otherwise
    it creates and returns a `Task` (using `asyncio.create_task` by default.)
 
 The result is an _awaitable_ which can be either directly awaited or passed
@@ -917,9 +917,9 @@ Some features are currently available experimentally. They may work only on some
 
 **See [docs/task_interruption.md](docs/task_interruption.md) for detailed documentation.**
 
-> ⚠️ **Note:** Task interruption with `_PyTask` objects on Python 3.14.0 requires the `patch_pytask()` 
-> compatibility function due to separated C and Python asyncio implementations. This function is 
-> automatically called by `create_pytask()` to synchronize both implementations for proper 
+> ⚠️ **Note:** Task interruption with `_PyTask` objects on Python 3.14.0 requires the `patch_pytask()`
+> compatibility function due to separated C and Python asyncio implementations. This function is
+> automatically called by `create_pytask()` to synchronize both implementations for proper
 > `current_task()` behavior. C Tasks (from `asyncio.create_task()`) have limited interrupt support.
 
 Methods are provided to raise exceptions on a `Task`. This is somewhat similar to
@@ -945,25 +945,25 @@ Please note the following cases:
    Therefore, we provide a base class, `InterruptError`, deriving from `CancelledError` which
    should be used for interrupts in general.
 
-   However, `asyncio.Condition` in Python 3.12 and earlier has a buggy implementation that will not 
-   correctly pass on such subclasses during `wait()` in all cases. The finally block that re-acquires 
-   the lock only catches `CancelledError`, not its subclasses. This was fixed in Python 3.13+ with 
-   improved exception handling that properly catches `CancelledError` and subclasses 
+   However, `asyncio.Condition` in Python 3.12 and earlier has a buggy implementation that will not
+   correctly pass on such subclasses during `wait()` in all cases. The finally block that re-acquires
+   the lock only catches `CancelledError`, not its subclasses. This was fixed in Python 3.13+ with
+   improved exception handling that properly catches `CancelledError` and subclasses
    ([CPython PR #112201](https://github.com/python/cpython/pull/112201)).
-   
-   For compatibility with older Python versions, a safer `InterruptCondition` class is provided that 
-   handles `CancelledError` subclasses correctly. On Python 3.13+, `InterruptCondition` is simply 
+
+   For compatibility with older Python versions, a safer `InterruptCondition` class is provided that
+   handles `CancelledError` subclasses correctly. On Python 3.13+, `InterruptCondition` is simply
    an alias to the standard `asyncio.Condition` for optimal performance.
 
-2. Even subclasses of `CancelledError` will be converted to a new `CancelledError`
+1. Even subclasses of `CancelledError` will be converted to a new `CancelledError`
    instance when not handled in a task, and awaited.
 
-3. These functions currently are only work __reliably__ with `Task` object implemented in Python.
+1. These functions currently are only work __reliably__ with `Task` object implemented in Python.
    Modern implementation often have a native "C" implementation of `Task` objects and they contain inaccessible code which cannot be used by the library. In particular, the
    `Task.__step` method cannot be explicitly scheduled to the event loop. For that reason,
    a special `create_pytask()` helper is provided to create a suitable python `Task` instance.
 
-4. __However:__ This library does go through extra hoops to make it usable with C Tasks.
+1. __However:__ This library does go through extra hoops to make it usable with C Tasks.
    It almost works, but with two caveats:
 
    - CTasks which have plain `TaskStepMethWrapper` callbacks scheduled cannot be interrupted.
