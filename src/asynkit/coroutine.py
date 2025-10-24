@@ -567,6 +567,11 @@ def create_eager_factory(
         ```
 
     Notes:
+        - This is a different mechanism from Python 3.12's native eager execution
+          feature. Python 3.12 provides `eager_start=True` parameter for 
+          `asyncio.create_task()` and `asyncio.eager_task_factory()`. Our 
+          implementation works on all Python versions and provides additional 
+          features like TaskLikeFuture for synchronous completion.
         - The factory may return TaskLikeFuture instead of Task for synchronous
           coroutines. TaskLikeFuture provides Task-compatible methods like
           set_name(), get_name(), etc. for full asyncio compatibility.
