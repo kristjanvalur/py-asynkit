@@ -23,6 +23,7 @@ pip install asynkit
 ## Key Features
 
 - 🚀 **[Eager Execution](#eager)**: Start coroutines immediately, not when awaited
+- 🏭 **[Eager Task Factory](#eager_task_factory-and-create_eager_factory---global-eager-execution)**: Global eager execution for all tasks (Python 3.12 API, backward compatible)
 - ⚡ **[Advanced Scheduling](#scheduling-tools)**: Priority tasks, queue control, task switching
 - 🔧 **[Coroutine Control](#coroutine-tools)**: Low-level inspection and manipulation
 - 🔬 **[Experimental Features](#experimental-features)**: Task interruption, custom timeouts
@@ -139,6 +140,73 @@ to `asyncio.gather()`. The coroutine is executed in its own copy of the current 
 just as would happen if it were directly turned into a `Task`.
 
 `func_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
+
+### `eager_task_factory` and `create_eager_factory()` - Global Eager Execution
+
+For applications that want to apply eager execution globally (similar to Python 3.12's `asyncio.eager_task_factory`), asynkit provides task factory functions that make **all** tasks created with `asyncio.create_task()` execute eagerly. This implementation provides the same API as Python 3.12's native factory while being backward compatible with older Python versions.
+
+#### Using the Pre-created Factory
+
+```python
+import asyncio
+import asynkit
+
+# Set up eager execution for all tasks (Python 3.12 API, works with 3.10+)
+loop = asyncio.get_running_loop()
+loop.set_task_factory(asynkit.eager_task_factory)
+
+
+# Now all tasks execute eagerly
+async def my_coroutine():
+    return "immediate_result"
+
+
+task = asyncio.create_task(my_coroutine())
+# Task starts executing immediately, not when awaited
+```
+
+#### Creating Custom Factories
+
+```python
+import asynkit
+
+# Create a custom eager factory (preserving existing factory)
+loop = asyncio.get_running_loop()
+old_factory = loop.get_task_factory()
+eager_factory = asynkit.create_eager_factory(old_factory)
+loop.set_task_factory(eager_factory)
+```
+
+#### Python 3.12+ Compatibility
+
+asynkit also provides a `create_task()` function with the same `eager_start` parameter as Python 3.12+:
+
+```python
+# Works on all Python versions (3.10+)
+task = asynkit.create_task(my_coroutine(), eager_start=True)  # Eager
+task = asynkit.create_task(my_coroutine(), eager_start=False)  # Standard
+```
+
+#### Performance Benefits
+
+Eager task factories provide **massive performance improvements** for task startup latency:
+
+- **Standard asyncio**: ~2,300 microseconds to first execution
+- **Eager factories**: ~1-2 microseconds to first execution
+- **Improvement**: **1,000x+ faster** task startup
+
+See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance.md) for detailed performance analysis comparing asynkit's implementation with Python 3.12's native `eager_task_factory`.
+
+#### When to Use Task Factories vs. Decorators
+
+| Use Case | Recommendation |
+|----------|----------------|
+| **Global optimization** | `eager_task_factory` |
+| **Legacy code migration** | `eager_task_factory` |
+| **Selective optimization** | `@asynkit.eager` decorator |
+| **Fine-grained control** | `@asynkit.eager` decorator |
+| **Python 3.10/3.11 support** | Either (both work) |
+| **Python 3.12+ migration** | `eager_task_factory` (compatible API) |
 
 ### `await_sync(), aiter_sync()` - Running coroutines synchronously
 
@@ -917,9 +985,9 @@ Some features are currently available experimentally. They may work only on some
 
 **See [docs/task_interruption.md](docs/task_interruption.md) for detailed documentation.**
 
-> ⚠️ **Note:** Task interruption with `_PyTask` objects on Python 3.14.0 requires the `patch_pytask()` 
-> compatibility function due to separated C and Python asyncio implementations. This function is 
-> automatically called by `create_pytask()` to synchronize both implementations for proper 
+> ⚠️ **Note:** Task interruption with `_PyTask` objects on Python 3.14.0 requires the `patch_pytask()`
+> compatibility function due to separated C and Python asyncio implementations. This function is
+> automatically called by `create_pytask()` to synchronize both implementations for proper
 > `current_task()` behavior. C Tasks (from `asyncio.create_task()`) have limited interrupt support.
 
 Methods are provided to raise exceptions on a `Task`. This is somewhat similar to
@@ -945,14 +1013,14 @@ Please note the following cases:
    Therefore, we provide a base class, `InterruptError`, deriving from `CancelledError` which
    should be used for interrupts in general.
 
-   However, `asyncio.Condition` in Python 3.12 and earlier has a buggy implementation that will not 
-   correctly pass on such subclasses during `wait()` in all cases. The finally block that re-acquires 
-   the lock only catches `CancelledError`, not its subclasses. This was fixed in Python 3.13+ with 
-   improved exception handling that properly catches `CancelledError` and subclasses 
+   However, `asyncio.Condition` in Python 3.12 and earlier has a buggy implementation that will not
+   correctly pass on such subclasses during `wait()` in all cases. The finally block that re-acquires
+   the lock only catches `CancelledError`, not its subclasses. This was fixed in Python 3.13+ with
+   improved exception handling that properly catches `CancelledError` and subclasses
    ([CPython PR #112201](https://github.com/python/cpython/pull/112201)).
-   
-   For compatibility with older Python versions, a safer `InterruptCondition` class is provided that 
-   handles `CancelledError` subclasses correctly. On Python 3.13+, `InterruptCondition` is simply 
+
+   For compatibility with older Python versions, a safer `InterruptCondition` class is provided that
+   handles `CancelledError` subclasses correctly. On Python 3.13+, `InterruptCondition` is simply
    an alias to the standard `asyncio.Condition` for optimal performance.
 
 2. Even subclasses of `CancelledError` will be converted to a new `CancelledError`

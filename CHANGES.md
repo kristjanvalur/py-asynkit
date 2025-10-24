@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.0] - 2025
+
+### New Features
+
+- **Eager Task Factory**: Added comprehensive eager task factory implementation with Python 3.12 API compatibility
+  - `create_eager_factory()` function for creating custom eager task factories
+  - `eager_task_factory` module-level instance ready for immediate use
+  - Provides the same API as Python 3.12's native `asyncio.eager_task_factory` while supporting Python 3.10+
+  - Version-aware context parameter support (Python 3.11+ only)
+  - Enhanced `TaskLikeFuture` constructor accepting name and context parameters
+  - Performance improvements: 1,000x+ reduction in task startup latency
+  - Comprehensive documentation and performance analysis in `docs/eager_task_factory_performance.md`
+  - Usage: `loop.set_task_factory(asynkit.eager_task_factory)` enables global eager execution
+
+### Performance Improvements
+
+- **Massive task startup optimization**: Benchmarking shows dramatic latency improvements
+  - Python 3.12 eager_task_factory: 2,447x faster than standard asyncio (0.92 μs vs 2,263 μs)
+  - asynkit eager_task_factory: 1,493x faster than standard asyncio (1.52 μs vs 2,263 μs)
+
+### Bug Fixes
+
+- **Fixed mypy unused-ignore warnings**: Added `tests.test_anyio` to modules with disabled unused-ignore warnings
+  - Resolves version-specific import issues with `exceptiongroup` module across Python versions
+
 ## [0.13.1] - 2025
 
 ### Bug Fixes

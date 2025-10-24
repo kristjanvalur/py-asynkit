@@ -1,6 +1,6 @@
 [project]
 name = "asynkit"
-version = "0.13.1"
+version = "0.14.0"
 description = "A toolkit for Python coroutines"
 authors = [
     {name = "Kristján Valur Jónsson", email = "sweskman@gmail.com"}
@@ -143,6 +143,7 @@ module = [
     "asynkit.loop.eventloop",
     "asynkit.tools",
     "tests.test_coro",
+    "tests.test_anyio",
     "tests.conftest",
 ]
 warn_unused_ignores=false

@@ -528,7 +528,7 @@ class TestInterrupt:
 
     @pytest.mark.xfail(
         sys.version_info < (3, 13),
-        reason="regular condition can only deal with 'CancelledError' on Python < 3.13"
+        reason="regular condition can only deal with 'CancelledError' on Python < 3.13",
     )
     async def test_cancelled_condition_wait_acquire_regular(self, ctask):
         await self._cancelled_condition_wait_acquire(ctask, asyncio.Condition())

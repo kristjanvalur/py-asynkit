@@ -490,7 +490,7 @@ Key implementation aspects:
 
 - Uses `CoroStart` to manage partial coroutine execution
 - Returns different types based on completion state
-- Supports custom task factories via `task_factory` parameter
+- Supports custom task factories via `create_task` parameter
 
 ## Advanced: Context Preservation
 

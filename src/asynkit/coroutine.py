@@ -4,8 +4,9 @@ import asyncio
 import contextlib
 import functools
 import inspect
+import sys
 import types
-from asyncio import Future
+from asyncio import Future, Task
 from collections.abc import (
     AsyncGenerator,
     AsyncIterable,
@@ -27,7 +28,8 @@ from typing import (
 
 from typing_extensions import ParamSpec, Protocol
 
-from .tools import Cancellable, cancelling, create_task
+from .tools import Cancellable, cancelling
+from .tools import create_task as _create_task
 
 __all__ = [
     "CoroStart",
@@ -38,6 +40,10 @@ __all__ = [
     "func_eager",
     "eager",
     "eager_ctx",
+    "create_eager_factory",
+    "eager_task_factory",
+    "create_task",
+    "TaskLikeFuture",
     "coro_get_frame",
     "coro_is_new",
     "coro_is_suspended",
@@ -392,7 +398,8 @@ async def coro_await(
 def coro_eager(
     coro: Coroutine[Any, Any, T],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    context: Context | None = None,
 ) -> CAwaitable[T]:
     """
     Make the coroutine "eager":
@@ -404,19 +411,19 @@ def coro_eager(
     """
 
     # start the coroutine. Run it to the first block, exception or return value.
-    cs = CoroStart(coro, context=copy_context())
+    cs = CoroStart(coro, context=context if context is not None else copy_context())
     if cs.done():
         return cs.as_future()
 
-    if task_factory:
-        return task_factory(cs.as_coroutine())
-    return create_task(cs.as_coroutine(), name="eager_task")
+    if create_task:
+        return create_task(cs.as_coroutine())
+    return _create_task(cs.as_coroutine(), name="eager_task")
 
 
 def func_eager(
     func: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> Callable[P, CAwaitable[T]]:
     """
     Decorator to automatically apply the `coro_eager` to the
@@ -425,7 +432,7 @@ def func_eager(
 
     @functools.wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> CAwaitable[T]:
-        return coro_eager(func(*args, **kwargs), task_factory=task_factory)
+        return coro_eager(func(*args, **kwargs), create_task=create_task)
 
     return wrapper
 
@@ -434,7 +441,7 @@ def func_eager(
 def eager(
     arg: Coroutine[Any, Any, T],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> CAwaitable[T]: ...
 
 
@@ -442,14 +449,14 @@ def eager(
 def eager(
     arg: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> Callable[P, CAwaitable[T]]: ...
 
 
 def eager(
     arg: Coroutine[Any, Any, T] | Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> CAwaitable[T] | Callable[P, CAwaitable[T]]:
     """
     Convenience function invoking either `coro_eager` or `func_eager`
@@ -458,21 +465,303 @@ def eager(
     """
     if isinstance(arg, types.CoroutineType):
         # A coroutine
-        return coro_eager(arg, task_factory=task_factory)
+        return coro_eager(arg, create_task=create_task)
     if isinstance(arg, types.FunctionType):
-        return func_eager(arg, task_factory=task_factory)
+        return func_eager(arg, create_task=create_task)
     raise TypeError("need coroutine or function")
 
 
 def eager_ctx(
     coro: Coroutine[Any, Any, T],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
     msg: str | None = None,
 ) -> contextlib.AbstractContextManager[CAwaitable[T]]:
     """Create an eager task and return a context manager that will cancel it on exit."""
-    e = coro_eager(coro, task_factory=task_factory)
+    e = coro_eager(coro, create_task=create_task)
     return cancelling(e, msg=msg)
+
+
+class TaskLikeFuture(Future[T]):
+    """A Future subclass that supports Task-like methods for asyncio compatibility.
+
+    This is used when eager execution completes synchronously but asyncio expects
+    a Task-like object that supports set_name(), get_name(), etc.
+    """
+
+    def __init__(
+        self,
+        future: Future[T] | None = None,
+        *,
+        name: str | None = None,
+        context: Context | None = None,
+    ) -> None:
+        super().__init__()
+        self._name: str | None = name
+        self._context: Context | None = context
+
+        # Copy state from existing future if provided
+        if future is not None:
+            if future.done():
+                if future.cancelled():
+                    self.cancel()
+                elif future.exception() is not None:
+                    exc = future.exception()
+                    assert exc is not None  # we just checked it's not None
+                    self.set_exception(exc)
+                else:
+                    self.set_result(future.result())
+
+    def set_name(self, value: str) -> None:
+        """Set the task name (Task compatibility method)."""
+        self._name = value
+
+    def get_name(self) -> str:
+        """Get the task name (Task compatibility method)."""
+        return self._name or f"TaskLikeFuture-{id(self)}"
+
+    def get_context(self) -> Context:
+        """Get the task context (Task compatibility method)."""
+        return self._context or Context()
+
+    def set_context(self, context: Context) -> None:
+        """Set the task context (Task compatibility method)."""
+        self._context = context
+
+
+def create_eager_factory(
+    inner_factory: Callable[..., Task[Any]] | None = None,
+) -> Callable[..., Any]:
+    """
+    Create a task factory that applies eager execution to all coroutines.
+
+    This function creates a task factory that can be set on an event loop to make
+    all coroutines created via `asyncio.create_task()` execute eagerly. Eager
+    execution means the coroutine starts immediately and runs until it blocks,
+    potentially completing synchronously without creating a Task.
+
+    Args:
+        inner_factory: Optional task factory to delegate to when coroutines
+            actually need to be scheduled. If None, falls back to creating
+            asyncio.Task instances directly.
+
+    Returns:
+        A task factory function with signature (loop, coro, **kwargs) ->
+        Task | TaskLikeFuture. The returned factory can be passed to
+        `loop.set_task_factory()`.
+
+        - If the coroutine completes synchronously: returns TaskLikeFuture
+        - If the coroutine blocks: returns Task (via inner_factory or asyncio.Task)
+
+    Example:
+        ```python
+        import asyncio
+        import asynkit
+
+        # Option 1: Simple usage (replaces any existing factory)
+        factory = asynkit.create_eager_factory()
+        loop = asyncio.get_running_loop()
+        loop.set_task_factory(factory)
+
+        # Option 2: Preserve existing factory by chaining
+        old_factory = loop.get_task_factory()
+        factory = asynkit.create_eager_factory(old_factory)
+        loop.set_task_factory(factory)
+
+        # Now all tasks created will execute eagerly
+        async def sync_coro():
+            return "completed"  # No await - completes immediately
+
+        task = asyncio.create_task(sync_coro())
+        assert task.done()  # True - completed synchronously!
+        result = await task  # "completed"
+        ```
+
+    Notes:
+        - This is a different mechanism from Python 3.12's native eager execution
+          feature. Python 3.12 provides `eager_start=True` parameter for
+          `asyncio.create_task()` and `asyncio.eager_task_factory()`. Our
+          implementation works on all Python versions but may not always create
+          a real Task - synchronous coroutines get a TaskLikeFuture instead.
+        - All kwargs from asyncio.create_task() are properly forwarded to the
+          inner factory when delegation occurs.
+        - This is experimental functionality that modifies global task creation
+          behavior for the entire event loop.
+        - If you want to preserve an existing task factory, explicitly pass it
+          as inner_factory rather than relying on automatic detection.
+
+    See Also:
+        - `eager()`: Apply eager execution to individual coroutines
+        - `coro_eager()`: Lower-level eager execution function
+        - `TaskLikeFuture`: Future subclass with Task-like methods
+    """
+
+    def factory(
+        loop: asyncio.AbstractEventLoop, coro: Coroutine[Any, Any, Any], **kwargs: Any
+    ) -> Any:
+        # an actual task_factory, corresponding to the signature of
+        # AbstractEventLoop.set_task_factory()
+        # however, it will not always return a Task, it may return a future.
+        # we hope that the event loop that calls it won't mind.
+        # kwargs.pop("eager_start", None)  # incompatible with the standard eager.
+
+        # Extract context and name parameters for coro_eager and TaskLikeFuture
+        context = kwargs.get("context")
+        name = kwargs.get("name")
+
+        def create_task(coro: Coroutine[Any, Any, T]) -> CAwaitable[T]:
+            # when creating the task for the coro continuation, use the inner factory
+            # with the original kwargs from the task factory call
+            if inner_factory is not None:
+                return inner_factory(loop, coro, **kwargs)
+            else:
+                return asyncio.Task(coro, loop=loop, **kwargs)
+
+        # Use the refactored function that handles both eager execution and wrapping
+        return coro_eager_task_helper(
+            coro, construct_task=create_task, context=context, name=name
+        )
+
+    return factory
+
+
+#: Pre-created eager task factory instance for easy use.
+#:
+#: This is equivalent to ``create_eager_factory()`` and can be used directly
+#: with ``loop.set_task_factory()`` for the same behavior as Python 3.12's
+#: ``asyncio.eager_task_factory``.
+#:
+#: Example:
+#:     >>> import asyncio
+#:     >>> import asynkit
+#:     >>> loop = asyncio.get_running_loop()
+#:     >>> loop.set_task_factory(asynkit.eager_task_factory)
+eager_task_factory = create_eager_factory()
+
+
+def create_task(
+    coro: Coroutine[Any, Any, T],
+    *,
+    name: str | None = None,
+    context: Context | None = None,
+    eager_start: bool | None = None,
+    **kwargs: Any,
+) -> CAwaitable[T]:
+    """
+    Create a task with optional eager execution, compatible with Python 3.12+ API.
+
+    This function provides the same interface as Python 3.12's asyncio.create_task()
+    including the eager_start parameter, but works on all Python versions using
+    asynkit's eager execution implementation.
+
+    Args:
+        coro: The coroutine to wrap in a task
+        name: Optional name for the task
+        context: Optional context to run the coroutine in
+        eager_start: If True, apply eager execution. If False or None,
+            delegate to standard asyncio.create_task()
+        **kwargs: Additional arguments passed to asyncio.create_task()
+
+    Returns:
+        Task or TaskLikeFuture: Returns asynkit's eager implementation when
+        eager_start=True, otherwise returns standard asyncio.Task
+
+    Example:
+        ```python
+        import asynkit
+
+        # Use eager execution (asynkit implementation)
+        task = asynkit.create_task(my_coro(), eager_start=True)
+
+        # Use standard asyncio behavior
+        task = asynkit.create_task(my_coro(), eager_start=False)
+        task = asynkit.create_task(my_coro())  # same as eager_start=False
+        ```
+
+    Notes:
+        - When eager_start=True, may return TaskLikeFuture instead of Task for
+          synchronous completion, similar to create_eager_factory behavior
+        - Provides compatibility with Python 3.12+ asyncio.create_task() API
+        - Works on all Python versions, not just 3.12+
+    """
+    if eager_start:
+        # Use our enhanced eager implementation with Task compatibility
+        def continuation_factory(c: Coroutine[Any, Any, T]) -> CAwaitable[T]:
+            # Pass the context to the continuation task
+            try:
+                return _create_task(c, name=name, context=context, **kwargs)  # type: ignore[call-arg]
+            except TypeError:
+                # Fallback for Python < 3.11 which doesn't support context parameter
+                # Note: The coroutine is already running in the correct context from
+                # coro_eager_task_helper, so we don't need to pass context here
+                return _create_task(c, name=name, **kwargs)
+
+        # Use the refactored function that handles both eager execution and wrapping
+        return coro_eager_task_helper(
+            coro, construct_task=continuation_factory, context=context, name=name
+        )
+    else:
+        # Delegate to standard asyncio.create_task()
+        # Handle context parameter compatibility (added in Python 3.11)
+        try:
+            return _create_task(coro, name=name, context=context, **kwargs)  # type: ignore[call-arg]
+        except TypeError:
+            # Fallback for Python < 3.11 which doesn't support context parameter
+            if context is not None:
+                # For older Python versions, we can't pass context to create_task
+                # This is a limitation of the older asyncio API
+                pass
+            return _create_task(coro, name=name, **kwargs)
+
+
+def coro_eager_task_helper(
+    coro: Coroutine[Any, Any, T],
+    *,
+    construct_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]],
+    context: Context | None = None,
+    name: str | None = None,
+) -> CAwaitable[T]:
+    """
+    Internal helper for eager execution with Task compatibility and context handling.
+
+    This function combines eager execution with TaskLikeFuture wrapping for
+    synchronous completion, making it suitable for use in task factories and
+    create_task implementations.
+
+    Args:
+        coro: The coroutine to execute eagerly
+        construct_task: Factory for creating continuation tasks when coroutine blocks
+        context: Optional context to run the coroutine in
+        name: Optional name for the task (applied to TaskLikeFuture for sync completion)
+
+    Returns:
+        Task, TaskLikeFuture, or CAwaitable depending on execution path:
+        - Sync completion: TaskLikeFuture with Task-like methods
+        - Async completion: Result from construct_task (usually asyncio.Task)
+    """
+
+    # In Python < 3.11, context parameter doesn't exist for create_task()
+    # so we ignore any provided context and let CoroStart manage its own
+    if sys.version_info < (3, 11):
+        context = None
+
+    if context is not None:
+        # Enter the context only for the initial start, then use None for CoroStart
+        # This way the continuation won't try to re-enter the context
+        def start_in_context() -> CoroStart[T]:
+            return CoroStart(coro, context=None)
+
+        cs = context.run(start_in_context)
+    else:
+        # No explicit context - use copy_context() as before
+        cs = CoroStart(coro, context=copy_context())
+
+    if cs.done():
+        # Sync completion - wrap in TaskLikeFuture for Task compatibility
+        return TaskLikeFuture(cs.as_future(), name=name, context=context)
+
+    # Async completion - delegate to task construction factory
+    return construct_task(cs.as_coroutine())
 
 
 def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
