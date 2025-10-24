@@ -118,6 +118,7 @@ else:
 if sys.version_info >= (3, 13):
     InterruptCondition = asyncio.Condition
 else:
+
     class InterruptCondition(asyncio.Condition):
         """
         A class which fixes the lack of support in asyncio.Condition for arbitrary

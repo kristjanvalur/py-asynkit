@@ -477,6 +477,45 @@ def eager_ctx(
     return cancelling(e, msg=msg)
 
 
+class TaskLikeFuture(Future[T]):
+    """A Future subclass that supports Task-like methods for asyncio compatibility.
+    
+    This is used when eager execution completes synchronously but asyncio expects
+    a Task-like object that supports set_name(), get_name(), etc.
+    """
+    
+    def __init__(self, future: Future[T] | None = None) -> None:
+        super().__init__()
+        self._name: str | None = None
+        self._context: Context | None = None
+        
+        # Copy state from existing future if provided
+        if future is not None:
+            if future.done():
+                if future.cancelled():
+                    self.cancel()
+                elif future.exception() is not None:
+                    self.set_exception(future.exception())
+                else:
+                    self.set_result(future.result())
+    
+    def set_name(self, value: str) -> None:
+        """Set the task name (Task compatibility method)."""
+        self._name = value
+    
+    def get_name(self) -> str:
+        """Get the task name (Task compatibility method)."""
+        return self._name or f"TaskLikeFuture-{id(self)}"
+    
+    def get_context(self) -> Context:
+        """Get the task context (Task compatibility method)."""
+        return self._context or Context()
+    
+    def set_context(self, context: Context) -> None:
+        """Set the task context (Task compatibility method).""" 
+        self._context = context
+
+
 def create_eager_task_factory(
     inner_factory: Callable[..., Task[Any]] | None = None,
 ) -> Callable[..., Any]:
@@ -495,13 +534,21 @@ def create_eager_task_factory(
         # kwargs.pop("eager_start", None)  # incompatible with the standard eager.
 
         def create_task(coro: Coroutine[Any, Any, T]) -> CAwaitable[T]:
-            # when creating the task for the coro continuation, use the previous factory
+            # when creating the task for the coro continuation, use the inner factory
+            # with the original kwargs from the task factory call
             if inner_factory is not None:
                 return inner_factory(loop, coro, **kwargs)
             else:
                 return asyncio.Task(coro, loop=loop, **kwargs)
 
-        return eager(coro, create_task=create_task)
+        result = eager(coro, create_task=create_task)
+        
+        # If eager returns a Future (sync completion), convert to TaskLikeFuture
+        # so asyncio can call set_name() and other Task methods on it
+        if isinstance(result, Future) and not isinstance(result, Task):
+            return TaskLikeFuture(result)
+        
+        return result
 
     return factory
 
