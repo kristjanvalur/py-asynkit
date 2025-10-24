@@ -428,6 +428,42 @@ class TestEagerFactory:
         finally:
             loop.set_task_factory(old_factory)
 
+    async def test_eager_task_factory_instance(self):
+        """Test that the pre-created eager_task_factory instance works correctly."""
+
+        async def sync_coro():
+            return "immediate_result"
+
+        async def async_coro():
+            await asyncio.sleep(0)  # Force suspension
+            return "async_result"
+
+        loop = asyncio.get_running_loop()
+        old_factory = loop.get_task_factory()
+
+        try:
+            # Set the pre-created eager_task_factory instance
+            loop.set_task_factory(asynkit.eager_task_factory)
+
+            # Test sync coroutine - should complete immediately
+            sync_task = asyncio.create_task(sync_coro())
+            assert sync_task.done(), "Sync coroutine should complete immediately"
+            assert isinstance(sync_task, asynkit.TaskLikeFuture)
+            sync_result = await sync_task
+            assert sync_result == "immediate_result"
+
+            # Test async coroutine - should create real Task
+            async_task = asyncio.create_task(async_coro())
+            assert not async_task.done(), (
+                "Async coroutine should not complete immediately"
+            )
+            assert isinstance(async_task, asyncio.Task)
+            async_result = await async_task
+            assert async_result == "async_result"
+
+        finally:
+            loop.set_task_factory(old_factory)
+
 
 class TestCreateTask:
     """Test the create_task function with eager_start parameter."""

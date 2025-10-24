@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import functools
 import inspect
+import sys
 import types
 from asyncio import Future, Task
 from collections.abc import (
@@ -40,6 +41,7 @@ __all__ = [
     "eager",
     "eager_ctx",
     "create_eager_factory",
+    "eager_task_factory",
     "create_task",
     "TaskLikeFuture",
     "coro_get_frame",
@@ -623,6 +625,20 @@ def create_eager_factory(
     return factory
 
 
+#: Pre-created eager task factory instance for easy use.
+#:
+#: This is equivalent to ``create_eager_factory()`` and can be used directly
+#: with ``loop.set_task_factory()`` for the same behavior as Python 3.12's
+#: ``asyncio.eager_task_factory``.
+#:
+#: Example:
+#:     >>> import asyncio
+#:     >>> import asynkit
+#:     >>> loop = asyncio.get_running_loop()
+#:     >>> loop.set_task_factory(asynkit.eager_task_factory)
+eager_task_factory = create_eager_factory()
+
+
 def create_task(
     coro: Coroutine[Any, Any, T],
     *,
@@ -723,7 +739,6 @@ def coro_eager_task_helper(
         - Sync completion: TaskLikeFuture with Task-like methods
         - Async completion: Result from construct_task (usually asyncio.Task)
     """
-    import sys
 
     # In Python < 3.11, context parameter doesn't exist for create_task()
     # so we ignore any provided context and let CoroStart manage its own
