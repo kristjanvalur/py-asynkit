@@ -112,7 +112,7 @@ class TestEager:
 
         m = Mock()
         m.side_effect = factory
-        future = asynkit.coro_eager(coro(log), task_factory=m)
+        future = asynkit.coro_eager(coro(log), create_task=m)
         if block:
             m.assert_called_once()
         log.append("a")

@@ -27,7 +27,8 @@ from typing import (
 
 from typing_extensions import ParamSpec, Protocol
 
-from .tools import Cancellable, cancelling, create_task
+from .tools import Cancellable, cancelling
+from .tools import create_task as _create_task
 
 __all__ = [
     "CoroStart",
@@ -392,7 +393,7 @@ async def coro_await(
 def coro_eager(
     coro: Coroutine[Any, Any, T],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> CAwaitable[T]:
     """
     Make the coroutine "eager":
@@ -408,15 +409,15 @@ def coro_eager(
     if cs.done():
         return cs.as_future()
 
-    if task_factory:
-        return task_factory(cs.as_coroutine())
-    return create_task(cs.as_coroutine(), name="eager_task")
+    if create_task:
+        return create_task(cs.as_coroutine())
+    return _create_task(cs.as_coroutine(), name="eager_task")
 
 
 def func_eager(
     func: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> Callable[P, CAwaitable[T]]:
     """
     Decorator to automatically apply the `coro_eager` to the
@@ -425,7 +426,7 @@ def func_eager(
 
     @functools.wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> CAwaitable[T]:
-        return coro_eager(func(*args, **kwargs), task_factory=task_factory)
+        return coro_eager(func(*args, **kwargs), create_task=create_task)
 
     return wrapper
 
@@ -434,7 +435,7 @@ def func_eager(
 def eager(
     arg: Coroutine[Any, Any, T],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> CAwaitable[T]: ...
 
 
@@ -442,14 +443,14 @@ def eager(
 def eager(
     arg: Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> Callable[P, CAwaitable[T]]: ...
 
 
 def eager(
     arg: Coroutine[Any, Any, T] | Callable[P, Coroutine[Any, Any, T]],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
 ) -> CAwaitable[T] | Callable[P, CAwaitable[T]]:
     """
     Convenience function invoking either `coro_eager` or `func_eager`
@@ -458,20 +459,20 @@ def eager(
     """
     if isinstance(arg, types.CoroutineType):
         # A coroutine
-        return coro_eager(arg, task_factory=task_factory)
+        return coro_eager(arg, create_task=create_task)
     if isinstance(arg, types.FunctionType):
-        return func_eager(arg, task_factory=task_factory)
+        return func_eager(arg, create_task=create_task)
     raise TypeError("need coroutine or function")
 
 
 def eager_ctx(
     coro: Coroutine[Any, Any, T],
     *,
-    task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
+    create_task: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]] | None = None,
     msg: str | None = None,
 ) -> contextlib.AbstractContextManager[CAwaitable[T]]:
     """Create an eager task and return a context manager that will cancel it on exit."""
-    e = coro_eager(coro, task_factory=task_factory)
+    e = coro_eager(coro, create_task=create_task)
     return cancelling(e, msg=msg)
 
 
