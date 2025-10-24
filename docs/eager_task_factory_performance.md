@@ -24,7 +24,7 @@ While Python's native implementation has a performance edge, asynkit's implement
 The benchmark measures two key metrics:
 
 1. **Latency to First Yield**: Time from `create_task()` call until the coroutine reaches its first `await` point
-1. **Throughput**: Operations per second for tasks that repeatedly call `asyncio.sleep(0)`
+2. **Throughput**: Operations per second for tasks that repeatedly call `asyncio.sleep(0)`
 
 #### Latency Test Coroutine
 
@@ -199,13 +199,13 @@ The benchmark includes:
 
 1. **Eager execution provides massive benefits** for task startup latency (1,000x+ improvement)
 
-1. **Both implementations are highly effective** at eliminating event loop scheduling delays
+2. **Both implementations are highly effective** at eliminating event loop scheduling delays
 
-1. **asynkit provides excellent cross-version compatibility** while maintaining competitive performance
+3. **asynkit provides excellent cross-version compatibility** while maintaining competitive performance
 
-1. **The choice depends on your constraints**: Use Python 3.12 native for maximum performance, or asynkit for broader compatibility and selective application
+4. **The choice depends on your constraints**: Use Python 3.12 native for maximum performance, or asynkit for broader compatibility and selective application
 
-1. **Real-world impact**: For applications creating many short-lived tasks, eager execution can significantly reduce overall latency and improve responsiveness
+5. **Real-world impact**: For applications creating many short-lived tasks, eager execution can significantly reduce overall latency and improve responsiveness
 
 ## Future Considerations
 
