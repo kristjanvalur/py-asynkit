@@ -274,7 +274,7 @@ def enable_eager_tasks() -> None:
         def enhanced_create_task(*args: Any, **kwargs: Any) -> asyncio.Task[Any]:
             eager_start = kwargs.pop("eager_start", None)
 
-            if eager_start is True:
+            if eager_start:
                 # Use native eager_task_factory temporarily
                 loop = asyncio.get_running_loop()
                 old_factory = loop.get_task_factory()
@@ -283,13 +283,9 @@ def enable_eager_tasks() -> None:
                     return _original_create_task(*args, **kwargs)
                 finally:
                     loop.set_task_factory(old_factory)
-            elif eager_start is False or eager_start is None:
-                # Standard behavior
-                return _original_create_task(*args, **kwargs)
             else:
-                raise ValueError(
-                    f"eager_start must be True, False, or None, got {eager_start!r}"
-                )
+                # Standard behavior (eager_start is falsy or None)
+                return _original_create_task(*args, **kwargs)
 
         # Apply the enhanced create_task
         asyncio.create_task = enhanced_create_task
