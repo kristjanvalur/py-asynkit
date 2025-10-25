@@ -158,34 +158,34 @@ class TestEagerTasksCompat:
         assert result3 == "result"
 
     async def test_eager_start_invalid_value(self):
-        """Test that invalid eager_start values are handled appropriately."""
+        """Test eager_start values work like native Python (truthiness)."""
         asynkit.compat.enable_eager_tasks()
 
         async def test_coro():
             return "result"
 
-        # Test invalid values - behavior depends on Python version
-        if sys.version_info >= (3, 14):
-            # Native implementation might handle invalid values differently
-            # Just test that it doesn't crash completely
-            try:
-                task = asyncio.create_task(test_coro(), eager_start="invalid")
-                # If it doesn't raise, that's fine for native implementation
-                task.cancel()
-            except (ValueError, TypeError):
-                # Either is acceptable
-                pass
-        else:
-            # Our implementation should validate
-            with pytest.raises(
-                ValueError, match="eager_start must be True, False, or None"
-            ):
-                asyncio.create_task(test_coro(), eager_start="invalid")
-
-            with pytest.raises(
-                ValueError, match="eager_start must be True, False, or None"
-            ):
-                asyncio.create_task(test_coro(), eager_start=1)
+        # Test various values - should all work based on truthiness
+        # This matches native Python 3.14 behavior
+        
+        # String "invalid" is truthy, should work like eager_start=True
+        task1 = asyncio.create_task(test_coro(), eager_start="invalid")
+        result1 = await task1
+        assert result1 == "result"
+        
+        # Integer 1 is truthy, should work like eager_start=True
+        task2 = asyncio.create_task(test_coro(), eager_start=1)
+        result2 = await task2
+        assert result2 == "result"
+        
+        # Integer 0 is falsy, should work like eager_start=False
+        task3 = asyncio.create_task(test_coro(), eager_start=0)
+        result3 = await task3
+        assert result3 == "result"
+        
+        # Empty string is falsy, should work like eager_start=False
+        task4 = asyncio.create_task(test_coro(), eager_start="")
+        result4 = await task4
+        assert result4 == "result"
 
     def test_detection_functions(self):
         """Test the detection utility functions."""
