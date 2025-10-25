@@ -229,7 +229,7 @@ loop = asyncio.get_running_loop()
 loop.set_task_factory(asyncio.eager_task_factory)  # Global eager execution
 
 # 2. asyncio.create_task() supports eager_start parameter everywhere
-task = asyncio.create_task(my_coroutine(), eager_start=True)   # Eager execution
+task = asyncio.create_task(my_coroutine(), eager_start=True)  # Eager execution
 task = asyncio.create_task(my_coroutine(), eager_start=False)  # Standard behavior
 ```
 
@@ -257,24 +257,27 @@ The `enable_eager_tasks()` function automatically detects your Python version an
 import asyncio
 import asynkit.compat
 
+
 def setup_eager_execution():
     """Set up eager execution using the best available method."""
     asynkit.compat.enable_eager_tasks()
-    
+
     # Global eager execution
-    loop = asyncio.get_running_loop() 
+    loop = asyncio.get_running_loop()
     loop.set_task_factory(asyncio.eager_task_factory)
+
 
 async def main():
     setup_eager_execution()
-    
+
     # Per-task control works everywhere
     eager_task = asyncio.create_task(fetch_data(), eager_start=True)
     standard_task = asyncio.create_task(fetch_data(), eager_start=False)
-    
+
     # Both APIs provide identical behavior across Python versions
     results = await asyncio.gather(eager_task, standard_task)
     return results
+
 
 # Works on any Python 3.10+ installation
 asyncio.run(main())

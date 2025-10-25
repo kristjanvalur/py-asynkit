@@ -8,7 +8,6 @@ import pytest
 
 import asynkit.compat
 
-
 pytestmark = pytest.mark.anyio
 
 
@@ -261,14 +260,16 @@ class TestEagerTasksCompat:
 
 
 @pytest.mark.parametrize(
-    "python_version,expected_eager_start,expected_factory", [
+    "python_version,expected_eager_start,expected_factory",
+    [
         ((3, 10), False, False),  # Python 3.10
-        ((3, 11), False, False),  # Python 3.11  
-        ((3, 12), False, True),   # Python 3.12
-        ((3, 13), False, True),   # Python 3.13
-        ((3, 14), True, True),    # Python 3.14
-        ((3, 15), True, True),    # Python 3.15 (future)
-    ])
+        ((3, 11), False, False),  # Python 3.11
+        ((3, 12), False, True),  # Python 3.12
+        ((3, 13), False, True),  # Python 3.13
+        ((3, 14), True, True),  # Python 3.14
+        ((3, 15), True, True),  # Python 3.15 (future)
+    ],
+)
 def test_version_specific_behavior(
     python_version, expected_eager_start, expected_factory
 ):
@@ -277,7 +278,7 @@ def test_version_specific_behavior(
         # Test detection functions
         eager_start_detected = asynkit.compat._detect_eager_start_support()
         factory_detected = asynkit.compat._detect_native_eager_task_factory()
-        
+
         assert eager_start_detected == expected_eager_start
         assert factory_detected == expected_factory
 

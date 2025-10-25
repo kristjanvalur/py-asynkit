@@ -198,7 +198,7 @@ _original_create_task = None
 def _detect_eager_start_support() -> bool:
     """Detect if native eager_start parameter is available in asyncio.create_task()."""
     import sys
-    
+
     # eager_start parameter was added in Python 3.14
     return sys.version_info >= (3, 14)
 
@@ -206,79 +206,79 @@ def _detect_eager_start_support() -> bool:
 def _detect_native_eager_task_factory() -> bool:
     """Detect if native asyncio.eager_task_factory is available."""
     import sys
-    
+
     # eager_task_factory was added in Python 3.12
     return sys.version_info >= (3, 12)
 
 
 def enable_eager_tasks() -> None:
     """Enable comprehensive eager task execution across all Python versions.
-    
+
     This function provides seamless cross-version compatibility by:
-    
+
     1. **Python < 3.12**: Makes `asyncio.eager_task_factory` available using
        asynkit's implementation
     2. **All versions**: Enhances `asyncio.create_task()` with `eager_start`
        parameter support
     3. **Python 3.12+**: Uses native `eager_task_factory` when available for
        optimal performance
-    
+
     After calling this function:
-    
+
     ```python
     import asyncio
     import asynkit.compat
-    
+
     asynkit.compat.enable_eager_tasks()
-    
+
     # Now available on all Python versions:
     loop = asyncio.get_running_loop()
     loop.set_task_factory(asyncio.eager_task_factory)  # Global eager execution
-    
+
     task = asyncio.create_task(my_coro(), eager_start=True)   # Per-task eager
     task = asyncio.create_task(my_coro(), eager_start=False)  # Standard behavior
     ```
-    
+
     The implementation automatically chooses the best strategy:
     - Python < 3.12: Uses asynkit's eager implementation
     - Python 3.12+ with native support: Uses Python's native eager features
     - Python 3.12+ without native eager_start: Temporarily swaps task factory
-    
+
     Can be called multiple times safely - subsequent calls are no-ops.
     """
     global _eager_tasks_enabled, _original_create_task
-    
+
     if _eager_tasks_enabled:
         return  # Already enabled, nothing to do
-    
+
     # Import asynkit's eager implementation
     from . import coroutine as _coroutine
-    
+
     # 1. Make asyncio.eager_task_factory available on Python < 3.12
     if not _detect_native_eager_task_factory():
-        asyncio.eager_task_factory = _coroutine.eager_task_factory
-    
+        asyncio.eager_task_factory = _coroutine.eager_task_factory  # type: ignore[attr-defined]
+
     # 2. Enhanced asyncio.create_task() with eager_start parameter
     _original_create_task = asyncio.create_task
-    
+
     # Detect capabilities
     has_native_eager_start = _detect_eager_start_support()
     has_native_eager_factory = _detect_native_eager_task_factory()
-    
+
     if has_native_eager_start:
         # Python 3.12+ with native eager_start support - leave it as-is
         pass  # No wrapping needed, native implementation already supports eager_start
-    
+
     elif has_native_eager_factory:
         # Python 3.12+ without eager_start - use temporary factory swapping
-        def enhanced_create_task(*args, **kwargs):
+        def enhanced_create_task(*args: Any, **kwargs: Any) -> asyncio.Task[Any]:
             eager_start = kwargs.pop("eager_start", None)
-            
+
             if eager_start is True:
                 # Use native eager_task_factory temporarily
                 loop = asyncio.get_running_loop()
                 old_factory = loop.get_task_factory()
-                loop.set_task_factory(asyncio.eager_task_factory)
+                loop.set_task_factory(asyncio.eager_task_factory)  # type: ignore[attr-defined]
                 try:
                     return _original_create_task(*args, **kwargs)
                 finally:
@@ -290,31 +290,31 @@ def enable_eager_tasks() -> None:
                 raise ValueError(
                     f"eager_start must be True, False, or None, got {eager_start!r}"
                 )
-        
+
         # Apply the enhanced create_task
         asyncio.create_task = enhanced_create_task
-    
+
     else:
         # Python < 3.12 - use our existing asynkit.coroutine.create_task implementation
         # It already supports eager_start parameter
-        asyncio.create_task = _coroutine.create_task
+        asyncio.create_task = _coroutine.create_task  # type: ignore[assignment]
     _eager_tasks_enabled = True
 
 
 def disable_eager_tasks() -> None:
     """Disable eager task execution monkeypatching and restore original behavior.
-    
+
     Restores `asyncio.create_task()` to its original implementation and removes
     any added `asyncio.eager_task_factory` attribute if it was added by asynkit.
-    
+
     This is primarily useful for testing or when you need to temporarily disable
     the monkeypatching.
     """
     global _eager_tasks_enabled, _original_create_task
-    
+
     if not _eager_tasks_enabled:
         return  # Not enabled, nothing to do
-    
+
     # Restore original create_task only if we wrapped it
     if (
         _original_create_task is not None
@@ -322,10 +322,10 @@ def disable_eager_tasks() -> None:
     ):
         asyncio.create_task = _original_create_task
         _original_create_task = None
-    
+
     # Remove asyncio.eager_task_factory if we added it
     if not _detect_native_eager_task_factory():
         if hasattr(asyncio, "eager_task_factory"):
             delattr(asyncio, "eager_task_factory")
-    
+
     _eager_tasks_enabled = False
