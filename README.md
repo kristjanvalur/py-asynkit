@@ -24,6 +24,7 @@ pip install asynkit
 
 - 🚀 **[Eager Execution](#eager)**: Start coroutines immediately, not when awaited
 - 🏭 **[Eager Task Factory](#eager_task_factory-and-create_eager_factory---global-eager-execution)**: Global eager execution for all tasks (Python 3.12 API, backward compatible)
+- 🔧 **[Cross-Version Compatibility](#cross-version-compatibility)**: Seamless eager execution across all Python versions with automatic monkeypatching
 - ⚡ **[Advanced Scheduling](#scheduling-tools)**: Priority tasks, queue control, task switching
 - 🔧 **[Coroutine Control](#coroutine-tools)**: Low-level inspection and manipulation
 - 🔬 **[Experimental Features](#experimental-features)**: Task interruption, custom timeouts
@@ -207,6 +208,79 @@ See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance
 | **Fine-grained control** | `@asynkit.eager` decorator |
 | **Python 3.10/3.11 support** | Either (both work) |
 | **Python 3.12+ migration** | `eager_task_factory` (compatible API) |
+
+## Cross-Version Compatibility
+
+### Automatic Eager Execution Monkeypatching
+
+For the **ultimate in cross-version compatibility**, asynkit provides automatic monkeypatching that enables modern eager execution APIs on all Python versions:
+
+```python
+import asyncio
+import asynkit.compat
+
+# Enable comprehensive eager task execution across all Python versions
+asynkit.compat.enable_eager_tasks()
+
+# Now these APIs work identically on Python 3.10-3.14+:
+
+# 1. asyncio.eager_task_factory is available everywhere
+loop = asyncio.get_running_loop()
+loop.set_task_factory(asyncio.eager_task_factory)  # Global eager execution
+
+# 2. asyncio.create_task() supports eager_start parameter everywhere
+task = asyncio.create_task(my_coroutine(), eager_start=True)   # Eager execution
+task = asyncio.create_task(my_coroutine(), eager_start=False)  # Standard behavior
+```
+
+#### How It Works
+
+The `enable_eager_tasks()` function automatically detects your Python version and applies the optimal implementation:
+
+| Python Version | Implementation Strategy |
+|----------------|------------------------|
+| **Python < 3.12** | Adds `asyncio.eager_task_factory` using asynkit's implementation, enhances `create_task()` with `eager_start` parameter |
+| **Python 3.12+ with native `eager_start`** | Uses native Python implementations directly (no monkeypatching needed) |
+| **Python 3.12+ without native `eager_start`** | Uses native `eager_task_factory` with temporary factory swapping for `eager_start=True` |
+
+#### Benefits
+
+- **🔄 Drop-in Compatibility**: Identical APIs across all Python versions
+- **⚡ Optimal Performance**: Automatically uses the fastest available implementation
+- **🛡️ Future-Proof**: Gracefully adapts to new Python versions
+- **🧹 Clean Restoration**: `disable_eager_tasks()` restores original behavior
+
+#### Example: Cross-Version Migration
+
+```python
+# This code works identically on Python 3.10, 3.11, 3.12, and beyond!
+import asyncio
+import asynkit.compat
+
+def setup_eager_execution():
+    """Set up eager execution using the best available method."""
+    asynkit.compat.enable_eager_tasks()
+    
+    # Global eager execution
+    loop = asyncio.get_running_loop() 
+    loop.set_task_factory(asyncio.eager_task_factory)
+
+async def main():
+    setup_eager_execution()
+    
+    # Per-task control works everywhere
+    eager_task = asyncio.create_task(fetch_data(), eager_start=True)
+    standard_task = asyncio.create_task(fetch_data(), eager_start=False)
+    
+    # Both APIs provide identical behavior across Python versions
+    results = await asyncio.gather(eager_task, standard_task)
+    return results
+
+# Works on any Python 3.10+ installation
+asyncio.run(main())
+```
+
+This makes asynkit the **definitive solution for eager task execution** across the entire Python ecosystem, providing a smooth migration path from legacy Python versions to the latest releases.
 
 ### `await_sync(), aiter_sync()` - Running coroutines synchronously
 
