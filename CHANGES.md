@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.1] - 2025-10-25
+
+### New Features
+
+- **Cross-Version Eager Task Compatibility**: Added comprehensive monkeypatching support for eager task execution across Python 3.10-3.14+
+  - `asynkit.compat.enable_eager_tasks()` function provides seamless `asyncio.create_task(eager_start=True)` support on all Python versions
+  - `asynkit.compat.disable_eager_tasks()` function for clean restoration of original asyncio behavior
+  - Version-aware strategy selection automatically chooses optimal implementation:
+    - Python 3.10-3.11: Direct delegation to `asynkit.coroutine.create_task`
+    - Python 3.12-3.13: Temporary factory swapping with native `eager_task_factory`
+    - Python 3.14+: No wrapping needed (native `eager_start` support detected)
+  - Makes `asyncio.eager_task_factory` available across all Python versions
+  - Future-proof design automatically adapts to new Python releases
+  - Comprehensive test suite with 17 tests covering all scenarios and edge cases
+
+### Compatibility Improvements
+
+- **Python 3.14 Support**: First library to detect and leverage Python 3.14's native `eager_start` parameter support
+  - Confirmed `eager_start` parameter availability in Python 3.14.0rc2
+  - Automatic detection avoids unnecessary wrapping when native support exists
+  - Version-based detection using `sys.version_info` for optimal performance
+  - Maintains backward compatibility while preparing for future Python versions
+
+### Documentation
+
+- **Cross-Version Compatibility Guide**: Added comprehensive documentation in README.md
+  - Usage examples and migration scenarios
+  - Implementation strategy table showing approach per Python version
+  - Benefits and performance considerations
+  - Complete API reference for new compatibility functions
+
 ## [0.14.0] - 2025
 
 ### New Features
