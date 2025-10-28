@@ -19,11 +19,18 @@ typedef struct {
     PyObject *wrapped_iter;  /* The wrapped coroutine iterator (lazy-initialized) */
 } CoroStartWrapperObject;
 
+/* Forward declaration of wrapper methods */
+static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg);
+
 /* CoroStart object structure */
 typedef struct {
     PyObject_HEAD
-    PyObject *wrapped_coro;  /* The wrapped coroutine */
-    PyObject *context;       /* Context for execution (can be NULL) */
+    PyObject *wrapped_coro;
+    PyObject *context;
+    PyObject *s_value;        // completed value (if not exception)
+    PyObject *s_exc_type;     // exception type (if completed with exception)
+    PyObject *s_exc_value;    // exception value
+    PyObject *s_exc_traceback; // exception traceback
 } CoroStartObject;
 
 /* Helper function to get or create the wrapped iterator */
@@ -57,6 +64,35 @@ corostart_wrapper_get_iterator(CoroStartWrapperObject *self)
     self->wrapped_iter = coro_iter;  /* Transfer ownership */
     
     return coro_iter;
+}
+
+/* CoroStart _start method - simplified eager execution logic */
+static int
+corostart_start(CoroStartObject *self)
+{
+    if (self->wrapped_coro == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
+        return -1;
+    }
+    
+    /* Initialize all start result fields to NULL */
+    self->s_value = NULL;
+    self->s_exc_type = NULL;
+    self->s_exc_value = NULL;
+    self->s_exc_traceback = NULL;
+    
+    /* Try to send None to start the coroutine (ignoring context for now) */
+    PyObject *send_result = PyObject_CallMethod(self->wrapped_coro, "send", "O", Py_None);
+    
+    if (send_result != NULL) {
+        /* Coroutine yielded a value - it's suspended */
+        self->s_value = send_result;  /* Transfer ownership */
+        return 0;  /* Success */
+    } else {
+        /* Exception occurred - fetch and store it */
+        PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
+        return 0;  /* Success (we handled the exception) */
+    }
 }
 
 /* CoroStartWrapper deallocation */
@@ -95,29 +131,58 @@ corostart_wrapper_iter(CoroStartWrapperObject *self)
     return (PyObject *)self;
 }
 
-/* CoroStartWrapper __next__ method - required for iterator protocol */
+/* CoroStartWrapper __next__ method - alias for send(None) */
 static PyObject *
 corostart_wrapper_iternext(CoroStartWrapperObject *self)
 {
-    PyObject *wrapped_iter = corostart_wrapper_get_iterator(self);
-    if (wrapped_iter == NULL) {
-        return NULL;
-    }
-    
-    /* Call __next__ on the wrapped iterator using PyObject_CallMethod */
-    return PyObject_CallMethod(wrapped_iter, "__next__", NULL);
+    /* __next__ is equivalent to send(None) */
+    return corostart_wrapper_send(self, Py_None);
 }
 
-/* CoroStartWrapper send method - required for coroutine protocol */
+/* CoroStartWrapper send method - simplified to handle start state */
 static PyObject *
 corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
 {
+    if (self->corostart == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "CoroStart object is NULL");
+        return NULL;
+    }
+    
+    CoroStartObject *corostart = (CoroStartObject *)self->corostart;
+    
+    /* Check if we have start results (first call) */
+    if (corostart->s_value != NULL || corostart->s_exc_type != NULL) {
+        /* This is the first send call - process the eager execution result */
+        
+        if (corostart->s_exc_type != NULL) {
+            /* Exception occurred during start - re-raise it */
+            PyErr_Restore(corostart->s_exc_type, corostart->s_exc_value, corostart->s_exc_traceback);
+            /* Clear the fields (PyErr_Restore steals references) */
+            corostart->s_exc_type = NULL;
+            corostart->s_exc_value = NULL;
+            corostart->s_exc_traceback = NULL;
+            return NULL;
+        }
+        
+        if (corostart->s_value != NULL) {
+            /* Coroutine yielded a value - return it */
+            PyObject *result = corostart->s_value;
+            corostart->s_value = NULL;  /* Clear and transfer ownership */
+            return result;
+        }
+        
+        /* This shouldn't happen */
+        PyErr_SetString(PyExc_RuntimeError, "Invalid start state");
+        return NULL;
+    }
+    
+    /* No start results - coroutine was already started, delegate to wrapped iterator */
     PyObject *wrapped_iter = corostart_wrapper_get_iterator(self);
     if (wrapped_iter == NULL) {
         return NULL;
     }
     
-    /* Call send() on the wrapped iterator using PyObject_CallMethod */
+    /* Call send() on the wrapped iterator */
     return PyObject_CallMethod(wrapped_iter, "send", "O", arg);
 }
 
@@ -180,6 +245,10 @@ corostart_dealloc(CoroStartObject *self)
     PyObject_GC_UnTrack(self);
     Py_XDECREF(self->wrapped_coro);
     Py_XDECREF(self->context);
+    Py_XDECREF(self->s_value);
+    Py_XDECREF(self->s_exc_type);
+    Py_XDECREF(self->s_exc_value);
+    Py_XDECREF(self->s_exc_traceback);
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -189,6 +258,10 @@ corostart_traverse(CoroStartObject *self, visitproc visit, void *arg)
 {
     Py_VISIT(self->wrapped_coro);
     Py_VISIT(self->context);
+    Py_VISIT(self->s_value);
+    Py_VISIT(self->s_exc_type);
+    Py_VISIT(self->s_exc_value);
+    Py_VISIT(self->s_exc_traceback);
     return 0;
 }
 
@@ -198,6 +271,10 @@ corostart_clear(CoroStartObject *self)
 {
     Py_CLEAR(self->wrapped_coro);
     Py_CLEAR(self->context);
+    Py_CLEAR(self->s_value);
+    Py_CLEAR(self->s_exc_type);
+    Py_CLEAR(self->s_exc_value);
+    Py_CLEAR(self->s_exc_traceback);
     return 0;
 }
 
@@ -230,7 +307,59 @@ static PyAsyncMethods corostart_as_async = {
 };
 
 /* CoroStart methods */
+/* CoroStart methods */
+static PyObject *
+corostart_done(CoroStartObject *self, PyObject *args) {
+    // Return True if we have completed (indicated by having an exception)
+    // Either StopIteration (normal completion) or any other exception (error)
+    if (self->s_exc_type != NULL) {
+        Py_RETURN_TRUE;
+    }
+    Py_RETURN_FALSE;
+}
+
+static PyObject *
+corostart_result(CoroStartObject *self, PyObject *args) {
+    // Check if we're done (must have an exception)
+    if (self->s_exc_type == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
+        return NULL;
+    }
+    
+    // Check if it's StopIteration (normal completion)
+    if (PyErr_GivenExceptionMatches(self->s_exc_type, PyExc_StopIteration)) {
+        // Check if s_exc_value is an instance of the exception type
+        if (self->s_exc_value && PyObject_IsInstance(self->s_exc_value, self->s_exc_type)) {
+            // s_exc_value is an actual StopIteration instance
+            PyObject *value = PyObject_GetAttrString(self->s_exc_value, "value");
+            if (value == NULL) {
+                PyErr_Clear();
+                Py_RETURN_NONE;
+            }
+            return value;
+        } else {
+            // s_exc_value is the raw value (Python optimization)
+            if (self->s_exc_value) {
+                Py_INCREF(self->s_exc_value);
+                return self->s_exc_value;
+            } else {
+                Py_RETURN_NONE;
+            }
+        }
+    } else {
+        // Re-raise other exceptions using Restore
+        PyErr_Restore(
+            Py_XNewRef(self->s_exc_type),
+            Py_XNewRef(self->s_exc_value), 
+            Py_XNewRef(self->s_exc_traceback)
+        );
+        return NULL;
+    }
+}
+
 static PyMethodDef corostart_methods[] = {
+    {"done", (PyCFunction)corostart_done, METH_NOARGS, "Return True if coroutine is done"},
+    {"result", (PyCFunction)corostart_result, METH_NOARGS, "Return result or raise exception"},
     {NULL, NULL, 0, NULL}
 };
 
@@ -248,12 +377,12 @@ static PyTypeObject CoroStartType = {
     .tp_as_async = &corostart_as_async,
 };
 
-/* Constructor function - updated for new structure */
+/* Constructor function - simplified eager execution */
 static PyObject *
 corostart_new_wrapper(PyObject *self, PyObject *args)
 {
     PyObject *coro;
-    PyObject *context = NULL;  /* Optional context parameter */
+    PyObject *context = NULL;  /* Optional context parameter (ignored for now) */
     
     if (!PyArg_ParseTuple(args, "O|O", &coro, &context)) {
         return NULL;
@@ -269,6 +398,19 @@ corostart_new_wrapper(PyObject *self, PyObject *args)
     cs->wrapped_coro = Py_NewRef(coro);
     cs->context = context;
     Py_XINCREF(cs->context);
+    
+    /* Initialize start result fields */
+    cs->s_value = NULL;
+    cs->s_exc_type = NULL;
+    cs->s_exc_value = NULL;
+    cs->s_exc_traceback = NULL;
+    
+    /* Perform eager execution */
+    if (corostart_start(cs) < 0) {
+        /* _start failed */
+        Py_DECREF(cs);
+        return NULL;
+    }
     
     return (PyObject *)cs;
 }

@@ -394,6 +394,7 @@ class CoroStart(Awaitable[T_co]):
 # Use C implementation of CoroStart when available for performance
 # The C version eliminates Python generator overhead in the suspend/resume hot path
 _PyCoroStart = CoroStart  # Keep reference to Python implementation
+PyCoroStart = CoroStart   # Always provide PyCoroStart alias to Python version
 
 if _HAVE_C_EXTENSION and _CCoroStart is not None:
     # Wrap C extension to match Python interface
