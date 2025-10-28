@@ -1,0 +1,59 @@
+# clang-format configuration for py-asynkit C extensions
+# Based on Python's PEP 7 style guide for C code
+
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 88  # Match Python line length from ruff
+
+# Braces and spacing
+BreakBeforeBraces: Linux
+SpaceAfterCStyleCast: true
+SpaceBeforeParens: Never
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# Indentation
+IndentCaseLabels: true
+IndentPPDirectives: BeforeHash
+ContinuationIndentWidth: 4
+
+# Function formatting
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+
+# Pointer and reference alignment
+PointerAlignment: Right
+DerivePointerAlignment: false
+
+# Include sorting
+SortIncludes: CaseInsensitive
+IncludeBlocks: Regroup
+
+# Comments
+ReflowComments: true
+SpacesBeforeTrailingComments: 2
+
+# Line breaks
+MaxEmptyLinesToKeep: 2
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+# Function parameters
+BinPackParameters: false
+BinPackArguments: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
+# Penalties for formatting choices (lower = preferred)
+PenaltyBreakAssignment: 100
+PenaltyBreakBeforeFirstCallParameter: 200
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 200
+
+# Experimental features
+ExperimentalAutoDetectBinPacking: false

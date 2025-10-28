@@ -35,6 +35,7 @@ from .tools import create_task as _create_task
 # Try to import C extension for performance-critical components
 try:
     from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[import-untyped]
+
     _HAVE_C_EXTENSION = True
 except ImportError:
     _CCoroStartBase = None
@@ -179,7 +180,7 @@ def coro_is_finished(coro: Suspendable) -> bool:
 class CoroStartBase(Awaitable[T_co]):
     """
     Base class for CoroStart with only synchronous methods.
-    
+
     A class to encapsulate the state of a coroutine which is manually started
     until its first suspension point, and then resumed. This facilitates
     later execution of coroutines, encapsulating them in Tasks only at the point when
@@ -360,13 +361,13 @@ class CoroStartBase(Awaitable[T_co]):
 class CoroStartMixin(Generic[T_co]):
     """
     Mixin providing async methods for CoroStart.
-    
+
     This mixin adds async convenience methods on top of a CoroStartBase.
     It should be mixed with either the Python CoroStartBase or the C extension
     CoroStartBase to provide the full CoroStart functionality.
     """
 
-    # Type hints for attributes from CoroStartBase 
+    # Type hints for attributes from CoroStartBase
     coro: Coroutine[Any, Any, T_co]
     context: Context | None
     start_result: tuple[Any, BaseException | None] | None
@@ -423,10 +424,11 @@ class CoroStartMixin(Generic[T_co]):
 class CoroStart(CoroStartBase[T_co], CoroStartMixin[T_co]):
     """
     Complete CoroStart implementation combining base functionality with async methods.
-    
+
     This is the main user-facing class that provides both sync and async methods
     for managing eager coroutine execution.
     """
+
     pass
 
 
@@ -434,62 +436,70 @@ class CoroStart(CoroStartBase[T_co], CoroStartMixin[T_co]):
 # Use C implementation of CoroStartBase when available for performance
 # The C version eliminates Python generator overhead in the suspend/resume hot path
 _PyCoroStartBase = CoroStartBase  # Keep reference to Python implementation
-PyCoroStartBase = CoroStartBase   # Always provide PyCoroStartBase alias to Python version
-_PyCoroStart = CoroStart          # Keep reference to Python implementation
-PyCoroStart = CoroStart           # Always provide PyCoroStart alias to Python version
+_PyCoroStart = CoroStart  # Keep reference to Python implementation
 
 # Re-enable C extension with working integration
 if _HAVE_C_EXTENSION and _CCoroStartBase is not None:
     # Create C-based CoroStart by combining C base with Python mixin
     # Note: We can't use multiple inheritance with C types, so we use composition
-    
+
     class _CCoroStartWithMixin(CoroStartMixin[T_co]):
         """C CoroStartBase + Python CoroStartMixin = Full CoroStart functionality"""
-        
-        def __init__(self, coro: Coroutine[Any, Any, T_co], *, context: Context | None = None) -> None:
+
+        def __init__(
+            self, coro: Coroutine[Any, Any, T_co], *, context: Context | None = None
+        ) -> None:
             # Use composition to wrap the C implementation
-            self._c_base = _CCoroStartBase(coro, context=context) if context else _CCoroStartBase(coro)
-        
+            self._c_base = (
+                _CCoroStartBase(coro, context=context)
+                if context
+                else _CCoroStartBase(coro)
+            )
+
         # Delegate all sync methods to the C base
         def __await__(self) -> Generator[Any, None, T_co]:
             return self._c_base.__await__()
-        
-        def throw(self, typ: Type[BaseException], val: object = None, tb: object = None) -> T_co:
+
+        def throw(
+            self, typ: Type[BaseException], val: object = None, tb: object = None
+        ) -> T_co:
             return self._c_base.throw(typ, val, tb)
-        
+
         def close(self) -> None:
             return self._c_base.close()
-        
+
         def done(self) -> bool:
             return self._c_base.done()
-        
+
         def result(self) -> T_co:
             return self._c_base.result()
-        
+
         def exception(self) -> BaseException | None:
             return self._c_base.exception()
-        
+
         def as_future(self) -> asyncio.Future[T_co]:
             return self._c_base.as_future()
-        
+
         def as_awaitable(self) -> Awaitable[T_co]:
             return self._c_base.as_awaitable()
-    
+
     # C implementation (follows asyncio naming convention)
     _CCoroStart = _CCoroStartWithMixin
-    
+
     # Wrapper class that chooses between C and Python implementations
     class _CoroStartWrapper:
         """Adapter that uses C implementation when possible, falls back to Python"""
-        
-        def __new__(cls, coro: Coroutine[Any, Any, T_co], *, context: Context | None = None):
+
+        def __new__(
+            cls, coro: Coroutine[Any, Any, T_co], *, context: Context | None = None
+        ):
             try:
                 # Try C implementation first
                 return _CCoroStart(coro, context=context)
             except Exception:
                 # Fall back to Python implementation if C fails
                 return _PyCoroStart(coro, context=context)
-    
+
     # Public API uses C implementation when available (follows asyncio convention)
     CoroStart = _CoroStartWrapper  # type: ignore[misc,assignment]
 

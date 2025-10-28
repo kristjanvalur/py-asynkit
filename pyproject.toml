@@ -56,16 +56,21 @@ executor = {type = "simple"}
 [tool.poe.tasks]
 lint = "ruff check ."
 format = "ruff format ."
+format-c = "python scripts/format_c.py format"
 test = "pytest tests examples"
 cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 typing = "mypy -p asynkit -p tests -p examples"
 format-docs = "mdformat --number *.md docs/*.md"
-formatall = ["format", "format-docs"]
-check = ["style", "style-docs", "lint", "typing", "cov"]
+formatall = ["format", "format-c", "format-docs"]
+check = ["style", "style-c", "style-docs", "lint", "typing", "cov"]
 
 [tool.poe.tasks.style]
 help = "Validate code style"
 cmd  = "ruff format . --check --diff"
+
+[tool.poe.tasks.style-c]
+help = "Validate C code style"
+cmd  = "python scripts/format_c.py check"
 
 [tool.poe.tasks.style-docs]
 help = "Validate documentation style"
