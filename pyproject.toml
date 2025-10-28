@@ -40,6 +40,7 @@ dev = [
     "anyio>=4.0.0",
     "mdformat>=0.7.0",
     "mdformat-ruff>=0.1.0",
+    "setuptools>=80.9.0",
 ]
 
 [project.optional-dependencies]

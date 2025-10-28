@@ -7,10 +7,14 @@
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <stdio.h>
 
 /* Forward declarations */
 static PyTypeObject CoroStartType;
 static PyTypeObject CoroStartWrapperType;
+
+/* Forward declaration of methods */
+static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs);
 
 /* CoroStartWrapper - implements both iterator and coroutine protocols */
 typedef struct {
@@ -574,7 +578,7 @@ static PyTypeObject CoroStartType = {
     .tp_name = "asynkit._cext.CoroStart",
     .tp_basicsize = sizeof(CoroStartObject),
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
-    .tp_new = PyType_GenericNew,
+    .tp_new = corostart_new,
     .tp_dealloc = (destructor)corostart_dealloc,
     .tp_traverse = (traverseproc)corostart_traverse,
     .tp_clear = (inquiry)corostart_clear,
@@ -582,9 +586,9 @@ static PyTypeObject CoroStartType = {
     .tp_as_async = &corostart_as_async,
 };
 
-/* Constructor function - simplified eager execution with keyword argument support */
+/* CoroStart type constructor */
 static PyObject *
-corostart_new_wrapper(PyObject *self, PyObject *args, PyObject *kwargs)
+corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
     PyObject *coro;
     PyObject *context = NULL;  /* Optional context parameter */
@@ -596,7 +600,7 @@ corostart_new_wrapper(PyObject *self, PyObject *args, PyObject *kwargs)
     }
     
     /* Create CoroStart object */
-    CoroStartObject *cs = (CoroStartObject *)CoroStartType.tp_alloc(&CoroStartType, 0);
+    CoroStartObject *cs = (CoroStartObject *)type->tp_alloc(type, 0);
     if (cs == NULL) {
         return NULL;
     }
@@ -624,7 +628,6 @@ corostart_new_wrapper(PyObject *self, PyObject *args, PyObject *kwargs)
 
 /* Module methods */
 static PyMethodDef module_methods[] = {
-    {"CoroStart", (PyCFunction)corostart_new_wrapper, METH_VARARGS | METH_KEYWORDS, "Create CoroStart wrapper"},
     {NULL, NULL, 0, NULL}
 };
 
@@ -662,6 +665,14 @@ PyInit__cext(void)
     Py_INCREF(&CoroStartWrapperType);
     if (PyModule_AddObject(module, "CoroStartWrapperType", (PyObject *)&CoroStartWrapperType) < 0) {
         Py_DECREF(&CoroStartWrapperType);
+        Py_DECREF(module);
+        return NULL;
+    }
+    
+    /* Add CoroStartBase type to module */
+    Py_INCREF(&CoroStartType);
+    if (PyModule_AddObject(module, "CoroStartBase", (PyObject *)&CoroStartType) < 0) {
+        Py_DECREF(&CoroStartType);
         Py_DECREF(module);
         return NULL;
     }
