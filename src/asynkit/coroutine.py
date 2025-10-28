@@ -31,6 +31,14 @@ from typing_extensions import ParamSpec, Protocol
 from .tools import Cancellable, cancelling
 from .tools import create_task as _create_task
 
+# Try to import C extension for performance-critical components
+try:
+    from asynkit._cext import CoroStart as _CCoroStart
+    _HAVE_C_EXTENSION = True
+except ImportError:
+    _CCoroStart = None
+    _HAVE_C_EXTENSION = False
+
 __all__ = [
     "CoroStart",
     "awaitmethod",
@@ -380,6 +388,33 @@ class CoroStart(Awaitable[T_co]):
             return self.as_future()
         else:
             return self
+
+
+# C Extension Integration
+# Use C implementation of CoroStart when available for performance
+# The C version eliminates Python generator overhead in the suspend/resume hot path
+_PyCoroStart = CoroStart  # Keep reference to Python implementation
+
+if _HAVE_C_EXTENSION and _CCoroStart is not None:
+    # Wrap C extension to match Python interface
+    class _CoroStartWrapper:
+        """Adapter to make C CoroStart compatible with Python interface"""
+        
+        def __new__(cls, coro: Coroutine[Any, Any, T_co], *, context: Context | None = None):
+            # For now, only use C extension when context is None
+            # Context support would require additional C implementation
+            if context is None:
+                try:
+                    return _CCoroStart(coro)
+                except Exception:
+                    # Fall back to Python implementation if C extension fails
+                    return _PyCoroStart(coro, context=context)
+            else:
+                # Use Python implementation for context support
+                return _PyCoroStart(coro, context=context)
+    
+    # Replace CoroStart with the wrapper that uses C extension when possible
+    CoroStart = _CoroStartWrapper  # type: ignore[misc,assignment]
 
 
 async def coro_await(
