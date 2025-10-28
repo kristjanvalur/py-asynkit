@@ -1057,3 +1057,254 @@ async def test_sync_function():
 
     assert asynkit.syncfunction(async_method)() == "foo"
     assert async_method2() == "bar"
+
+
+class TestCoroStartContext:
+    """Test context variable handling in CoroStart close() and throw() methods"""
+
+    test_var: ContextVar[str] = ContextVar("test_var")
+    
+    async def sleep(self, t):
+        # for synchronous tests use asyncio version
+        if getattr(self, "sync", False):
+            await asyncio.sleep(t)
+        else:
+            await sleep(t)
+    
+    async def coro_with_cleanup(self):
+        """Coroutine that does cleanup in finally block with context"""
+        try:
+            self.test_var.set("try_block")
+            await sleep(0)
+        finally:
+            # Cleanup should see the context from CoroStart creation
+            self.test_var.set("cleanup_" + self.test_var.get())
+            await sleep(0)
+
+    async def coro_clean_exit(self):
+        """Coroutine that exits cleanly when closed"""
+        try:
+            self.test_var.set("before_sleep")
+            await sleep(0)
+        except GeneratorExit:
+            # Clean exit - just set a marker and exit
+            self.test_var.set("clean_exit")
+            raise
+
+    async def coro_ignores_exception(self):
+        """Coroutine that ignores exceptions for retry testing"""
+        try:
+            self.test_var.set("before_sleep")
+            await self.sleep(0)
+        except (GeneratorExit, asyncio.CancelledError):
+            # Ignore the exception - this will trigger retry logic
+            self.test_var.set("ignored_exit")
+            await self.sleep(0)
+
+    def make_context_with_var(self, value: str):
+        """Helper to create a context with our test var set"""
+        ctx = copy_context()
+        def set_var():
+            self.test_var.set(value)
+        ctx.run(set_var)
+        return ctx
+
+    async def test_close_with_context(self):
+        """Test that close() uses context from CoroStart creation"""
+        # Set up initial context
+        self.test_var.set("outer")
+        
+        # Create context for the CoroStart
+        close_context = self.make_context_with_var("close_context")
+        
+        # Start coroutine in the specific context
+        cs = asynkit.CoroStart(self.coro_with_cleanup(), context=close_context)
+        assert not cs.done()
+        
+        # Close should raise RuntimeError since coro does async cleanup and ignores GeneratorExit
+        with pytest.raises(RuntimeError) as err:
+            cs.close()
+        assert err.match("coroutine ignored GeneratorExit")
+        
+        # Check that outer context is unchanged
+        assert self.test_var.get() == "outer"
+        
+        # Check that cleanup was attempted in the CoroStart context
+        def check_cleanup():
+            # The coroutine cleanup ran in close_context
+            assert self.test_var.get() == "cleanup_try_block"
+        close_context.run(check_cleanup)
+
+    async def test_close_clean_exit_with_context(self):
+        """Test that close() works with context when coroutine exits cleanly"""
+        # Set up initial context
+        self.test_var.set("outer")
+        
+        # Create context for the CoroStart  
+        close_context = self.make_context_with_var("close_context")
+        
+        # Start coroutine in the specific context
+        cs = asynkit.CoroStart(self.coro_clean_exit(), context=close_context)
+        assert not cs.done()
+        
+        # Close should work cleanly
+        cs.close()
+        
+        # Check that outer context is unchanged
+        assert self.test_var.get() == "outer"
+        
+        # Check that close ran in the CoroStart context
+        def check_close():
+            assert self.test_var.get() == "clean_exit"
+        close_context.run(check_close)
+
+    async def test_close_no_context(self):
+        """Test that close() works without context (context=None)"""
+        # Set context value
+        self.test_var.set("current")
+        
+        cs = asynkit.CoroStart(self.coro_clean_exit(), context=None)
+        assert not cs.done()
+        
+        # Close should work cleanly
+        cs.close()
+        
+        # Clean exit should have run in current context
+        assert self.test_var.get() == "clean_exit"
+
+    def test_close_sync_with_context(self):
+        """Test synchronous close() with context (should raise for blocking coro)"""
+        self.sync = True
+        
+        # Set up contexts
+        self.test_var.set("outer")
+        close_context = self.make_context_with_var("close_sync")
+        
+        cs = asynkit.CoroStart(self.coro_ignores_exception(), context=close_context)
+        assert not cs.done()
+        
+        # Should raise RuntimeError when coroutine ignores GeneratorExit
+        with pytest.raises(RuntimeError) as err:
+            cs.close()
+        assert err.match("coroutine ignored GeneratorExit")
+        
+        # Check context was used during close attempt
+        def check_context():
+            assert self.test_var.get() == "ignored_exit"
+        close_context.run(check_context)
+
+    async def test_throw_with_context(self):
+        """Test throw() with context variable propagation from CoroStart"""
+        # Set up contexts
+        self.test_var.set("outer")
+        throw_context = self.make_context_with_var("throw_context")
+        
+        cs = asynkit.CoroStart(self.coro_with_cleanup(), context=throw_context)
+        assert not cs.done()
+        
+        # Throw exception - should raise RuntimeError since coro ignores it in finally
+        with pytest.raises(RuntimeError) as err:
+            cs.throw(ValueError("test"))
+        assert err.match("coroutine ignored ValueError")
+        
+        # Check outer context unchanged
+        assert self.test_var.get() == "outer"
+        
+        # Check cleanup ran in throw context
+        def check_cleanup():
+            assert self.test_var.get() == "cleanup_try_block"
+        throw_context.run(check_cleanup)
+
+    async def test_throw_handled_with_context(self):
+        """Test throw() where exception is handled, with context"""
+        async def handler_coro():
+            try:
+                self.test_var.set("before_exception")
+                await sleep(0)
+            except ValueError:
+                # Handle the exception and return normally
+                self.test_var.set("handled_" + self.test_var.get())
+                return "handled_result"
+        
+        # Set up contexts
+        self.test_var.set("outer")
+        throw_context = self.make_context_with_var("throw_context")
+        
+        cs = asynkit.CoroStart(handler_coro(), context=throw_context)
+        assert not cs.done()
+        
+        # Throw exception that gets handled
+        result = cs.throw(ValueError("test"))
+        assert result == "handled_result"
+        
+        # Check that handler ran in throw context  
+        def check_handler():
+            # The handler caught the exception in throw_context and set "before_exception" first
+            assert self.test_var.get() == "handled_before_exception"
+        throw_context.run(check_handler)
+
+    def test_throw_sync_with_context(self):
+        """Test synchronous throw() with context and retry logic"""
+        self.sync = True
+        
+        # Set up contexts
+        self.test_var.set("outer")
+        throw_context = self.make_context_with_var("throw_sync")
+        
+        cs = asynkit.CoroStart(self.coro_ignores_exception(), context=throw_context)
+        assert not cs.done()
+        
+        # Should raise the thrown exception after retries
+        with pytest.raises(asyncio.CancelledError):
+            cs.throw(asyncio.CancelledError(), tries=2)
+        
+        # Check context was used during throw
+        def check_context():
+            assert self.test_var.get() == "ignored_exit"
+        throw_context.run(check_context)
+
+    def test_throw_handled_return_with_context(self):
+        """Test synchronous throw() that returns a value with context"""
+        self.sync = True
+        
+        async def sync_handler():
+            try:
+                await asyncio.sleep(0)  # Will be sent via throw
+            except ZeroDivisionError:
+                self.test_var.set("caught_" + self.test_var.get())
+                return "sync_result"
+        
+        # Set up contexts
+        self.test_var.set("outer") 
+        throw_context = self.make_context_with_var("sync_throw")
+        
+        cs = asynkit.CoroStart(sync_handler(), context=throw_context)
+        assert not cs.done()
+        
+        result = cs.throw(ZeroDivisionError())
+        assert result == "sync_result"
+        
+        # Check handler ran in throw context
+        def check_handler():
+            assert self.test_var.get() == "caught_sync_throw"
+        throw_context.run(check_handler)
+
+    async def test_close_completed_coroutine(self):
+        """Test close() on already completed coroutine with context"""
+        async def simple_coro():
+            return "done"
+        
+        self.test_var.set("outer")
+        close_context = self.make_context_with_var("should_not_change")
+        
+        cs = asynkit.CoroStart(simple_coro(), context=close_context)
+        assert cs.done()  # Completed immediately
+        
+        # Close should be no-op for completed coroutine
+        cs.close()
+        
+        # Context should be unchanged
+        assert self.test_var.get() == "outer"
+        def check_unchanged():
+            assert self.test_var.get() == "should_not_change"
+        close_context.run(check_unchanged)
