@@ -41,30 +41,22 @@ corostart_start(CoroStartObject *self)
         return -1;
     }
     
-    /* Initialize all start result fields to NULL */
-    self->s_value = NULL;
-    self->s_exc_type = NULL;
-    self->s_exc_value = NULL;
-    self->s_exc_traceback = NULL;
-    
     /* Try to send None to start the coroutine (with context support) */
-    PyObject *send_result;
     if (self->context != NULL) {
         /* Use context.run(coro.send, None) */
         PyObject *send_method = PyObject_GetAttrString(self->wrapped_coro, "send");
         if (send_method == NULL) {
             return -1;
         }
-        send_result = PyObject_CallMethod(self->context, "run", "OO", send_method, Py_None);
+        self->s_value = PyObject_CallMethod(self->context, "run", "OO", send_method, Py_None);
         Py_DECREF(send_method);
     } else {
         /* Direct call to coro.send(None) */
-        send_result = PyObject_CallMethod(self->wrapped_coro, "send", "O", Py_None);
+        self->s_value = PyObject_CallMethod(self->wrapped_coro, "send", "O", Py_None);
     }
-    
-    if (send_result != NULL) {
+
+    if (self->s_value != NULL) {
         /* Coroutine yielded a value - it's suspended */
-        self->s_value = send_result;  /* Transfer ownership */
         return 0;  /* Success */
     } else {
         /* Exception occurred - fetch and store it */
