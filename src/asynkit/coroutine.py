@@ -307,9 +307,13 @@ class CoroStart(Awaitable[T_co]):
     def close(self) -> None:
         """
         Close the coroutine.  It must immediately exit.
+        Respects context if provided.
         """
         self.start_result = None
-        self.coro.close()
+        if self.context:
+            self.context.run(self.coro.close)
+        else:
+            self.coro.close()
 
     async def aclose(self) -> None:
         """

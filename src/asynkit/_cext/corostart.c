@@ -422,10 +422,46 @@ corostart_exception(CoroStartObject *self, PyObject *args) {
     }
 }
 
+static PyObject *
+corostart_close(CoroStartObject *self, PyObject *args) {
+    // Close the coroutine - it must immediately exit
+    // Clear the start result and delegate to wrapped coroutine close
+    
+    if (self->wrapped_coro == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
+        return NULL;
+    }
+    
+    // Clear start results (like Python implementation: self.start_result = None)
+    Py_CLEAR(self->s_value);
+    Py_CLEAR(self->s_exc_type);
+    Py_CLEAR(self->s_exc_value);
+    Py_CLEAR(self->s_exc_traceback);
+    
+    // Call close() with context support
+    if (self->context != NULL) {
+        // Create a callable that will invoke close()
+        PyObject *close_callable = PyObject_GetAttrString(self->wrapped_coro, "close");
+        if (close_callable == NULL) {
+            return NULL;
+        }
+
+        // Call context.run(close_callable)
+        // This executes the close operation inside the context
+        PyObject *result = PyObject_CallMethod(self->context, "run", "O", close_callable);
+        Py_DECREF(close_callable);
+        return result;
+    } else {
+        // Direct call to coro.close()
+        return PyObject_CallMethod(self->wrapped_coro, "close", NULL);
+    }
+}
+
 static PyMethodDef corostart_methods[] = {
     {"done", (PyCFunction)corostart_done, METH_NOARGS, "Return True if coroutine is done"},
     {"result", (PyCFunction)corostart_result, METH_NOARGS, "Return result or raise exception"},
     {"exception", (PyCFunction)corostart_exception, METH_NOARGS, "Return exception or None"},
+    {"close", (PyCFunction)corostart_close, METH_NOARGS, "Close the coroutine"},
     {NULL, NULL, 0, NULL}
 };
 
