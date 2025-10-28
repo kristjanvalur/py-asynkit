@@ -16,7 +16,7 @@ static PyTypeObject CoroStartWrapperType;
 typedef struct {
     PyObject_HEAD
     PyObject *corostart;     /* Reference to our CoroStart object */
-    PyObject *wrapped_iter;  /* The wrapped coroutine iterator (lazy-initialized) */
+    PyObject *wrapped_iter;  /* The wrapped coroutine iterator */
 } CoroStartWrapperObject;
 
 /* Forward declaration of wrapper methods */
@@ -32,39 +32,6 @@ typedef struct {
     PyObject *s_exc_value;    // exception value
     PyObject *s_exc_traceback; // exception traceback
 } CoroStartObject;
-
-/* Helper function to get or create the wrapped iterator */
-static PyObject *
-corostart_wrapper_get_iterator(CoroStartWrapperObject *self)
-{
-    if (self->wrapped_iter != NULL) {
-        return self->wrapped_iter;  /* Already have it */
-    }
-    
-    if (self->corostart == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "CoroStart object is NULL");
-        return NULL;
-    }
-    
-    /* Get the CoroStart object */
-    CoroStartObject *corostart = (CoroStartObject *)self->corostart;
-    
-    if (corostart->wrapped_coro == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
-        return NULL;
-    }
-    
-    /* Get the coroutine's iterator via __await__ */
-    PyObject *coro_iter = PyObject_CallMethod(corostart->wrapped_coro, "__await__", NULL);
-    if (coro_iter == NULL) {
-        return NULL;
-    }
-    
-    /* Cache it for future use */
-    self->wrapped_iter = coro_iter;  /* Transfer ownership */
-    
-    return coro_iter;
-}
 
 /* CoroStart _start method - simplified eager execution logic */
 static int
@@ -153,6 +120,11 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
     /* Check if we have start results (first call) */
     if (corostart->s_value != NULL || corostart->s_exc_type != NULL) {
         /* This is the first send call - process the eager execution result */
+        /* According to PEP 342, first send() must be None */
+        if (arg != Py_None) {
+            PyErr_SetString(PyExc_TypeError, "can't send non-None value to a just-started coroutine");
+            return NULL;
+        }
         
         if (corostart->s_exc_type != NULL) {
             /* Exception occurred during start - re-raise it */
@@ -175,29 +147,35 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
         PyErr_SetString(PyExc_RuntimeError, "Invalid start state");
         return NULL;
     }
-    
+
+    /* If both s_value and s_exc_type are NULL, we've already exhausted/awaited */
+    if (corostart->s_value == NULL && corostart->s_exc_type == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "cannot reuse already awaited coroutine");
+        return NULL;
+    }
+
     /* No start results - coroutine was already started, delegate to wrapped iterator */
-    PyObject *wrapped_iter = corostart_wrapper_get_iterator(self);
-    if (wrapped_iter == NULL) {
+    if (self->wrapped_iter == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "wrapped iterator is NULL");
         return NULL;
     }
     
     /* Call send() on the wrapped iterator */
-    return PyObject_CallMethod(wrapped_iter, "send", "O", arg);
+    return PyObject_CallMethod(self->wrapped_iter, "send", "O", arg);
 }
 
 /* CoroStartWrapper throw method - required for coroutine protocol */
 static PyObject *
 corostart_wrapper_throw(CoroStartWrapperObject *self, PyObject *args)
 {
-    PyObject *wrapped_iter = corostart_wrapper_get_iterator(self);
-    if (wrapped_iter == NULL) {
+    if (self->wrapped_iter == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "wrapped iterator is NULL");
         return NULL;
     }
     
     /* Call throw() on the wrapped iterator using PyObject_CallMethod */
     /* Note: we pass the args tuple directly since throw can take 1-3 args */
-    return PyObject_CallMethod(wrapped_iter, "throw", "O", args);
+    return PyObject_CallMethod(self->wrapped_iter, "throw", "O", args);
 }
 
 /* CoroStartWrapper close method - required for coroutine protocol */
@@ -205,14 +183,10 @@ static PyObject *
 corostart_wrapper_close(CoroStartWrapperObject *self, PyObject *Py_UNUSED(ignored))
 {
     if (self->wrapped_iter == NULL) {
-        Py_RETURN_NONE;  /* Nothing to close yet */
+        Py_RETURN_NONE;  /* Nothing to close */
     }
     
-    PyObject *result = PyObject_CallMethod(self->wrapped_iter, "close", NULL);
-    if (result != NULL) {
-        Py_CLEAR(self->wrapped_iter);  /* Clear the cached iterator */
-    }
-    return result;
+    return PyObject_CallMethod(self->wrapped_iter, "close", NULL);
 }
 
 /* CoroStartWrapper methods */
@@ -296,7 +270,12 @@ corostart_await(CoroStartObject *self)
     wrapper->corostart = (PyObject *)self;
     Py_INCREF(wrapper->corostart);
     
-    wrapper->wrapped_iter = NULL;  /* Will be created lazily when needed */
+    /* Create the wrapped iterator immediately */
+    wrapper->wrapped_iter = PyObject_CallMethod(self->wrapped_coro, "__await__", NULL);
+    if (wrapper->wrapped_iter == NULL) {
+        Py_DECREF(wrapper);
+        return NULL;
+    }
     
     return (PyObject *)wrapper;
 }
@@ -322,7 +301,20 @@ static PyObject *
 corostart_result(CoroStartObject *self, PyObject *args) {
     // Check if we're done (must have an exception)
     if (self->s_exc_type == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
+        // Use asyncio.InvalidStateError to match Python implementation
+        PyObject *asyncio_module = PyImport_ImportModule("asyncio");
+        if (asyncio_module) {
+            PyObject *invalid_state_error = PyObject_GetAttrString(asyncio_module, "InvalidStateError");
+            Py_DECREF(asyncio_module);
+            if (invalid_state_error) {
+                PyErr_SetString(invalid_state_error, "CoroStart: coroutine not done()");
+                Py_DECREF(invalid_state_error);
+            } else {
+                PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
+            }
+        } else {
+            PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
+        }
         return NULL;
     }
     
@@ -357,9 +349,50 @@ corostart_result(CoroStartObject *self, PyObject *args) {
     }
 }
 
+static PyObject *
+corostart_exception(CoroStartObject *self, PyObject *args) {
+    // Check if we're done (must have an exception)
+    if (self->s_exc_type == NULL) {
+        // Use asyncio.InvalidStateError to match Python implementation
+        PyObject *asyncio_module = PyImport_ImportModule("asyncio");
+        if (asyncio_module) {
+            PyObject *invalid_state_error = PyObject_GetAttrString(asyncio_module, "InvalidStateError");
+            Py_DECREF(asyncio_module);
+            if (invalid_state_error) {
+                PyErr_SetString(invalid_state_error, "CoroStart: coroutine not done()");
+                Py_DECREF(invalid_state_error);
+            } else {
+                PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
+            }
+        } else {
+            PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
+        }
+        return NULL;
+    }
+    
+    // Check if it's StopIteration (normal completion)
+    if (PyErr_GivenExceptionMatches(self->s_exc_type, PyExc_StopIteration)) {
+        // Normal completion - return None
+        Py_RETURN_NONE;
+    } else {
+        // Return the exception (not re-raise it like result() does)
+        if (self->s_exc_value && PyObject_IsInstance(self->s_exc_value, self->s_exc_type)) {
+            // s_exc_value is an actual exception instance
+            Py_INCREF(self->s_exc_value);
+            return self->s_exc_value;
+        } else {
+            // s_exc_value is the raw value, need to construct exception
+            PyObject *exc_instance = PyObject_CallFunction(self->s_exc_type, "O", 
+                self->s_exc_value ? self->s_exc_value : Py_None);
+            return exc_instance;
+        }
+    }
+}
+
 static PyMethodDef corostart_methods[] = {
     {"done", (PyCFunction)corostart_done, METH_NOARGS, "Return True if coroutine is done"},
     {"result", (PyCFunction)corostart_result, METH_NOARGS, "Return result or raise exception"},
+    {"exception", (PyCFunction)corostart_exception, METH_NOARGS, "Return exception or None"},
     {NULL, NULL, 0, NULL}
 };
 
