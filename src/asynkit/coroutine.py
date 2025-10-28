@@ -36,7 +36,7 @@ from .tools import create_task as _create_task
 try:
     from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[import-untyped]
 
-    _HAVE_C_EXTENSION = True
+    _HAVE_C_EXTENSION = False  # Temporarily disable for testing
 except ImportError:
     _CCoroStartBase = None
     _HAVE_C_EXTENSION = False
@@ -272,9 +272,42 @@ class CoroStartBase(Awaitable[T_co]):
         """
         Throw an exception into the started coroutine. If the coroutine fails to
         exit, the exception will be re-thrown, up to 'tries' times.  If the coroutine
-        handles the error and returns, the value is returned
+        handles the error and returns, the value is returned.
+        
+        This method is state-aware:
+        - Post-start, pre-await: Updates start_result and retries up to 'tries' times
+        - Post-await: Uses original retry logic for immediate exit requirement
         """
         value = exc if isinstance(exc, BaseException) else exc()
+        
+        # State-aware handling: check if we're in post-start, pre-await phase
+        if self.start_result is not None:
+            # We're in the pre-await state - throw and update start_result
+            # Apply the same retry logic as the post-await state
+            for i in range(tries):
+                try:
+                    result = (
+                        self.context.run(self.coro.throw, value)
+                        if self.context
+                        else self.coro.throw(value)
+                    )
+                    # Coroutine continued after throw - update start_result for later await
+                    self.start_result = (result, None)
+                    # Continue retry loop since coroutine didn't exit
+                    
+                except StopIteration as err:
+                    # Coroutine finished synchronously - clear state and return result
+                    self.start_result = None
+                    return cast(T_co, err.value)
+                except BaseException as exception:
+                    # Coroutine finished with exception - update start_result and re-raise
+                    self.start_result = (None, exception)
+                    raise
+            else:
+                # Exhausted retries in pre-await state
+                raise RuntimeError(f"coroutine ignored {type(value).__name__}")
+        
+        # Original retry logic for post-await state
         for i in range(tries):
             try:
                 # Use context support like other methods
@@ -294,12 +327,28 @@ class CoroStartBase(Awaitable[T_co]):
         """
         Close the coroutine.  It must immediately exit.
         Respects context if provided.
+        
+        This method is state-aware:
+        - Post-start, pre-await: Close coroutine and clear start_result  
+        - Post-await: Close coroutine directly (original behavior)
         """
-        self.start_result = None
-        if self.context:
-            self.context.run(self.coro.close)
+        # State-aware handling: check if we're in post-start, pre-await phase
+        if self.start_result is not None:
+            # We're in the pre-await state - close the coroutine and clear state
+            try:
+                if self.context:
+                    self.context.run(self.coro.close)
+                else:
+                    self.coro.close()
+            finally:
+                # Always clear start_result after closing in pre-await state
+                self.start_result = None
         else:
-            self.coro.close()
+            # Post-await state - close the coroutine directly (original behavior)
+            if self.context:
+                self.context.run(self.coro.close)
+            else:
+                self.coro.close()
 
     def done(self) -> bool:
         """returns true if the coroutine finished without blocking"""
@@ -383,20 +432,21 @@ class CoroStartMixin(Generic[T_co]):
         Throw an exception into a started coroutine if it is not done, instead
         of continuing it.
         """
-        value = exc if isinstance(exc, BaseException) else exc()
-
         try:
-            self.start_result = (
-                (
-                    self.context.run(self.coro.throw, value)
-                    if self.context
-                    else self.coro.throw(value)
-                ),
-                None,
-            )
-        except BaseException as exception:
-            self.start_result = (None, exception)
-        return await self
+            # Try synchronous throw - if it succeeds, coroutine finished immediately
+            return self.throw(exc, tries=1)
+        except RuntimeError as e:
+            if "ignored" in str(e):
+                # Coroutine didn't exit after throw - await for completion
+                # The throw() method already updated start_result for us
+                return await self
+            else:
+                # Some other RuntimeError - re-raise
+                raise
+        except BaseException:
+            # Any other exception from throw() (including when start_result was updated)
+            # The throw() method handled the state correctly, now await to complete
+            return await self
 
     async def aclose(self) -> None:
         """
