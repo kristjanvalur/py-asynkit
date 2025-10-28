@@ -438,70 +438,15 @@ class CoroStart(CoroStartBase[T_co], CoroStartMixin[T_co]):
 _PyCoroStartBase = CoroStartBase  # Keep reference to Python implementation
 _PyCoroStart = CoroStart  # Keep reference to Python implementation
 
-# Re-enable C extension with working integration
+# Simple multiple inheritance approach for C extension integration
 if _HAVE_C_EXTENSION and _CCoroStartBase is not None:
-    # Create C-based CoroStart by combining C base with Python mixin
-    # Note: We can't use multiple inheritance with C types, so we use composition
-
-    class _CCoroStartWithMixin(CoroStartMixin[T_co]):
-        """C CoroStartBase + Python CoroStartMixin = Full CoroStart functionality"""
-
-        def __init__(
-            self, coro: Coroutine[Any, Any, T_co], *, context: Context | None = None
-        ) -> None:
-            # Use composition to wrap the C implementation
-            self._c_base = (
-                _CCoroStartBase(coro, context=context)
-                if context
-                else _CCoroStartBase(coro)
-            )
-
-        # Delegate all sync methods to the C base
-        def __await__(self) -> Generator[Any, None, T_co]:
-            return self._c_base.__await__()
-
-        def throw(
-            self, typ: Type[BaseException], val: object = None, tb: object = None
-        ) -> T_co:
-            return self._c_base.throw(typ, val, tb)
-
-        def close(self) -> None:
-            return self._c_base.close()
-
-        def done(self) -> bool:
-            return self._c_base.done()
-
-        def result(self) -> T_co:
-            return self._c_base.result()
-
-        def exception(self) -> BaseException | None:
-            return self._c_base.exception()
-
-        def as_future(self) -> asyncio.Future[T_co]:
-            return self._c_base.as_future()
-
-        def as_awaitable(self) -> Awaitable[T_co]:
-            return self._c_base.as_awaitable()
-
-    # C implementation (follows asyncio naming convention)
-    _CCoroStart = _CCoroStartWithMixin
-
-    # Wrapper class that chooses between C and Python implementations
-    class _CoroStartWrapper:
-        """Adapter that uses C implementation when possible, falls back to Python"""
-
-        def __new__(
-            cls, coro: Coroutine[Any, Any, T_co], *, context: Context | None = None
-        ):
-            try:
-                # Try C implementation first
-                return _CCoroStart(coro, context=context)
-            except Exception:
-                # Fall back to Python implementation if C fails
-                return _PyCoroStart(coro, context=context)
+    # Pure C implementation with Python mixin via multiple inheritance
+    class _CCoroStart(_CCoroStartBase, CoroStartMixin[T_co]):
+        """C CoroStartBase + Python CoroStartMixin via multiple inheritance"""
+        pass
 
     # Public API uses C implementation when available (follows asyncio convention)
-    CoroStart = _CoroStartWrapper  # type: ignore[misc,assignment]
+    CoroStart = _CCoroStart  # type: ignore[misc,assignment]
 
 else:
     # Python implementation only

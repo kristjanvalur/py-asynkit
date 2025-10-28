@@ -14,6 +14,7 @@ def __await__(self):
 ```
 
 **The Issue:** When the wrapped coroutine suspends 100 times (e.g., `await asyncio.sleep(0)` in a loop):
+
 - The event loop unwinds the stack 100 times, passing through this generator
 - The event loop re-enters this generator 100 times on resume
 - That's 200 Python generator frame operations just for the wrapper
@@ -74,6 +75,7 @@ static PyTypeObject CoroStartType = {
 ### 3. Critical Functions
 
 **Starting the coroutine:**
+
 ```c
 static PyObject *
 corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
@@ -119,6 +121,7 @@ corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 ```
 
 **Iterator next (the hot path):**
+
 ```c
 static PyObject *
 corostart_iternext(PyObject *self)
@@ -141,6 +144,7 @@ corostart_iternext(PyObject *self)
 ```
 
 **Send method:**
+
 ```c
 static PyObject *
 corostart_send(PyObject *self, PyObject *arg)
@@ -160,6 +164,7 @@ corostart_send(PyObject *self, PyObject *arg)
 ### 4. Module Structure
 
 Create `src/asynkit/_cext/corostart.c` with:
+
 - Module initialization
 - Type definition and setup
 - Factory function exposed to Python
@@ -167,6 +172,7 @@ Create `src/asynkit/_cext/corostart.c` with:
 ### 5. Build Configuration
 
 Update `pyproject.toml` to include C extension:
+
 ```toml
 [tool.setuptools]
 ext-modules = [
@@ -181,13 +187,17 @@ Modify `src/asynkit/coroutine.py` to use C extension when available:
 ```python
 try:
     from asynkit._cext import CoroStart as _CCoroStart
+
     _use_c_extension = True
 except ImportError:
     _use_c_extension = False
 
+
 class CoroStart:
     """Python fallback implementation"""
+
     # ... existing code ...
+
 
 # Use C version if available
 if _use_c_extension:
@@ -197,11 +207,13 @@ if _use_c_extension:
 ## Expected Performance Gains
 
 For a coroutine that suspends N times:
+
 - **Current:** 2N Python generator frame operations (unwinding + rewinding)
 - **With C extension:** Direct C function calls, no frame overhead
 - **Estimated speedup:** 10-50x reduction in wrapper overhead (depends on coroutine complexity)
 
 The gain is most significant for:
+
 - Tight loops with frequent `await` calls
 - Middleware/wrapper patterns that stack multiple `CoroStart` instances
 - Any code where coroutine startup overhead is measurable
@@ -209,12 +221,14 @@ The gain is most significant for:
 ## Development Environment
 
 **WSL is preferred because:**
+
 - Simpler C toolchain (GCC/Clang vs MSVC)
 - Python dev headers easily available (`python3-dev`)
 - Better debugging tools (GDB, valgrind)
 - CI runs on Ubuntu anyway
 
 **Build commands:**
+
 ```bash
 # In WSL
 uv sync  # Will build C extension automatically

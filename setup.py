@@ -14,11 +14,11 @@ import sys
 build_ext = True
 
 # Skip C extension on PyPy or if explicitly disabled
-if hasattr(sys, 'pypy_version_info'):
+if hasattr(sys, "pypy_version_info"):
     build_ext = False
     print("PyPy detected - skipping C extension build")
 
-if os.environ.get('ASYNKIT_DISABLE_CEXT', '').lower() in ('1', 'true', 'yes'):
+if os.environ.get("ASYNKIT_DISABLE_CEXT", "").lower() in ("1", "true", "yes"):
     build_ext = False
     print("C extension disabled via ASYNKIT_DISABLE_CEXT")
 
@@ -26,9 +26,9 @@ if os.environ.get('ASYNKIT_DISABLE_CEXT', '').lower() in ('1', 'true', 'yes'):
 ext_modules = []
 if build_ext:
     corostart_ext = Extension(
-        name='asynkit._cext',
+        name="asynkit._cext",
         sources=[
-            'src/asynkit/_cext/corostart.c',
+            "src/asynkit/_cext/corostart.c",
         ],
         include_dirs=[],
         define_macros=[],

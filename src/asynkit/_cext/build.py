@@ -3,9 +3,10 @@
 
 from setuptools import Extension
 
+
 def build(setup_kwargs):
     """Build configuration for the C extension"""
-    
+
     ext_modules = [
         Extension(
             name="asynkit._cext",
@@ -20,8 +21,10 @@ def build(setup_kwargs):
             extra_link_args=[],
         )
     ]
-    
-    setup_kwargs.update({
-        "ext_modules": ext_modules,
-        "zip_safe": False,
-    })
+
+    setup_kwargs.update(
+        {
+            "ext_modules": ext_modules,
+            "zip_safe": False,
+        }
+    )
