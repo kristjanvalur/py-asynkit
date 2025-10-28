@@ -298,7 +298,14 @@ class CoroStart(Awaitable[T_co]):
         value = exc if isinstance(exc, BaseException) else exc()
         for i in range(tries):
             try:
-                self.coro.throw(value)
+                # Use context support like other methods
+                if self.context:
+                    result = self.context.run(self.coro.throw, value)
+                else:
+                    result = self.coro.throw(value)
+                # If we get here, coro.throw() returned normally (coroutine continued)
+                # This means the coroutine caught the exception and didn't exit
+                # Ignore the returned value and continue the loop to try again
             except StopIteration as err:
                 return cast(T_co, err.value)
         else:

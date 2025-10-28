@@ -415,6 +415,116 @@ corostart_exception(CoroStartObject *self, PyObject *args) {
 }
 
 static PyObject *
+corostart_throw(CoroStartObject *self, PyObject *args, PyObject *kwargs) {
+    PyObject *exc;
+    long tries = 1;  // Default tries = 1
+    
+    static char *kwlist[] = {"exc", "tries", NULL};
+    
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|l", kwlist, &exc, &tries)) {
+        return NULL;
+    }
+    
+    if (self->wrapped_coro == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
+        return NULL;
+    }
+    
+    // Convert exception type to instance if needed
+    PyObject *value;
+    if (PyExceptionInstance_Check(exc)) {
+        // exc is already an exception instance
+        value = exc;
+        Py_INCREF(value);
+    } else if (PyExceptionClass_Check(exc)) {
+        // exc is an exception type, instantiate it
+        value = PyObject_CallFunction(exc, NULL);
+        if (value == NULL) {
+            return NULL;
+        }
+    } else {
+        PyErr_SetString(PyExc_TypeError, "throw() arg must be an exception");
+        return NULL;
+    }
+    
+    // Try to throw the exception up to 'tries' times
+    for (long i = 0; i < tries; i++) {
+        PyObject *result;
+        
+        // Call throw() with context support
+        if (self->context != NULL) {
+            // Use context.run(coro.throw, value)
+            PyObject *throw_method = PyObject_GetAttrString(self->wrapped_coro, "throw");
+            if (throw_method == NULL) {
+                Py_DECREF(value);
+                return NULL;
+            }
+            result = PyObject_CallMethod(self->context, "run", "OO", throw_method, value);
+            Py_DECREF(throw_method);
+        } else {
+            // Direct call to coro.throw(value)
+            result = PyObject_CallMethod(self->wrapped_coro, "throw", "O", value);
+        }
+        
+        if (result != NULL) {
+            // throw() returned normally - coroutine didn't exit, it yielded a value
+            // This means the coroutine caught the exception and continued
+            Py_DECREF(result);  // Ignore the yielded value
+            // Continue the loop to try again
+            continue;
+        }
+        
+        // Check if we got StopIteration (normal completion)
+        if (PyErr_ExceptionMatches(PyExc_StopIteration)) {
+            PyObject *exc_type, *exc_value, *exc_traceback;
+            PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
+            
+            // Extract the value from StopIteration
+            PyObject *stop_value = NULL;
+            if (exc_value && PyObject_IsInstance(exc_value, PyExc_StopIteration)) {
+                stop_value = PyObject_GetAttrString(exc_value, "value");
+                if (stop_value == NULL) {
+                    PyErr_Clear();
+                }
+            }
+            if (stop_value == NULL) {
+                // If we couldn't get the value attribute, use the exception value itself
+                stop_value = exc_value ? exc_value : Py_None;
+                Py_INCREF(stop_value);
+            }
+            
+            Py_XDECREF(exc_type);
+            if (exc_value != stop_value) {
+                Py_XDECREF(exc_value);
+            }
+            Py_XDECREF(exc_traceback);
+            Py_DECREF(value);
+            return stop_value;
+        }
+        
+        // Other exception occurred, continue the loop if we have more tries
+        if (i < tries - 1) {
+            PyErr_Clear();  // Clear the error for next iteration
+        }
+    }
+    
+    // All tries exhausted, raise RuntimeError
+    PyObject *exc_type_name = PyObject_GetAttrString((PyObject *)Py_TYPE(value), "__name__");
+    PyObject *error_msg = PyUnicode_FromFormat("coroutine ignored %U", exc_type_name);
+    Py_XDECREF(exc_type_name);
+    Py_DECREF(value);
+    
+    if (error_msg) {
+        PyErr_SetObject(PyExc_RuntimeError, error_msg);
+        Py_DECREF(error_msg);
+    } else {
+        PyErr_SetString(PyExc_RuntimeError, "coroutine ignored exception");
+    }
+    
+    return NULL;
+}
+
+static PyObject *
 corostart_close(CoroStartObject *self, PyObject *args) {
     // Close the coroutine - it must immediately exit
     // Clear the start result and delegate to wrapped coroutine close
@@ -453,6 +563,7 @@ static PyMethodDef corostart_methods[] = {
     {"done", (PyCFunction)corostart_done, METH_NOARGS, "Return True if coroutine is done"},
     {"result", (PyCFunction)corostart_result, METH_NOARGS, "Return result or raise exception"},
     {"exception", (PyCFunction)corostart_exception, METH_NOARGS, "Return exception or None"},
+    {"throw", (PyCFunction)corostart_throw, METH_VARARGS | METH_KEYWORDS, "Throw an exception into the coroutine"},
     {"close", (PyCFunction)corostart_close, METH_NOARGS, "Close the coroutine"},
     {NULL, NULL, 0, NULL}
 };
