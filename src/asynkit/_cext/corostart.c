@@ -262,10 +262,24 @@ corostart_wrapper_close(CoroStartWrapperObject *self, PyObject *Py_UNUSED(ignore
         return NULL;
     }
 
-    // todo: call with context
+    PyObject *result;
     
-    /* Call close() directly on the wrapped coroutine */
-    return PyObject_CallMethod(corostart->wrapped_coro, "close", NULL);
+    // If a context is provided, use context.run() to call close
+    if (corostart->context != Py_None && corostart->context != NULL) {
+        // Create a callable that will invoke close()
+        PyObject *close_callable = PyObject_GetAttrString(corostart->wrapped_coro, "close");
+        if (close_callable == NULL) {
+            return NULL;
+        }
+        // Call context.run(close_callable)
+        result = PyObject_CallMethod(corostart->context, "run", "O", close_callable);
+        Py_DECREF(close_callable);
+    } else {
+        // Direct call to coro.close()
+        result = PyObject_CallMethod(corostart->wrapped_coro, "close", NULL);
+    }
+    
+    return result;
 }
 
 /* CoroStartWrapper methods */
