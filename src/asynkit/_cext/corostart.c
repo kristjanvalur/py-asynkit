@@ -38,6 +38,48 @@ typedef struct {
     PyObject *s_exc_traceback; // exception traceback
 } CoroStartObject;
 
+/* State checking macros for CoroStart objects */
+#define IS_DONE(self) ((self)->s_exc_type != NULL)
+#define IS_PENDING(self) ((self)->s_value != NULL)
+#define IS_CONTINUED(self) ((self)->s_value == NULL && (self)->s_exc_type == NULL && \
+                           (self)->s_exc_value == NULL && (self)->s_exc_traceback == NULL)
+
+/* State invariant checker for debugging and validation */
+static inline void
+assert_corostart_invariant(CoroStartObject *self)
+{
+#ifdef NDEBUG
+    /* Skip checks in release builds */
+    (void)self;
+#else
+    /* Validate state model invariants:
+     * 1. Exactly one of three states: done, pending, or continued
+     * 2. done: s_exc_type != NULL (and s_value == NULL)
+     * 3. pending: s_value != NULL (and s_exc_type == NULL)
+     * 4. continued: all fields are NULL
+     */
+    int is_done = IS_DONE(self);
+    int is_pending = IS_PENDING(self);
+    int is_continued = IS_CONTINUED(self);
+    
+    /* Exactly one state should be true */
+    int state_count = is_done + is_pending + is_continued;
+    assert(state_count == 1 && "CoroStart must be in exactly one state");
+    
+    /* Additional consistency checks */
+    if (is_done) {
+        /* done() state - should not have s_value */
+        assert(self->s_value == NULL && "done() state should not have s_value");
+    }
+    if (is_pending) {
+        /* pending() state - should not have exception fields */
+        assert(self->s_exc_type == NULL && "pending() state should not have exception");
+        assert(self->s_exc_value == NULL && "pending() state should not have exception value");
+        assert(self->s_exc_traceback == NULL && "pending() state should not have exception traceback");
+    }
+#endif
+}
+
 /* CoroStart _start method - simplified eager execution logic */
 static int
 corostart_start(CoroStartObject *self)
@@ -61,12 +103,14 @@ corostart_start(CoroStartObject *self)
         self->s_value = PyObject_CallMethod(self->wrapped_coro, "send", "O", Py_None);
     }
 
-    if (self->s_value != NULL) {
+    if (IS_PENDING(self)) {
         /* Coroutine yielded a value - it's pending */
+        assert_corostart_invariant(self);
         return 0;  /* Success */
     } else {
         /* Exception occurred - fetch and store it */
         PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
+        assert_corostart_invariant(self);
         return 0;  /* Success (we handled the exception) */
     }
 }
@@ -124,7 +168,7 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
     CoroStartObject *corostart = (CoroStartObject *)self->corostart;
     
     /* Check if we have start results (first call) */
-    if (corostart->s_value != NULL || corostart->s_exc_type != NULL) {
+    if (!IS_CONTINUED(corostart)) {
         /* This is the first send call - process the eager execution result */
         /* According to PEP 342, first send() must be None */
         if (arg != Py_None) {
@@ -132,7 +176,7 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
             return NULL;
         }
         
-        if (corostart->s_exc_type != NULL) {
+        if (IS_DONE(corostart)) {
             /* Exception occurred during start - re-raise it and clear state */
             PyErr_Restore(corostart->s_exc_type, corostart->s_exc_value, corostart->s_exc_traceback);
             /* Clear the fields (PyErr_Restore steals references) - marks as continued */
@@ -142,7 +186,7 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
             return NULL;
         }
         
-        if (corostart->s_value != NULL) {
+        if (IS_PENDING(corostart)) {
             /* Coroutine yielded a value - return it and clear state to mark as continued */
             PyObject *result = corostart->s_value;
             corostart->s_value = NULL;  /* Clear and transfer ownership - marks as continued */
@@ -326,9 +370,10 @@ static PyAsyncMethods corostart_as_async = {
 /* CoroStart methods */
 static PyObject *
 corostart_done(CoroStartObject *self, PyObject *args) {
+    assert_corostart_invariant(self);
     // Return True if we have completed (indicated by having an exception)
     // Either StopIteration (normal completion) or any other exception (error)
-    if (self->s_exc_type != NULL) {
+    if (IS_DONE(self)) {
         Py_RETURN_TRUE;
     }
     Py_RETURN_FALSE;
@@ -336,10 +381,10 @@ corostart_done(CoroStartObject *self, PyObject *args) {
 
 static PyObject *
 corostart_continued(CoroStartObject *self, PyObject *Py_UNUSED(args)) {
+    assert_corostart_invariant(self);
     // Return True if the coroutine has been continued (awaited) after initial start  
     // In C implementation, continued means all start result fields are NULL
-    if (self->s_value == NULL && self->s_exc_type == NULL && 
-        self->s_exc_value == NULL && self->s_exc_traceback == NULL) {
+    if (IS_CONTINUED(self)) {
         Py_RETURN_TRUE;
     }
     Py_RETURN_FALSE;
@@ -347,9 +392,10 @@ corostart_continued(CoroStartObject *self, PyObject *Py_UNUSED(args)) {
 
 static PyObject *
 corostart_pending(CoroStartObject *self, PyObject *Py_UNUSED(args)) {
+    assert_corostart_invariant(self);
     // Return True if the coroutine is pending, waiting for async operation
-    // This means we have a yielded value but no exception
-    if (self->s_value != NULL && self->s_exc_type == NULL) {
+    // This means we have a yielded value (s_value != NULL)
+    if (IS_PENDING(self)) {
         Py_RETURN_TRUE;
     }
     Py_RETURN_FALSE;
@@ -448,15 +494,8 @@ corostart_exception(CoroStartObject *self, PyObject *args) {
 }
 
 static PyObject *
-corostart_throw(CoroStartObject *self, PyObject *args, PyObject *kwargs) {
-    PyObject *exc;
-    long tries = 1;  // Default tries = 1
-    
-    static char *kwlist[] = {"exc", "tries", NULL};
-    
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|l", kwlist, &exc, &tries)) {
-        return NULL;
-    }
+corostart__throw(CoroStartObject *self, PyObject *exc) {
+    assert_corostart_invariant(self);
     
     if (self->wrapped_coro == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
@@ -476,239 +515,112 @@ corostart_throw(CoroStartObject *self, PyObject *args, PyObject *kwargs) {
             return NULL;
         }
     } else {
-        PyErr_SetString(PyExc_TypeError, "throw() arg must be an exception");
+        PyErr_SetString(PyExc_TypeError, "_throw() arg must be an exception");
         return NULL;
     }
     
-    // State-aware handling: check if we're in post-start, pre-await phase
-    if (self->s_value != NULL || self->s_exc_type != NULL) {
-        // We're in the pre-await state - throw and update start_result
-        // Apply the same retry logic as the post-await state
-        for (long i = 0; i < tries; i++) {
-            PyObject *result;
-            
-            // Call throw() with context support
-            if (self->context != NULL) {
-                PyObject *throw_method = PyObject_GetAttrString(self->wrapped_coro, "throw");
-                if (throw_method == NULL) {
-                    Py_DECREF(value);
-                    return NULL;
-                }
-                result = PyObject_CallMethod(self->context, "run", "OO", throw_method, value);
-                Py_DECREF(throw_method);
-            } else {
-                result = PyObject_CallMethod(self->wrapped_coro, "throw", "O", value);
-            }
-            
-            if (result != NULL) {
-                // Coroutine continued after throw - update start_result for later await
-                Py_CLEAR(self->s_value);
-                Py_CLEAR(self->s_exc_type);
-                Py_CLEAR(self->s_exc_value);
-                Py_CLEAR(self->s_exc_traceback);
-                self->s_value = result;  // Store new yielded value
-                // Continue retry loop since coroutine didn't exit
-                continue;
-            }
-            
-            // Check if we got StopIteration (normal completion)
-            if (PyErr_ExceptionMatches(PyExc_StopIteration)) {
-                PyObject *exc_type, *exc_value, *exc_traceback;
-                PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
-                
-                // Coroutine finished synchronously - clear state and return result
-                Py_CLEAR(self->s_value);
-                Py_CLEAR(self->s_exc_type);
-                Py_CLEAR(self->s_exc_value);
-                Py_CLEAR(self->s_exc_traceback);
-                
-                // Extract the value from StopIteration
-                PyObject *stop_value = NULL;
-                if (exc_value && PyObject_IsInstance(exc_value, PyExc_StopIteration)) {
-                    stop_value = PyObject_GetAttrString(exc_value, "value");
-                    if (stop_value == NULL) {
-                        PyErr_Clear();
-                    }
-                }
-                if (stop_value == NULL) {
-                    stop_value = exc_value ? exc_value : Py_None;
-                    Py_INCREF(stop_value);
-                }
-                
-                Py_XDECREF(exc_type);
-                if (exc_value != stop_value) {
-                    Py_XDECREF(exc_value);
-                }
-                Py_XDECREF(exc_traceback);
-                Py_DECREF(value);
-                return stop_value;
-            }
-            
-            // Other exception - update start_result and re-raise
-            PyObject *exc_type, *exc_value, *exc_traceback;
-            PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
-            
-            Py_CLEAR(self->s_value);
-            Py_CLEAR(self->s_exc_type);
-            Py_CLEAR(self->s_exc_value);
-            Py_CLEAR(self->s_exc_traceback);
-            
-            self->s_exc_type = exc_type;
-            self->s_exc_value = exc_value;
-            self->s_exc_traceback = exc_traceback;
-            
+    PyObject *result;
+    
+    // Call throw() with context support
+    if (self->context != NULL) {
+        PyObject *throw_method = PyObject_GetAttrString(self->wrapped_coro, "throw");
+        if (throw_method == NULL) {
             Py_DECREF(value);
-            PyErr_Restore(Py_XNewRef(exc_type), Py_XNewRef(exc_value), Py_XNewRef(exc_traceback));
             return NULL;
         }
-        
-        // Exhausted retries in pre-await state
-        PyObject *exc_type_name = PyObject_GetAttrString((PyObject *)Py_TYPE(value), "__name__");
-        PyObject *error_msg = PyUnicode_FromFormat("coroutine ignored %U", exc_type_name);
-        Py_XDECREF(exc_type_name);
-        Py_DECREF(value);
-        
-        if (error_msg) {
-            PyErr_SetObject(PyExc_RuntimeError, error_msg);
-            Py_DECREF(error_msg);
-        } else {
-            PyErr_SetString(PyExc_RuntimeError, "coroutine ignored exception");
-        }
-        return NULL;
-    }
-    
-    // Original retry logic for post-await state
-    for (long i = 0; i < tries; i++) {
-        PyObject *result;
-        
-        // Call throw() with context support
-        if (self->context != NULL) {
-            // Use context.run(coro.throw, value)
-            PyObject *throw_method = PyObject_GetAttrString(self->wrapped_coro, "throw");
-            if (throw_method == NULL) {
-                Py_DECREF(value);
-                return NULL;
-            }
-            result = PyObject_CallMethod(self->context, "run", "OO", throw_method, value);
-            Py_DECREF(throw_method);
-        } else {
-            // Direct call to coro.throw(value)
-            result = PyObject_CallMethod(self->wrapped_coro, "throw", "O", value);
-        }
-        
-        if (result != NULL) {
-            // throw() returned normally - coroutine didn't exit, it yielded a value
-            // This means the coroutine caught the exception and continued
-            Py_DECREF(result);  // Ignore the yielded value
-            // Continue the loop to try again
-            continue;
-        }
-        
-        // Check if we got StopIteration (normal completion)
-        if (PyErr_ExceptionMatches(PyExc_StopIteration)) {
-            PyObject *exc_type, *exc_value, *exc_traceback;
-            PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
-            
-            // Extract the value from StopIteration
-            PyObject *stop_value = NULL;
-            if (exc_value && PyObject_IsInstance(exc_value, PyExc_StopIteration)) {
-                stop_value = PyObject_GetAttrString(exc_value, "value");
-                if (stop_value == NULL) {
-                    PyErr_Clear();
-                }
-            }
-            if (stop_value == NULL) {
-                // If we couldn't get the value attribute, use the exception value itself
-                stop_value = exc_value ? exc_value : Py_None;
-                Py_INCREF(stop_value);
-            }
-            
-            Py_XDECREF(exc_type);
-            if (exc_value != stop_value) {
-                Py_XDECREF(exc_value);
-            }
-            Py_XDECREF(exc_traceback);
-            Py_DECREF(value);
-            return stop_value;
-        }
-        
-        // Other exception occurred, continue the loop if we have more tries
-        if (i < tries - 1) {
-            PyErr_Clear();  // Clear the error for next iteration
-        }
-    }
-    
-    // All tries exhausted, raise RuntimeError
-    PyObject *exc_type_name = PyObject_GetAttrString((PyObject *)Py_TYPE(value), "__name__");
-    PyObject *error_msg = PyUnicode_FromFormat("coroutine ignored %U", exc_type_name);
-    Py_XDECREF(exc_type_name);
-    Py_DECREF(value);
-    
-    if (error_msg) {
-        PyErr_SetObject(PyExc_RuntimeError, error_msg);
-        Py_DECREF(error_msg);
+        result = PyObject_CallMethod(self->context, "run", "OO", throw_method, value);
+        Py_DECREF(throw_method);
     } else {
-        PyErr_SetString(PyExc_RuntimeError, "coroutine ignored exception");
+        result = PyObject_CallMethod(self->wrapped_coro, "throw", "O", value);
     }
     
-    return NULL;
+    if (result != NULL) {
+        // Coroutine yielded a value - update state to pending with the new value
+        Py_CLEAR(self->s_value);
+        Py_CLEAR(self->s_exc_type);
+        Py_CLEAR(self->s_exc_value);
+        Py_CLEAR(self->s_exc_traceback);
+        self->s_value = result;  // Store new yielded value (becomes pending state)
+        
+        Py_DECREF(value);
+        Py_RETURN_NONE;
+    }
+    
+    // Check if we got StopIteration (normal completion)
+    if (PyErr_ExceptionMatches(PyExc_StopIteration)) {
+        PyObject *exc_type, *exc_value, *exc_traceback;
+        PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
+        
+        // Coroutine finished synchronously - update state to done
+        Py_CLEAR(self->s_value);
+        Py_CLEAR(self->s_exc_type);
+        Py_CLEAR(self->s_exc_value);
+        Py_CLEAR(self->s_exc_traceback);
+        
+        // Set done state with StopIteration exception
+        self->s_exc_type = exc_type;
+        self->s_exc_value = exc_value;
+        self->s_exc_traceback = exc_traceback;
+        
+        Py_DECREF(value);
+        Py_RETURN_NONE;
+    }
+    
+    // Any other exception - update state to done with the exception
+    PyObject *exc_type, *exc_value, *exc_traceback;
+    PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
+    
+    Py_CLEAR(self->s_value);
+    Py_CLEAR(self->s_exc_type);
+    Py_CLEAR(self->s_exc_value);
+    Py_CLEAR(self->s_exc_traceback);
+    
+    // Set done state with the exception
+    self->s_exc_type = exc_type;
+    self->s_exc_value = exc_value;
+    self->s_exc_traceback = exc_traceback;
+    
+    Py_DECREF(value);
+    Py_RETURN_NONE;
 }
+
+
 
 static PyObject *
 corostart_close(CoroStartObject *self, PyObject *args) {
-    // Close the coroutine - state-aware like Python implementation
-    // Post-start, pre-await: Close coroutine and clear start_result  
-    // Post-await: Close coroutine directly (original behavior)
+    assert_corostart_invariant(self);
     
     if (self->wrapped_coro == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
         return NULL;
     }
     
-    // State-aware handling: check if we're in post-start, pre-await phase
-    if (self->s_value != NULL || self->s_exc_type != NULL) {
-        // We're in the pre-await state - close the coroutine and clear state
-        PyObject *result;
-        
-        // Call close() with context support
-        if (self->context != NULL) {
-            // Create a callable that will invoke close()
-            PyObject *close_callable = PyObject_GetAttrString(self->wrapped_coro, "close");
-            if (close_callable == NULL) {
-                return NULL;
-            }
-            // Call context.run(close_callable)
-            result = PyObject_CallMethod(self->context, "run", "O", close_callable);
-            Py_DECREF(close_callable);
-        } else {
-            // Direct call to coro.close()
-            result = PyObject_CallMethod(self->wrapped_coro, "close", NULL);
+    PyObject *result;
+    
+    // Always close the underlying coroutine
+    if (self->context != NULL) {
+        // Create a callable that will invoke close()
+        PyObject *close_callable = PyObject_GetAttrString(self->wrapped_coro, "close");
+        if (close_callable == NULL) {
+            return NULL;
         }
-        
-        // Always clear start result after closing in pre-await state
-        Py_CLEAR(self->s_value);
-        Py_CLEAR(self->s_exc_type);
-        Py_CLEAR(self->s_exc_value);
-        Py_CLEAR(self->s_exc_traceback);
-        
-        return result;
+        // Call context.run(close_callable)
+        result = PyObject_CallMethod(self->context, "run", "O", close_callable);
+        Py_DECREF(close_callable);
     } else {
-        // Post-await state - close the coroutine directly (original behavior)
-        if (self->context != NULL) {
-            // Create a callable that will invoke close()
-            PyObject *close_callable = PyObject_GetAttrString(self->wrapped_coro, "close");
-            if (close_callable == NULL) {
-                return NULL;
-            }
-            // Call context.run(close_callable)
-            PyObject *result = PyObject_CallMethod(self->context, "run", "O", close_callable);
-            Py_DECREF(close_callable);
-            return result;
-        } else {
-            // Direct call to coro.close()
-            return PyObject_CallMethod(self->wrapped_coro, "close", NULL);
-        }
+        // Direct call to coro.close()
+        result = PyObject_CallMethod(self->wrapped_coro, "close", NULL);
     }
+    
+    // Transition to continued() state so that subsequent await attempts 
+    // trigger the "cannot reuse already awaited coroutine" error in __await__
+    Py_CLEAR(self->s_value);
+    Py_CLEAR(self->s_exc_type);
+    Py_CLEAR(self->s_exc_value);
+    Py_CLEAR(self->s_exc_traceback);
+    
+    assert_corostart_invariant(self);
+    return result;
 }
 
 static PyMethodDef corostart_methods[] = {
@@ -717,7 +629,7 @@ static PyMethodDef corostart_methods[] = {
     {"pending", (PyCFunction)corostart_pending, METH_NOARGS, "Return True if coroutine is pending, waiting for async operation"},
     {"result", (PyCFunction)corostart_result, METH_NOARGS, "Return result or raise exception"},
     {"exception", (PyCFunction)corostart_exception, METH_NOARGS, "Return exception or None"},
-    {"throw", (PyCFunction)corostart_throw, METH_VARARGS | METH_KEYWORDS, "Throw an exception into the coroutine"},
+    {"_throw", (PyCFunction)corostart__throw, METH_O, "Core throw method - throw an exception into the coroutine"},
     {"close", (PyCFunction)corostart_close, METH_NOARGS, "Close the coroutine"},
     {NULL, NULL, 0, NULL}
 };
@@ -778,6 +690,7 @@ corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         return NULL;
     }
     
+    assert_corostart_invariant(cs);
     return (PyObject *)cs;
 }
 

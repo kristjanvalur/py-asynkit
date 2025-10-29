@@ -1322,3 +1322,96 @@ class TestCoroStartContext:
             assert self.test_var.get() == "should_not_change"
 
         close_context.run(check_unchanged)
+        
+    async def test_context_isolation_blocking(self, corostart_type):
+        """Test that context changes in blocking close() do not leak out"""
+        self.sync = True
+
+        async def context_changing_coro():
+            try:
+                self.test_var.set("inside_coro")
+                await asyncio.sleep(0)
+                return 1
+            finally:
+                # Change context variable during cleanup
+                self.test_var.set("changed_in_cleanup")
+                await asyncio.sleep(0)
+
+        # Set up initial context
+        self.test_var.set("initial")
+        
+        # copy the context
+        copied_context = copy_context()
+
+        cs = corostart_type(context_changing_coro(), context=copied_context)
+        assert not cs.done()
+        
+        assert self.test_var.get() == "initial"
+        
+        # run the coroutine to the end
+        v = await cs
+        assert v == 1
+        
+        assert self.test_var.get() == "initial"  # Context changes should be isolated
+        
+    async def test_context_isolation_blocking_with_task(self, corostart_type):
+        """Test that context changes in blocking close() do not leak out"""
+        self.sync = True
+
+        async def context_changing_coro():
+            try:
+                self.test_var.set("inside_coro")
+                await asyncio.sleep(0)
+                return 1
+            finally:
+                # Change context variable during cleanup
+                self.test_var.set("changed_in_cleanup")
+                await asyncio.sleep(0)
+
+        # Set up initial context
+        self.test_var.set("initial")
+        # copy the context
+        copied_context = copy_context()
+
+        cs = corostart_type(context_changing_coro(), context=copied_context)
+        assert not cs.done()
+        
+        assert self.test_var.get() == "initial"
+        
+        # run the coroutine to the end
+        v = await asyncio.create_task(cs.as_coroutine())
+        assert v == 1
+        
+        assert self.test_var.get() == "initial"  # Context changes should be isolated
+        
+    async def test_context_isolation_blocking_with_awaitable(self, corostart_type):
+        """Test that context changes in blocking close() do not leak out when using as_awaitable()"""
+        self.sync = True
+
+        async def context_changing_coro():
+            try:
+                self.test_var.set("inside_coro")
+                await asyncio.sleep(0)
+                return 1
+            finally:
+                # Change context variable during cleanup
+                self.test_var.set("changed_in_cleanup")
+                await asyncio.sleep(0)
+
+        # Set up initial context
+        self.test_var.set("initial")
+        # copy the context
+        copied_context = copy_context()
+
+        cs = corostart_type(context_changing_coro(), context=copied_context)
+        assert not cs.done()
+        
+        assert self.test_var.get() == "initial"
+        
+        # run the coroutine to the end using as_awaitable()
+        v = await cs.as_awaitable()
+
+        assert v == 1
+        assert self.test_var.get() == "initial"  # Context changes should be isolated
+        
+        
