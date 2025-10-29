@@ -4,7 +4,7 @@
  * Phase 3: Create CoroStartWrapper that implements both iterator and coroutine protocols
  * following the PyCoroWrapper pattern discovered in CPython source
  * 
- * Updated: 2025-10-28 - Added consumed() and suspended() API methods
+ * Updated: 2025-10-29 - Updated to continued() and pending() API methods (renamed from consumed/suspended)
  */
 
 #define PY_SSIZE_T_CLEAN
@@ -62,7 +62,7 @@ corostart_start(CoroStartObject *self)
     }
 
     if (self->s_value != NULL) {
-        /* Coroutine yielded a value - it's suspended */
+        /* Coroutine yielded a value - it's pending */
         return 0;  /* Success */
     } else {
         /* Exception occurred - fetch and store it */
@@ -135,7 +135,7 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
         if (corostart->s_exc_type != NULL) {
             /* Exception occurred during start - re-raise it and clear state */
             PyErr_Restore(corostart->s_exc_type, corostart->s_exc_value, corostart->s_exc_traceback);
-            /* Clear the fields (PyErr_Restore steals references) - marks as consumed */
+            /* Clear the fields (PyErr_Restore steals references) - marks as continued */
             corostart->s_exc_type = NULL;
             corostart->s_exc_value = NULL;
             corostart->s_exc_traceback = NULL;
@@ -143,9 +143,9 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
         }
         
         if (corostart->s_value != NULL) {
-            /* Coroutine yielded a value - return it and clear state to mark as consumed */
+            /* Coroutine yielded a value - return it and clear state to mark as continued */
             PyObject *result = corostart->s_value;
-            corostart->s_value = NULL;  /* Clear and transfer ownership - marks as consumed */
+            corostart->s_value = NULL;  /* Clear and transfer ownership - marks as continued */
             return result;
         }
         
@@ -154,10 +154,10 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
         return NULL;
     }
 
-    /* Check if consumed (all start result fields are NULL) */
+    /* Check if continued (all start result fields are NULL) */
     if (corostart->s_value == NULL && corostart->s_exc_type == NULL && 
         corostart->s_exc_value == NULL && corostart->s_exc_traceback == NULL) {
-        /* Consumed coroutine, trigger the "cannot reuse" error */
+        /* Continued coroutine, trigger the "cannot reuse" error */
         return PyObject_CallMethod(corostart->wrapped_coro, "send", "O", Py_None);
     }
 
@@ -335,9 +335,9 @@ corostart_done(CoroStartObject *self, PyObject *args) {
 }
 
 static PyObject *
-corostart_consumed(CoroStartObject *self, PyObject *Py_UNUSED(args)) {
-    // Return True if the coroutine has been consumed by the await mechanism  
-    // In C implementation, consumed means all start result fields are NULL
+corostart_continued(CoroStartObject *self, PyObject *Py_UNUSED(args)) {
+    // Return True if the coroutine has been continued (awaited) after initial start  
+    // In C implementation, continued means all start result fields are NULL
     if (self->s_value == NULL && self->s_exc_type == NULL && 
         self->s_exc_value == NULL && self->s_exc_traceback == NULL) {
         Py_RETURN_TRUE;
@@ -346,8 +346,8 @@ corostart_consumed(CoroStartObject *self, PyObject *Py_UNUSED(args)) {
 }
 
 static PyObject *
-corostart_suspended(CoroStartObject *self, PyObject *Py_UNUSED(args)) {
-    // Return True if the coroutine is suspended waiting for async operation
+corostart_pending(CoroStartObject *self, PyObject *Py_UNUSED(args)) {
+    // Return True if the coroutine is pending, waiting for async operation
     // This means we have a yielded value but no exception
     if (self->s_value != NULL && self->s_exc_type == NULL) {
         Py_RETURN_TRUE;
@@ -713,8 +713,8 @@ corostart_close(CoroStartObject *self, PyObject *args) {
 
 static PyMethodDef corostart_methods[] = {
     {"done", (PyCFunction)corostart_done, METH_NOARGS, "Return True if coroutine finished synchronously during initial start"},
-    {"consumed", (PyCFunction)corostart_consumed, METH_NOARGS, "Return True if coroutine has been consumed by the await mechanism"},
-    {"suspended", (PyCFunction)corostart_suspended, METH_NOARGS, "Return True if coroutine is suspended waiting for async operation"},
+    {"continued", (PyCFunction)corostart_continued, METH_NOARGS, "Return True if coroutine has been continued (awaited) after initial start"},
+    {"pending", (PyCFunction)corostart_pending, METH_NOARGS, "Return True if coroutine is pending, waiting for async operation"},
     {"result", (PyCFunction)corostart_result, METH_NOARGS, "Return result or raise exception"},
     {"exception", (PyCFunction)corostart_exception, METH_NOARGS, "Return exception or None"},
     {"throw", (PyCFunction)corostart_throw, METH_VARARGS | METH_KEYWORDS, "Throw an exception into the coroutine"},

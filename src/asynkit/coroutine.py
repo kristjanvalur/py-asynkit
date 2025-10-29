@@ -36,7 +36,7 @@ from .tools import create_task as _create_task
 try:
     from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[import-untyped]
 
-    _HAVE_C_EXTENSION = True  # Re-enabled - C extension now has consumed/suspended methods
+    _HAVE_C_EXTENSION = True  # Re-enabled - C extension now has continued/pending methods
 except ImportError:
     _CCoroStartBase = None
     _HAVE_C_EXTENSION = False
@@ -222,7 +222,7 @@ class CoroStartBase(Awaitable[T_co]):
         _awaitable_.
         """
         if self._start_result is None:
-            # consumed coroutine, trigger the "cannot reuse" error
+            # continued coroutine, trigger the "cannot reuse" error
             self.coro.send(None)
             assert False, "unreachable"
 
@@ -354,12 +354,12 @@ class CoroStartBase(Awaitable[T_co]):
         """returns true if the coroutine finished synchronously during initial start"""
         return self._start_result is not None and self._start_result[1] is not None
 
-    def consumed(self) -> bool:
-        """returns true if the coroutine has been consumed by the await mechanism"""
+    def continued(self) -> bool:
+        """returns true if the coroutine has been continued (awaited) after initial start"""
         return self._start_result is None
 
-    def suspended(self) -> bool:
-        """returns true if the coroutine is suspended waiting for async operation"""
+    def pending(self) -> bool:
+        """returns true if the coroutine is pending, waiting for async operation"""
         return self._start_result is not None and self._start_result[1] is None
 
     def result(self) -> T_co:
@@ -436,16 +436,16 @@ class CoroStartMixin(Generic[T_co]):
         
         Uses only public API - no direct access to private state.
         """
-        # If coroutine is already consumed, nothing to close
-        if self.consumed():
+        # If coroutine is already continued, nothing to close
+        if self.continued():
             return
             
-        # If coroutine finished synchronously, just return  
+    # If coroutine finished synchronously, just return  
         if self.done():
             return
             
-        # For suspended coroutines, use athrow to send GeneratorExit
-        # This will handle both pre-await and post-await states properly
+    # For suspended coroutines, use athrow to send GeneratorExit
+    # This will handle both pre-await and post-await states properly
         try:
             await self.athrow(GeneratorExit())
         except GeneratorExit:
@@ -500,13 +500,14 @@ class CoroStart(CoroStartBase[T_co], CoroStartMixin[T_co]):
     pass
 
 
-# C Extension Integration
+ # C Extension Integration
 # Use C implementation of CoroStartBase when available for performance
 # The C version eliminates Python generator overhead in the suspend/resume hot path
 _PyCoroStartBase = CoroStartBase  # Keep reference to Python implementation
 _PyCoroStart = CoroStart  # Keep reference to Python implementation
 
 # Simple multiple inheritance approach for C extension integration
+
 if _HAVE_C_EXTENSION and _CCoroStartBase is not None:
     # Pure C implementation with Python mixin via multiple inheritance
     class _CCoroStart(_CCoroStartBase, CoroStartMixin[T_co]):

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **CoroStart State Nomenclature**: Updated state method names for clarity
+  - `consumed()` → `continued()` - indicates coroutine has been awaited and finished
+  - `suspended()` → `pending()` - indicates coroutine is waiting for async operation
+  - Both Python and C extension implementations updated with new method names
+  - Old methods are no longer available - update code to use new names
+
 ## [0.14.1] - 2025-10-25
 
 ### New Features
