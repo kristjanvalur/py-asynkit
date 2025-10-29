@@ -2,6 +2,10 @@
 .vscode/
 scratch/
 
+# Prevent development test files in project root
+/*.py
+!setup.py
+
 # standard python .gitignore below
 
 # Byte-compiled / optimized / DLL files
