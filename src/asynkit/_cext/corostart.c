@@ -160,12 +160,12 @@ corostart_wrapper_iternext(CoroStartWrapperObject *self)
 static PyObject *
 corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
 {
-    if (self->corostart == NULL) {
+    CoroStartObject *corostart = (CoroStartObject *)self->corostart;
+    
+    if (corostart == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "CoroStart object is NULL");
         return NULL;
     }
-    
-    CoroStartObject *corostart = (CoroStartObject *)self->corostart;
     
     /* Check if we have start results (first call) */
     if (!IS_CONTINUED(corostart)) {
@@ -186,23 +186,11 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
             return NULL;
         }
         
-        if (IS_PENDING(corostart)) {
-            /* Coroutine yielded a value - return it and clear state to mark as continued */
-            PyObject *result = corostart->s_value;
-            corostart->s_value = NULL;  /* Clear and transfer ownership - marks as continued */
-            return result;
-        }
-        
-        /* This shouldn't happen */
-        PyErr_SetString(PyExc_RuntimeError, "Invalid start state");
-        return NULL;
-    }
-
-    /* Check if continued (all start result fields are NULL) */
-    if (corostart->s_value == NULL && corostart->s_exc_type == NULL && 
-        corostart->s_exc_value == NULL && corostart->s_exc_traceback == NULL) {
-        /* Continued coroutine, trigger the "cannot reuse" error */
-        return PyObject_CallMethod(corostart->wrapped_coro, "send", "O", Py_None);
+        // we are pending
+        /* Coroutine yielded a value - return it and clear state to mark as continued */
+        PyObject *result = corostart->s_value;
+        corostart->s_value = NULL;  /* Clear and transfer ownership - marks as continued */
+        return result;
     }
 
     /* No start results - coroutine was already started, delegate to wrapped coroutine */
@@ -213,11 +201,11 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
     
     /* Call send() on the wrapped coroutine (with context support) */
     if (corostart->context != NULL) {
-        /* Use context.run(coro.send, arg) */
         PyObject *send_method = PyObject_GetAttrString(corostart->wrapped_coro, "send");
         if (send_method == NULL) {
             return NULL;
         }
+        /* Use context.run(coro.send, arg) */
         PyObject *result = PyObject_CallMethod(corostart->context, "run", "OO", send_method, arg);
         Py_DECREF(send_method);
         return result;
@@ -273,6 +261,8 @@ corostart_wrapper_close(CoroStartWrapperObject *self, PyObject *Py_UNUSED(ignore
         PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
         return NULL;
     }
+
+    // todo: call with context
     
     /* Call close() directly on the wrapped coroutine */
     return PyObject_CallMethod(corostart->wrapped_coro, "close", NULL);
