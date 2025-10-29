@@ -218,11 +218,11 @@ class TestCoroStart:
         else:
             return self.coro1_nb, [1, 2, "a"]
 
-    async def test_auto_start(self, block, anyio_backend):
+    async def test_auto_start(self, block, anyio_backend, corostart_type):
         corofn, expect = self.get_coro1(block)
         log = []
         coro = corofn(log)
-        cs = asynkit.CoroStart(coro)
+        cs = corostart_type(coro)
         if block:
             assert not cs.done()
             assert asynkit.coro_is_suspended(coro)
@@ -234,20 +234,20 @@ class TestCoroStart:
             assert asynkit.coro_is_finished(coro)
             assert log == [1, 2]
 
-    async def test_await(self, block):
+    async def test_await(self, block, corostart_type):
         corofn, expect = self.get_coro1(block)
         log = []
         coro = corofn(log)
-        cs = asynkit.CoroStart(coro)
+        cs = corostart_type(coro)
         log.append("a")
         assert await cs == expect
         assert log == expect
 
-    async def test_await_twice(self, block):
+    async def test_await_twice(self, block, corostart_type):
         corofn, expect = self.get_coro1(block)
         log = []
         coro = corofn(log)
-        cs = asynkit.CoroStart(coro)
+        cs = corostart_type(coro)
         log.append("a")
         assert await cs == expect
         assert log == expect
@@ -255,7 +255,7 @@ class TestCoroStart:
             await cs
         assert err.match("cannot reuse already awaited")
 
-    async def test_close(self, block):
+    async def test_close(self, block, corostart_type):
         # first test regular coroutine
         async def normal():
             await sleep(0)
@@ -268,11 +268,12 @@ class TestCoroStart:
             await coro
         assert err.match("cannot reuse already")
 
-        # and now our own
+        # and now our own - using the parametrized CoroStart type
         corofn, expect = self.get_coro1(block)
         log = []
         coro = corofn(log)
-        cs = asynkit.CoroStart(coro)
+        cs = corostart_type(coro)  # Use the parametrized implementation
+
         log.append("a")
         cs.close()
         cs.close()
@@ -280,17 +281,17 @@ class TestCoroStart:
             await cs
         assert err.match("cannot reuse already")
 
-    async def test_start_err(self, block):
+    async def test_start_err(self, block, corostart_type):
         log = []
-        cs = asynkit.CoroStart(self.coro2(log))
+        cs = corostart_type(self.coro2(log))
         assert cs.done()
         with pytest.raises(ZeroDivisionError):
             await cs.as_coroutine()
 
-    async def test_as_coroutine(self, block):
+    async def test_as_coroutine(self, block, corostart_type):
         coro, expect = self.get_coro1(block)
         log = []
-        cs = asynkit.CoroStart(coro(log))
+        cs = corostart_type(coro(log))
         cr = cs.as_coroutine()
         assert inspect.iscoroutine(cr)
         log.append("a")
@@ -298,10 +299,10 @@ class TestCoroStart:
         assert log == expect
 
     @pytest.mark.parametrize("anyio_backend", ["asyncio"])
-    async def test_as_future(self, block, anyio_backend):
+    async def test_as_future(self, block, anyio_backend, corostart_type):
         coro, expect = self.get_coro1(block)
         log = []
-        cs = asynkit.CoroStart(coro(log))
+        cs = corostart_type(coro(log))
         log.append("a")
         if block:
             with pytest.raises(RuntimeError) as err:
@@ -314,10 +315,10 @@ class TestCoroStart:
             assert await fut == expect
 
     @pytest.mark.parametrize("anyio_backend", ["asyncio"])
-    async def test_as_awaitable(self, block, anyio_backend):
+    async def test_as_awaitable(self, block, anyio_backend, corostart_type):
         coro, expect = self.get_coro1(block)
         log = []
-        cs = asynkit.CoroStart(coro(log))
+        cs = corostart_type(coro(log))
         log.append("a")
         awaitable = cs.as_awaitable()
         if block:
@@ -326,28 +327,28 @@ class TestCoroStart:
             assert isinstance(awaitable, asyncio.Future)
         assert await awaitable == expect
 
-    async def test_result(self, block):
+    async def test_result(self, block, corostart_type):
         coro, _ = self.get_coro1(block)
         log = []
-        cs = asynkit.CoroStart(coro(log))
+        cs = corostart_type(coro(log))
         if block:
             assert not cs.done()
             with pytest.raises(asyncio.InvalidStateError):
                 cs.result()
         else:
             assert cs.result() is log
-        cs = asynkit.CoroStart(self.coro2(log))
+        cs = corostart_type(self.coro2(log))
         assert cs.done()
         with pytest.raises(ZeroDivisionError):
             cs.result()
 
-    async def test_exception(self, block):
+    async def test_exception(self, block, corostart_type):
         async def coro():
             if block:
                 await sleep(0.01)
             1 / 0
 
-        cs = asynkit.CoroStart(coro())
+        cs = corostart_type(coro())
         if block:
             assert not cs.done()
             with pytest.raises(asyncio.InvalidStateError):
@@ -355,10 +356,10 @@ class TestCoroStart:
         else:
             assert isinstance(cs.exception(), ZeroDivisionError)
 
-    async def test_low_level_close(self, block):
+    async def test_low_level_close(self, block, corostart_type):
         coro, _ = self.get_coro1(block)
         log = []
-        cs = asynkit.CoroStart(coro(log))
+        cs = corostart_type(coro(log))
         cont = cs.as_coroutine()
         if not block:
             with pytest.raises(StopIteration) as err:
@@ -370,14 +371,14 @@ class TestCoroStart:
         if block:
             assert self.gen_exit is True
 
-    async def test_closing(self, block):
+    async def test_closing(self, block, corostart_type):
         coro, _ = self.get_coro1(block)
-        async with aclosing(asynkit.CoroStart(coro([]))) as cs:
+        async with aclosing(corostart_type(coro([]))) as cs:
             return await cs
 
-    async def test_closing_abort(self, block):
+    async def test_closing_abort(self, block, corostart_type):
         coro, _ = self.get_coro1(block)
-        async with aclosing(asynkit.CoroStart(coro([]))) as cs:
+        async with aclosing(corostart_type(coro([]))) as cs:
             assert not self.gen_exit
             if cs.done():
                 return await cs
@@ -423,11 +424,11 @@ class TestCoroStartClose:
             pass
         return "handler"
 
-    def test_close(self):
+    def test_close(self, corostart_type):
         self.sync = True
         self.stage[0] = 0
         c = self.cleanupper()
-        starter = asynkit.CoroStart(c)
+        starter = corostart_type(c)
         assert not starter.done()
         assert self.stage[0] == 1
         with pytest.raises(RuntimeError) as err:
@@ -435,19 +436,19 @@ class TestCoroStartClose:
         assert err.match("coroutine ignored GeneratorExit")
         assert self.stage[0] == 2
 
-    async def test_aclose(self):
+    async def test_aclose(self, corostart_type):
         self.stage[0] = 0
         c = self.cleanupper()
-        starter = asynkit.CoroStart(c)
+        starter = corostart_type(c)
         assert self.stage[0] == 1
         assert not starter.done()
         await starter.aclose()
         assert self.stage[0] == 3
 
-    async def test_athrow(self):
+    async def test_athrow(self, corostart_type):
         self.stage[0] = 0
         c = self.cleanupper()
-        starter = asynkit.CoroStart(c)
+        starter = corostart_type(c)
         assert self.stage[0] == 1
         assert not starter.done()
         with pytest.raises(RuntimeError) as err:
@@ -455,21 +456,21 @@ class TestCoroStartClose:
         assert self.stage[0] == 3
         assert err.match("face")
 
-    async def test_athrow_handled(self):
+    async def test_athrow_handled(self, corostart_type):
         self.stage[0] = 0
         c = self.cleanupper()
-        starter = asynkit.CoroStart(c)
+        starter = corostart_type(c)
         assert self.stage[0] == 1
         assert not starter.done()
         result = await starter.athrow(ZeroDivisionError)
         assert self.stage[0] == 4
         assert result == "result"
 
-    def test_throw_handled(self):
+    def test_throw_handled(self, corostart_type):
         self.sync = True
         self.stage[0] = 0
         c = self.cleanupper()
-        starter = asynkit.CoroStart(c)
+        starter = corostart_type(c)
         assert self.stage[0] == 1
         assert not starter.done()
         with pytest.raises(RuntimeError) as err:
@@ -477,59 +478,59 @@ class TestCoroStartClose:
         assert err.match("coroutine ignored")
         assert self.stage[0] == 2
 
-    def test_throw_handled_2(self):
+    def test_throw_handled_2(self, corostart_type):
         self.sync = True
         self.stage[0] = 0
         c = self.cleanupper()
-        starter = asynkit.CoroStart(c)
+        starter = corostart_type(c)
         assert self.stage[0] == 1
         assert not starter.done()
         with pytest.raises(asyncio.CancelledError):
             starter.throw(asyncio.CancelledError, tries=2)
         assert self.stage[0] == 2
 
-    def test_throw_simple(self):
+    def test_throw_simple(self, corostart_type):
         self.sync = True
         c = self.simple()
-        starter = asynkit.CoroStart(c)
+        starter = corostart_type(c)
         assert starter.done()
         with pytest.raises(RuntimeError) as err:
             starter.throw(asyncio.CancelledError())
         assert err.match("cannot reuse already awaited coroutine")
 
-    def test_throw_handled_return(self):
+    def test_throw_handled_return(self, corostart_type):
         self.sync = True
         c = self.handler()
-        starter = asynkit.CoroStart(c)
+        starter = corostart_type(c)
         assert not starter.done()
         assert starter.throw(ZeroDivisionError()) == "handler"
 
-    async def test_close_simple(self):
-        starter = asynkit.CoroStart(self.simple())
+    async def test_close_simple(self, corostart_type):
+        starter = corostart_type(self.simple())
         assert starter.done()
         starter.close()
 
-        starter = asynkit.CoroStart(self.simple())
+        starter = corostart_type(self.simple())
         assert await starter == "simple"
         starter.close()
 
-    async def test_aclose_simple(self):
-        starter = asynkit.CoroStart(self.simple())
+    async def test_aclose_simple(self, corostart_type):
+        starter = corostart_type(self.simple())
         assert starter.done()
         await starter.aclose()
 
-        starter = asynkit.CoroStart(self.simple())
+        starter = corostart_type(self.simple())
         assert await starter == "simple"
         await starter.aclose()
 
-    async def test_athrow_simple(self):
-        starter = asynkit.CoroStart(self.simple())
+    async def test_athrow_simple(self, corostart_type):
+        starter = corostart_type(self.simple())
         assert starter.done()
         with pytest.raises(RuntimeError) as err:
             await starter.athrow(ZeroDivisionError())
         assert err.match("cannot reuse")
 
-        starter = asynkit.CoroStart(self.simple())
+        starter = corostart_type(self.simple())
         assert await starter == "simple"
         with pytest.raises(RuntimeError) as err:
             await starter.athrow(ZeroDivisionError())
@@ -1111,7 +1112,7 @@ class TestCoroStartContext:
         ctx.run(set_var)
         return ctx
 
-    async def test_close_with_context(self):
+    async def test_close_with_context(self, corostart_type):
         """Test that close() uses context from CoroStart creation"""
         # Set up initial context
         self.test_var.set("outer")
@@ -1120,7 +1121,7 @@ class TestCoroStartContext:
         close_context = self.make_context_with_var("close_context")
 
         # Start coroutine in the specific context
-        cs = asynkit.CoroStart(self.coro_with_cleanup(), context=close_context)
+        cs = corostart_type(self.coro_with_cleanup(), context=close_context)
         assert not cs.done()
 
         # Close should raise RuntimeError since coro does async cleanup and ignores GeneratorExit
@@ -1138,7 +1139,7 @@ class TestCoroStartContext:
 
         close_context.run(check_cleanup)
 
-    async def test_close_clean_exit_with_context(self):
+    async def test_close_clean_exit_with_context(self, corostart_type):
         """Test that close() works with context when coroutine exits cleanly"""
         # Set up initial context
         self.test_var.set("outer")
@@ -1147,7 +1148,7 @@ class TestCoroStartContext:
         close_context = self.make_context_with_var("close_context")
 
         # Start coroutine in the specific context
-        cs = asynkit.CoroStart(self.coro_clean_exit(), context=close_context)
+        cs = corostart_type(self.coro_clean_exit(), context=close_context)
         assert not cs.done()
 
         # Close should work cleanly
@@ -1162,12 +1163,12 @@ class TestCoroStartContext:
 
         close_context.run(check_close)
 
-    async def test_close_no_context(self):
+    async def test_close_no_context(self, corostart_type):
         """Test that close() works without context (context=None)"""
         # Set context value
         self.test_var.set("current")
 
-        cs = asynkit.CoroStart(self.coro_clean_exit(), context=None)
+        cs = corostart_type(self.coro_clean_exit(), context=None)
         assert not cs.done()
 
         # Close should work cleanly
@@ -1176,7 +1177,7 @@ class TestCoroStartContext:
         # Clean exit should have run in current context
         assert self.test_var.get() == "clean_exit"
 
-    def test_close_sync_with_context(self):
+    def test_close_sync_with_context(self, corostart_type):
         """Test synchronous close() with context (should raise for blocking coro)"""
         self.sync = True
 
@@ -1184,7 +1185,7 @@ class TestCoroStartContext:
         self.test_var.set("outer")
         close_context = self.make_context_with_var("close_sync")
 
-        cs = asynkit.CoroStart(self.coro_ignores_exception(), context=close_context)
+        cs = corostart_type(self.coro_ignores_exception(), context=close_context)
         assert not cs.done()
 
         # Should raise RuntimeError when coroutine ignores GeneratorExit
@@ -1198,13 +1199,13 @@ class TestCoroStartContext:
 
         close_context.run(check_context)
 
-    async def test_throw_with_context(self):
+    async def test_throw_with_context(self, corostart_type):
         """Test throw() with context variable propagation from CoroStart"""
         # Set up contexts
         self.test_var.set("outer")
         throw_context = self.make_context_with_var("throw_context")
 
-        cs = asynkit.CoroStart(self.coro_with_cleanup(), context=throw_context)
+        cs = corostart_type(self.coro_with_cleanup(), context=throw_context)
         assert not cs.done()
 
         # Throw exception - should raise RuntimeError since coro ignores it in finally
@@ -1221,7 +1222,7 @@ class TestCoroStartContext:
 
         throw_context.run(check_cleanup)
 
-    async def test_throw_handled_with_context(self):
+    async def test_throw_handled_with_context(self, corostart_type):
         """Test throw() where exception is handled, with context"""
 
         async def handler_coro():
@@ -1237,7 +1238,7 @@ class TestCoroStartContext:
         self.test_var.set("outer")
         throw_context = self.make_context_with_var("throw_context")
 
-        cs = asynkit.CoroStart(handler_coro(), context=throw_context)
+        cs = corostart_type(handler_coro(), context=throw_context)
         assert not cs.done()
 
         # Throw exception that gets handled
@@ -1251,7 +1252,7 @@ class TestCoroStartContext:
 
         throw_context.run(check_handler)
 
-    def test_throw_sync_with_context(self):
+    def test_throw_sync_with_context(self, corostart_type):
         """Test synchronous throw() with context and retry logic"""
         self.sync = True
 
@@ -1259,7 +1260,7 @@ class TestCoroStartContext:
         self.test_var.set("outer")
         throw_context = self.make_context_with_var("throw_sync")
 
-        cs = asynkit.CoroStart(self.coro_ignores_exception(), context=throw_context)
+        cs = corostart_type(self.coro_ignores_exception(), context=throw_context)
         assert not cs.done()
 
         # Should raise the thrown exception after retries
@@ -1272,7 +1273,7 @@ class TestCoroStartContext:
 
         throw_context.run(check_context)
 
-    def test_throw_handled_return_with_context(self):
+    def test_throw_handled_return_with_context(self, corostart_type):
         """Test synchronous throw() that returns a value with context"""
         self.sync = True
 
@@ -1287,7 +1288,7 @@ class TestCoroStartContext:
         self.test_var.set("outer")
         throw_context = self.make_context_with_var("sync_throw")
 
-        cs = asynkit.CoroStart(sync_handler(), context=throw_context)
+        cs = corostart_type(sync_handler(), context=throw_context)
         assert not cs.done()
 
         result = cs.throw(ZeroDivisionError())
@@ -1299,7 +1300,7 @@ class TestCoroStartContext:
 
         throw_context.run(check_handler)
 
-    async def test_close_completed_coroutine(self):
+    async def test_close_completed_coroutine(self, corostart_type):
         """Test close() on already completed coroutine with context"""
 
         async def simple_coro():
@@ -1308,7 +1309,7 @@ class TestCoroStartContext:
         self.test_var.set("outer")
         close_context = self.make_context_with_var("should_not_change")
 
-        cs = asynkit.CoroStart(simple_coro(), context=close_context)
+        cs = corostart_type(simple_coro(), context=close_context)
         assert cs.done()  # Completed immediately
 
         # Close should be no-op for completed coroutine
