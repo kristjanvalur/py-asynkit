@@ -84,11 +84,6 @@ assert_corostart_invariant(CoroStartObject *self)
 static int
 corostart_start(CoroStartObject *self)
 {
-    if (self->wrapped_coro == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
-        return -1;
-    }
-    
     /* Try to send None to start the coroutine (with context support) */
     if (self->context != NULL) {
         /* Use context.run(coro.send, None) */
@@ -162,11 +157,6 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
 {
     CoroStartObject *corostart = (CoroStartObject *)self->corostart;
     
-    if (corostart == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "CoroStart object is NULL");
-        return NULL;
-    }
-    
     /* Check if we have start results (first call) */
     if (!IS_CONTINUED(corostart)) {
         /* This is the first send call - process the eager execution result */
@@ -194,10 +184,6 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
     }
 
     /* No start results - coroutine was already started, delegate to wrapped coroutine */
-    if (corostart->wrapped_coro == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
-        return NULL;
-    }
     
     /* Call send() on the wrapped coroutine (with context support) */
     if (corostart->context != NULL) {
@@ -219,16 +205,7 @@ corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
 static PyObject *
 corostart_wrapper_throw(CoroStartWrapperObject *self, PyObject *exc)
 {
-    if (self->corostart == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "CoroStart object is NULL");
-        return NULL;
-    }
-    
     CoroStartObject *corostart = (CoroStartObject *)self->corostart;
-    if (corostart->wrapped_coro == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
-        return NULL;
-    }
     
     /* Call throw() on the wrapped coroutine (with context support) */
     /* Single exception argument - matches coroutine protocol */
@@ -251,16 +228,7 @@ corostart_wrapper_throw(CoroStartWrapperObject *self, PyObject *exc)
 static PyObject *
 corostart_wrapper_close(CoroStartWrapperObject *self, PyObject *Py_UNUSED(ignored))
 {
-    if (self->corostart == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "CoroStart object is NULL");
-        return NULL;
-    }
-    
     CoroStartObject *corostart = (CoroStartObject *)self->corostart;
-    if (corostart->wrapped_coro == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
-        return NULL;
-    }
 
     PyObject *result;
     
@@ -349,11 +317,6 @@ corostart_clear(CoroStartObject *self)
 static PyObject *
 corostart_await(CoroStartObject *self)
 {
-    if (self->wrapped_coro == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "no wrapped coroutine");
-        return NULL;
-    }
-    
     /* Create our CoroStartWrapper that holds a reference to this CoroStart */
     CoroStartWrapperObject *wrapper = (CoroStartWrapperObject *)CoroStartWrapperType.tp_alloc(&CoroStartWrapperType, 0);
     if (wrapper == NULL) {
@@ -501,11 +464,6 @@ static PyObject *
 corostart__throw(CoroStartObject *self, PyObject *exc) {
     assert_corostart_invariant(self);
     
-    if (self->wrapped_coro == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
-        return NULL;
-    }
-    
     // Convert exception type to instance if needed
     PyObject *value;
     if (PyExceptionInstance_Check(exc)) {
@@ -593,11 +551,6 @@ corostart__throw(CoroStartObject *self, PyObject *exc) {
 static PyObject *
 corostart_close(CoroStartObject *self, PyObject *args) {
     assert_corostart_invariant(self);
-    
-    if (self->wrapped_coro == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "wrapped coroutine is NULL");
-        return NULL;
-    }
     
     PyObject *result;
     
