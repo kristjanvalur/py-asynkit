@@ -1322,7 +1322,7 @@ class TestCoroStartContext:
             assert self.test_var.get() == "should_not_change"
 
         close_context.run(check_unchanged)
-        
+
     async def test_context_isolation_blocking(self, corostart_type):
         """Test that context changes in blocking close() do not leak out"""
         self.sync = True
@@ -1339,21 +1339,21 @@ class TestCoroStartContext:
 
         # Set up initial context
         self.test_var.set("initial")
-        
+
         # copy the context
         copied_context = copy_context()
 
         cs = corostart_type(context_changing_coro(), context=copied_context)
         assert not cs.done()
-        
+
         assert self.test_var.get() == "initial"
-        
+
         # run the coroutine to the end
         v = await cs
         assert v == 1
-        
+
         assert self.test_var.get() == "initial"  # Context changes should be isolated
-        
+
     async def test_context_isolation_blocking_with_task(self, corostart_type):
         """Test that context changes in blocking close() do not leak out"""
         self.sync = True
@@ -1375,15 +1375,15 @@ class TestCoroStartContext:
 
         cs = corostart_type(context_changing_coro(), context=copied_context)
         assert not cs.done()
-        
+
         assert self.test_var.get() == "initial"
-        
+
         # run the coroutine to the end
         v = await asyncio.create_task(cs.as_coroutine())
         assert v == 1
-        
+
         assert self.test_var.get() == "initial"  # Context changes should be isolated
-        
+
     async def test_context_isolation_blocking_with_awaitable(self, corostart_type):
         """Test that context changes in blocking close() do not leak out when using as_awaitable()"""
         self.sync = True
@@ -1405,15 +1405,15 @@ class TestCoroStartContext:
 
         cs = corostart_type(context_changing_coro(), context=copied_context)
         assert not cs.done()
-        
+
         assert self.test_var.get() == "initial"
-        
+
         # run the coroutine to the end using as_awaitable()
         v = await cs.as_awaitable()
 
         assert v == 1
         assert self.test_var.get() == "initial"  # Context changes should be isolated
-        
+
     async def test_close_context_isolation(self, corostart_type):
         """Test that close() respects context when throwing GeneratorExit"""
         self.sync = True
@@ -1433,45 +1433,49 @@ class TestCoroStartContext:
         # Set up initial context
         self.test_var.set("initial")
         print(f"INITIAL: test_var = {self.test_var.get()}")
-        
+
         # copy the context
         copied_context = copy_context()
 
         cs = corostart_type(context_aware_coro(), context=copied_context)
         assert not cs.done()
-        
+
         print(f"AFTER CS CREATION: test_var = {self.test_var.get()}")
-        
+
         # Close the coroutine while it's pending
         cs.close()
-        
+
         print(f"AFTER CLOSE: test_var = {self.test_var.get()}")
-        
+
         # The finally block should have run in the copied context
         # So in the calling context, we should still see "initial"
         # But if close() doesn't respect context, we might see the leak
-        
+
         def check_copied_context():
             value = self.test_var.get()
             print(f"IN COPIED CONTEXT: test_var = {value}")
             return value
-            
+
         copied_value = copied_context.run(check_copied_context)
-        
-        # If context isolation works: 
+
+        # If context isolation works:
         # - calling context should still be "initial"
         # - copied context should be "cleanup_saw_inside_coro"
-        
+
         calling_value = self.test_var.get()
         print(f"FINAL VALUES: calling={calling_value}, copied={copied_value}")
-        
-        # This is the test - if close() doesn't respect context, 
+
+        # This is the test - if close() doesn't respect context,
         # the finally block runs in calling context and we see the leak
         if calling_value != "initial":
-            print(f"BUG: Context leak detected! Expected 'initial', got '{calling_value}'")
-        
-        assert calling_value == "initial", f"Context leak: expected 'initial', got '{calling_value}'"
-        
+            print(
+                f"BUG: Context leak detected! Expected 'initial', got '{calling_value}'"
+            )
+
+        assert calling_value == "initial", (
+            f"Context leak: expected 'initial', got '{calling_value}'"
+        )
+
     async def test_wrapper_close_context_isolation(self, corostart_type):
         """Test that close() on the __await__ wrapper respects context when throwing GeneratorExit"""
         self.sync = True
@@ -1491,47 +1495,49 @@ class TestCoroStartContext:
         # Set up initial context
         self.test_var.set("initial")
         print(f"WRAPPER INITIAL: test_var = {self.test_var.get()}")
-        
+
         # copy the context
         copied_context = copy_context()
 
         cs = corostart_type(context_aware_coro(), context=copied_context)
         assert not cs.done()
-        
+
         print(f"WRAPPER AFTER CS CREATION: test_var = {self.test_var.get()}")
-        
+
         # Get the wrapper object from __await__()
         wrapper = cs.__await__()
         print(f"WRAPPER AFTER __await__(): test_var = {self.test_var.get()}")
-        
+
         # Close the wrapper while the coroutine is blocked
         wrapper.close()
-        
+
         print(f"WRAPPER AFTER CLOSE: test_var = {self.test_var.get()}")
-        
+
         # The finally block should have run in the copied context
         # So in the calling context, we should still see "initial"
         # But if wrapper.close() doesn't respect context, we might see the leak
-        
+
         def check_copied_context():
             value = self.test_var.get()
             print(f"WRAPPER IN COPIED CONTEXT: test_var = {value}")
             return value
-            
+
         copied_value = copied_context.run(check_copied_context)
-        
-        # If context isolation works: 
+
+        # If context isolation works:
         # - calling context should still be "initial"
         # - copied context should be "wrapper_cleanup_saw_inside_coro"
-        
+
         calling_value = self.test_var.get()
         print(f"WRAPPER FINAL VALUES: calling={calling_value}, copied={copied_value}")
-        
-        # This is the test - if wrapper.close() doesn't respect context, 
+
+        # This is the test - if wrapper.close() doesn't respect context,
         # the finally block runs in calling context and we see the leak
         if calling_value != "initial":
-            print(f"WRAPPER BUG: Context leak detected! Expected 'initial', got '{calling_value}'")
-        
-        assert calling_value == "initial", f"Wrapper context leak: expected 'initial', got '{calling_value}'"
-        
-        
+            print(
+                f"WRAPPER BUG: Context leak detected! Expected 'initial', got '{calling_value}'"
+            )
+
+        assert calling_value == "initial", (
+            f"Wrapper context leak: expected 'initial', got '{calling_value}'"
+        )
