@@ -7,6 +7,7 @@ from contextvars import ContextVar, copy_context
 from typing import Any
 from unittest.mock import Mock
 
+
 import pytest
 from anyio import Event, create_task_group, sleep
 
@@ -1060,6 +1061,10 @@ async def test_sync_function():
     assert async_method2() == "bar"
 
 
+@pytest.mark.skipif(
+    pytest.config.getoption("anyio_backend", default="asyncio").startswith("trio"),
+    reason="CoroStart is fundamentally incompatible with trio backend",
+)
 class TestCoroStartContext:
     """Test context variable handling in CoroStart close() and throw() methods"""
 
