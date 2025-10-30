@@ -12,7 +12,7 @@ from pathlib import Path
 def find_clang_format():
     """Find clang-format executable."""
     try:
-        result = subprocess.run(
+        subprocess.run(
             ["clang-format", "--version"],
             capture_output=True,
             text=True,

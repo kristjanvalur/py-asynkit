@@ -119,6 +119,9 @@ select = [
     "I",   # isort
     "UP",  # pyupgrade - automatically upgrade syntax for newer Python versions
 ]
+ignore = [
+    "E501",  # Line too long - trust ruff formatter for line length decisions
+]
 
 # Ignore `F401` (unused import) in all `__init__.py` files
 # Ignore `F403` (importing *) in all `__init__.py` files

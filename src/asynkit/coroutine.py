@@ -35,7 +35,9 @@ from .tools import create_task as _create_task
 # Try to import C extension for performance-critical components
 try:
     from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[import-untyped]
-    from ._cext import get_build_info as _get_c_build_info  # type: ignore[import-untyped]
+    from ._cext import (
+        get_build_info as _get_c_build_info,  # type: ignore[import-untyped]
+    )
 
     _HAVE_C_EXTENSION = (
         True  # Re-enabled - C extension now has continued/pending methods
@@ -78,7 +80,9 @@ def get_implementation_info() -> dict[str, Any]:
     else:
         return {
             "implementation": "Pure Python",
-            "performance_info": "Baseline performance (install with build tools for 4x boost)",
+            "performance_info": (
+                "Baseline performance (install with build tools for 4x boost)"
+            ),
             "c_extension_available": False,
         }
 
@@ -515,7 +519,8 @@ else:
     _CCoroStart = None
     CoroStart = _PyCoroStart  # type: ignore[misc,assignment]
 
-# Always export Python implementation for advanced use cases (follows asyncio convention)
+# Always export Python implementation for advanced use cases
+# (follows asyncio convention)
 PyCoroStart = _PyCoroStart  # type: ignore[misc,assignment]
 
 

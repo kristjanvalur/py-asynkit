@@ -141,8 +141,10 @@ class PerformanceTest:
 
             # For non-eager execution, adjust latency by dividing by number of tasks
             # since the measured latency includes the time to create all tasks.
-            # Note: This represents the MINIMUM possible non-eager latency (tight creation loop).
-            # In real scenarios, any work done between task creation and await increases latency.
+            # Note: This represents the MINIMUM possible non-eager latency
+            # (tight creation loop).
+            # In real scenarios, any work done between task creation and await
+            # increases latency.
             # Eager tasks maintain consistent latency regardless of intervening work.
             adjustment_factor = 1000 if self.is_non_eager else 1
             adjusted_latencies = [lat / adjustment_factor for lat in latencies]
@@ -167,7 +169,8 @@ class PerformanceTest:
 
             # Measure throughput
             print(
-                f"\nMeasuring throughput ({NUM_TASKS} tasks × {NUM_SLEEPS_PER_TASK} sleeps)..."
+                f"\nMeasuring throughput "
+                f"({NUM_TASKS} tasks × {NUM_SLEEPS_PER_TASK} sleeps)..."
             )
             throughput = await self.measure_throughput()
 
@@ -291,7 +294,6 @@ class AsynkitImplementationTest(PerformanceTest):
 
 async def compare_eager_start_parameter():
     """Test Python 3.12's per-task eager_start parameter if available."""
-    import inspect
 
     # Check if eager_start parameter is available
     sig = inspect.signature(asyncio.create_task)

@@ -104,8 +104,8 @@ def parametrize_corostart_implementations(test_func):
     """
     Decorator to parametrize a test function over available CoroStart implementations.
 
-    The test function will receive an additional 'corostart_impl' parameter that can be used
-    to monkeypatch the implementation.
+    The test function will receive an additional 'corostart_impl' parameter that
+    can be used to monkeypatch the implementation.
 
     Usage:
         @parametrize_corostart_implementations

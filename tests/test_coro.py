@@ -7,7 +7,6 @@ from contextvars import ContextVar, copy_context
 from typing import Any
 from unittest.mock import Mock
 
-
 import pytest
 from anyio import Event, create_task_group, sleep
 
@@ -1130,7 +1129,8 @@ class TestCoroStartContext:
         cs = corostart_type(self.coro_with_cleanup(), context=close_context)
         assert not cs.done()
 
-        # Close should raise RuntimeError since coro does async cleanup and ignores GeneratorExit
+        # Close should raise RuntimeError since coro does async cleanup
+        # and ignores GeneratorExit
         with pytest.raises(RuntimeError) as err:
             cs.close()
         assert err.match("coroutine ignored GeneratorExit")
@@ -1253,7 +1253,8 @@ class TestCoroStartContext:
 
         # Check that handler ran in throw context
         def check_handler():
-            # The handler caught the exception in throw_context and set "before_exception" first
+            # The handler caught the exception in throw_context and set
+            # "before_exception" first
             assert self.test_var.get() == "handled_before_exception"
 
         throw_context.run(check_handler)
@@ -1391,7 +1392,7 @@ class TestCoroStartContext:
         assert self.test_var.get() == "initial"  # Context changes should be isolated
 
     async def test_context_isolation_blocking_with_awaitable(self, corostart_type):
-        """Test that context changes in blocking close() do not leak out when using as_awaitable()"""
+        """Test that context changes in blocking close() do not leak out when using as_awaitable()."""
         self.sync = True
 
         async def context_changing_coro():
@@ -1483,7 +1484,7 @@ class TestCoroStartContext:
         )
 
     async def test_wrapper_close_context_isolation(self, corostart_type):
-        """Test that close() on the __await__ wrapper respects context when throwing GeneratorExit"""
+        """Test that close() on the __await__ wrapper respects context when throwing GeneratorExit."""
         self.sync = True
 
         async def context_aware_coro():
@@ -1541,7 +1542,8 @@ class TestCoroStartContext:
         # the finally block runs in calling context and we see the leak
         if calling_value != "initial":
             print(
-                f"WRAPPER BUG: Context leak detected! Expected 'initial', got '{calling_value}'"
+                f"WRAPPER BUG: Context leak detected! "
+                f"Expected 'initial', got '{calling_value}'"
             )
 
         assert calling_value == "initial", (

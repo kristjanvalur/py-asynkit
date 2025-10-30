@@ -10,8 +10,8 @@ import os
 import sys
 
 from setuptools import setup
-from setuptools.extension import Extension
 from setuptools.command.build_ext import build_ext as _build_ext
+from setuptools.extension import Extension
 
 
 class OptionalBuildExt(_build_ext):
