@@ -1061,12 +1061,13 @@ async def test_sync_function():
     assert async_method2() == "bar"
 
 
-@pytest.mark.skipif(
-    pytest.config.getoption("anyio_backend", default="asyncio").startswith("trio"),
-    reason="CoroStart is fundamentally incompatible with trio backend",
-)
 class TestCoroStartContext:
     """Test context variable handling in CoroStart close() and throw() methods"""
+
+    @pytest.fixture
+    def anyio_backend(self):
+        """CoroStart is incompatible with trio backend - asyncio only"""
+        return "asyncio"
 
     test_var: ContextVar[str] = ContextVar("test_var")
 
@@ -1327,11 +1328,6 @@ class TestCoroStartContext:
             assert self.test_var.get() == "should_not_change"
 
         close_context.run(check_unchanged)
-
-    @pytest.fixture
-    def anyio_backend(self):
-        """These blocking tests use asyncio.sleep() and don't work with trio"""
-        return "asyncio"
 
     async def test_context_isolation_blocking(self, corostart_type):
         """Test that context changes in blocking close() do not leak out"""
