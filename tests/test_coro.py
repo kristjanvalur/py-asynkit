@@ -1323,6 +1323,11 @@ class TestCoroStartContext:
 
         close_context.run(check_unchanged)
 
+    @pytest.fixture
+    def anyio_backend(self):
+        """These blocking tests use asyncio.sleep() and don't work with trio"""
+        return "asyncio"
+
     async def test_context_isolation_blocking(self, corostart_type):
         """Test that context changes in blocking close() do not leak out"""
         self.sync = True
@@ -1330,12 +1335,12 @@ class TestCoroStartContext:
         async def context_changing_coro():
             try:
                 self.test_var.set("inside_coro")
-                await asyncio.sleep(0)
+                await self.sleep(0)
                 return 1
             finally:
                 # Change context variable during cleanup
                 self.test_var.set("changed_in_cleanup")
-                await asyncio.sleep(0)
+                await self.sleep(0)
 
         # Set up initial context
         self.test_var.set("initial")
@@ -1361,12 +1366,12 @@ class TestCoroStartContext:
         async def context_changing_coro():
             try:
                 self.test_var.set("inside_coro")
-                await asyncio.sleep(0)
+                await self.sleep(0)
                 return 1
             finally:
                 # Change context variable during cleanup
                 self.test_var.set("changed_in_cleanup")
-                await asyncio.sleep(0)
+                await self.sleep(0)
 
         # Set up initial context
         self.test_var.set("initial")
@@ -1379,7 +1384,7 @@ class TestCoroStartContext:
         assert self.test_var.get() == "initial"
 
         # run the coroutine to the end
-        v = await asyncio.create_task(cs.as_coroutine())
+        v = await asynkit.tools.create_task(cs.as_coroutine())
         assert v == 1
 
         assert self.test_var.get() == "initial"  # Context changes should be isolated
@@ -1391,12 +1396,12 @@ class TestCoroStartContext:
         async def context_changing_coro():
             try:
                 self.test_var.set("inside_coro")
-                await asyncio.sleep(0)
+                await self.sleep(0)
                 return 1
             finally:
                 # Change context variable during cleanup
                 self.test_var.set("changed_in_cleanup")
-                await asyncio.sleep(0)
+                await self.sleep(0)
 
         # Set up initial context
         self.test_var.set("initial")
