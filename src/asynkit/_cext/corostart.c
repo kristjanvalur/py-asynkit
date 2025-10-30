@@ -11,6 +11,7 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <stdio.h>
+#include "cpython/genobject.h"  /* For PyCoroObject and generator types */
 
 /* Debug logging macros */
 #define DEBUG_TRACE 0
@@ -145,7 +146,7 @@ static int corostart_start(CoroStartObject *self)
     } else {
         TRACE_LOG("Coroutine completed or raised exception");
     }
-    
+
     assert_corostart_invariant(self);
     return 0; /* Success (we handled the exception) */
 }
@@ -771,7 +772,35 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 }
 
 /* Module methods */
-static PyMethodDef module_methods[] = {{NULL, NULL, 0, NULL}};
+static PyObject *cext_get_build_info(PyObject *self, PyObject *args)
+{
+    /* Return build configuration information */
+    PyObject *info = PyDict_New();
+    if (info == NULL) {
+        return NULL;
+    }
+    
+#ifdef DEBUG
+    PyDict_SetItemString(info, "build_type", PyUnicode_FromString("debug"));
+    PyDict_SetItemString(info, "debug_enabled", Py_True);
+#else
+    PyDict_SetItemString(info, "build_type", PyUnicode_FromString("optimized"));
+    PyDict_SetItemString(info, "debug_enabled", Py_False);
+#endif
+
+#ifdef NDEBUG
+    PyDict_SetItemString(info, "ndebug_enabled", Py_True);
+#else
+    PyDict_SetItemString(info, "ndebug_enabled", Py_False);
+#endif
+
+    return info;
+}
+
+static PyMethodDef module_methods[] = {
+    {"get_build_info", cext_get_build_info, METH_NOARGS, "Get build configuration information"},
+    {NULL, NULL, 0, NULL}
+};
 
 /* Module definition */
 static struct PyModuleDef cext_module = {PyModuleDef_HEAD_INIT,

@@ -3,7 +3,22 @@
 
 set -e  # Exit on error
 
-echo "=== Fast C Extension Build (uv) ==="
+# Parse command line arguments
+BUILD_TYPE="optimized"
+if [[ "$1" == "debug" ]]; then
+    BUILD_TYPE="debug"
+    export ASYNKIT_DEBUG=1
+    echo "=== Fast C Extension Build (uv) - DEBUG MODE ==="
+elif [[ "$1" == "optimized" || "$1" == "" ]]; then
+    BUILD_TYPE="optimized"
+    unset ASYNKIT_DEBUG
+    echo "=== Fast C Extension Build (uv) - OPTIMIZED MODE ==="
+else
+    echo "Usage: $0 [debug|optimized]"
+    echo "  debug     - Build with -g -O0 -DDEBUG flags"
+    echo "  optimized - Build with -O3 -DNDEBUG flags (default)"
+    exit 1
+fi
 
 # Clean any existing build artifacts
 echo "Cleaning build artifacts..."
