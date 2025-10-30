@@ -211,7 +211,7 @@ class CoroStartBase(Awaitable[T_co]):
         try:
             return (
                 self.context.run(self.coro.send, None)
-                if self.context
+                if self.context is not None
                 else self.coro.send(None)
             ), None
         except BaseException as exception:
@@ -249,7 +249,7 @@ class CoroStartBase(Awaitable[T_co]):
                 try:
                     out_value = (
                         self.context.run(self.coro.throw, exc)
-                        if self.context
+                        if self.context is not None
                         else self.coro.throw(exc)
                     )
                 except StopIteration as exc:
@@ -258,7 +258,7 @@ class CoroStartBase(Awaitable[T_co]):
                 try:
                     out_value = (
                         self.context.run(self.coro.send, in_value)
-                        if self.context
+                        if self.context is not None
                         else self.coro.send(in_value)
                     )
                 except StopIteration as exc:
@@ -275,7 +275,7 @@ class CoroStartBase(Awaitable[T_co]):
             self._start_result = (
                 (
                     self.context.run(self.coro.throw, value)
-                    if self.context
+                    if self.context is not None
                     else self.coro.throw(value)
                 ),
                 None,
@@ -289,7 +289,7 @@ class CoroStartBase(Awaitable[T_co]):
         Respects context if provided.
         """
         # Always close the underlying coroutine
-        if self.context:
+        if self.context is not None:
             self.context.run(self.coro.close)
         else:
             self.coro.close()
