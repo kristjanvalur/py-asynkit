@@ -11,7 +11,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <stdio.h>
-#include "cpython/genobject.h"  /* For PyCoroObject and generator types */
 
 /* Debug logging macros */
 #define DEBUG_TRACE 0
