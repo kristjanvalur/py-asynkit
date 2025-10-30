@@ -9,7 +9,46 @@ of coroutine utilities, particularly CoroStart.
 import os
 import sys
 
-from setuptools import Extension, setup
+from setuptools import setup
+from setuptools.extension import Extension
+from setuptools.command.build_ext import build_ext as _build_ext
+
+
+class OptionalBuildExt(_build_ext):
+    """Custom build_ext that gracefully handles C extension failures."""
+    
+    def build_extension(self, ext):
+        try:
+            super().build_extension(ext)
+            print(f"✓ Successfully built C extension: {ext.name}")
+            print("  → asynkit will use high-performance C implementation")
+        except Exception as e:
+            print(f"⚠ Failed to build C extension {ext.name}:")
+            print(f"  → {e}")
+            print("  → asynkit will use Python implementation")
+            print("  → For 4x performance boost, install build tools:")
+            
+            # Platform-specific guidance
+            import platform
+            system = platform.system().lower()
+            if system == "windows":
+                print("    pip install setuptools")
+                print("    Install Visual Studio Build Tools")
+            elif system == "darwin":
+                print("    xcode-select --install")
+            elif system == "linux":
+                print("    apt install python3-dev build-essential  # Ubuntu/Debian")
+                print("    yum install python3-devel gcc  # CentOS/RHEL")
+            
+            # Don't re-raise - let setup continue without the extension
+    
+    def run(self):
+        try:
+            super().run()
+        except Exception as e:
+            print(f"⚠ C extension build failed: {e}")
+            print("  → Continuing with Python-only installation")
+
 
 # Determine if we should build the C extension
 build_ext = True
@@ -81,5 +120,6 @@ if build_ext:
 if __name__ == "__main__":
     setup(
         ext_modules=ext_modules,
+        cmdclass={'build_ext': OptionalBuildExt},  # Use our custom build class
         zip_safe=False,  # C extensions require this
     )

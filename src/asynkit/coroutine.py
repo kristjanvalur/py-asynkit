@@ -35,13 +35,52 @@ from .tools import create_task as _create_task
 # Try to import C extension for performance-critical components
 try:
     from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[import-untyped]
+    from ._cext import get_build_info as _get_c_build_info  # type: ignore[import-untyped]
 
     _HAVE_C_EXTENSION = (
         True  # Re-enabled - C extension now has continued/pending methods
     )
 except ImportError:
     _CCoroStartBase = None
+    _get_c_build_info = None
     _HAVE_C_EXTENSION = False
+
+
+def get_implementation_info() -> dict[str, Any]:
+    """Return information about which coroutine implementation is active.
+    
+    Returns:
+        Dictionary with implementation details including:
+        - implementation: "C extension" or "Pure Python"
+        - performance_info: Description of expected performance
+        - build_info: For C extension, compiler and optimization details
+    
+    Example:
+        >>> info = get_implementation_info()
+        >>> print(f"Using {info['implementation']}")
+        >>> if 'build_info' in info:
+        ...     print(f"Build: {info['build_info']}")
+    """
+    if _HAVE_C_EXTENSION:
+        build_info = {}
+        if _get_c_build_info:
+            try:
+                build_info = _get_c_build_info()
+            except Exception:
+                build_info = {"status": "available but info unavailable"}
+        
+        return {
+            'implementation': 'C extension',
+            'performance_info': '4-5x faster than pure Python',
+            'build_info': build_info,
+            'c_extension_available': True
+        }
+    else:
+        return {
+            'implementation': 'Pure Python',
+            'performance_info': 'Baseline performance (install with build tools for 4x boost)',
+            'c_extension_available': False
+        }
 
 __all__ = [
     "CoroStart",
@@ -53,6 +92,7 @@ __all__ = [
     "func_eager",
     "eager",
     "eager_ctx",
+    "get_implementation_info",
     "create_eager_factory",
     "eager_task_factory",
     "create_task",
