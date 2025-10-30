@@ -197,9 +197,9 @@ eager_factory = asynkit.create_eager_factory(old_factory)
 loop.set_task_factory(eager_factory)
 ```
 
-#### Python 3.12+ Compatibility
+#### Python 3.13+ Compatibility
 
-asynkit also provides a `create_task()` function with the same `eager_start` parameter as Python 3.12+:
+asynkit also provides a `create_task()` function with the same `eager_start` parameter as Python 3.14+:
 
 ```python
 # Works on all Python versions (3.10+)
@@ -229,7 +229,7 @@ See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance
 | **Selective optimization** | `@asynkit.eager` decorator |
 | **Fine-grained control** | `@asynkit.eager` decorator |
 | **Python 3.10/3.11 support** | Either (both work) |
-| **Python 3.12+ migration** | `eager_task_factory` (compatible API) |
+| **Python 3.13+ migration** | `eager_task_factory` (compatible API) |
 
 ## Cross-Version Compatibility
 
@@ -275,7 +275,7 @@ The `enable_eager_tasks()` function automatically detects your Python version an
 #### Example: Cross-Version Migration
 
 ```python
-# This code works identically on Python 3.10, 3.11, 3.12, and beyond!
+# This code works identically on Python 3.10, 3.11, 3.12, 3.13, and beyond!
 import asyncio
 import asynkit.compat
 
@@ -825,17 +825,17 @@ Concrete subclasses of Python's built-in event loop classes are provided.
 
 #### Creating scheduling event loops
 
-The **recommended way** to use scheduling event loops is with the `scheduling_loop_factory()` function (Python 3.12+):
+The **recommended way** to use scheduling event loops is with the `scheduling_loop_factory()` function (Python 3.13+):
 
 ```python
 import asyncio
 import asynkit
 
-# Modern approach (Python 3.12+)
+# Modern approach (Python 3.13+)
 asyncio.run(main(), loop_factory=asynkit.scheduling_loop_factory)
 ```
 
-For Python 3.11 and earlier, or when using `asyncio.Runner`:
+For Python 3.12 and earlier, or when using `asyncio.Runner`:
 
 ```python
 import asyncio
@@ -1112,7 +1112,7 @@ Please note the following cases:
    Therefore, we provide a base class, `InterruptError`, deriving from `CancelledError` which
    should be used for interrupts in general.
 
-   However, `asyncio.Condition` in Python 3.12 and earlier has a buggy implementation that will not
+   However, `asyncio.Condition` in Python 3.13 and earlier has a buggy implementation that will not
    correctly pass on such subclasses during `wait()` in all cases. The finally block that re-acquires
    the lock only catches `CancelledError`, not its subclasses. This was fixed in Python 3.13+ with
    improved exception handling that properly catches `CancelledError` and subclasses

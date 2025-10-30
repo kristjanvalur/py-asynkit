@@ -120,8 +120,8 @@ asynkit's C extension **outperforms** even Python 3.13's native implementation:
 
 asynkit provides performance benefits across Python versions:
 
-- **Python 3.10-3.12**: Full eager execution capabilities via asynkit
-- **Python 3.13+**: Competitive or superior performance to native implementation
+- **Python 3.10-3.13**: Full eager execution capabilities via asynkit
+- **Python 3.14+**: Competitive or superior performance to native implementation
 - **Consistent API**: Same eager_task_factory interface across all versions
 
 ## Implementation Comparison
