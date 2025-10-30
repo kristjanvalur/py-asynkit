@@ -3,6 +3,7 @@ Test utilities for parametrizing Python vs C implementations.
 """
 
 import pytest
+
 import asynkit.coroutine as coroutine_module
 
 

@@ -4,7 +4,6 @@ Cross-platform C code formatting using clang-format.
 Gracefully handles missing clang-format installation.
 """
 
-import os
 import subprocess
 import sys
 from pathlib import Path

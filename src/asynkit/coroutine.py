@@ -302,7 +302,9 @@ class CoroStartBase(Awaitable[T_co]):
         return self._start_result is not None and self._start_result[1] is not None
 
     def continued(self) -> bool:
-        """returns true if the coroutine has been continued (awaited) after initial start"""
+        """Returns true if the coroutine has been continued (awaited) after
+        initial start.
+        """
         return self._start_result is None
 
     def pending(self) -> bool:
