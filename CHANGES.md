@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.0] - 2025-10-30
+
 ### Performance Improvements
 
 - **C Extension Optimization**: Implemented major performance enhancements for coroutine operations
