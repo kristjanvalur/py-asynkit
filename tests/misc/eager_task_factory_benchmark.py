@@ -9,7 +9,10 @@ This test measures:
 """
 
 import asyncio
+import contextlib
+import inspect
 import statistics
+import sys
 import time
 from collections.abc import Callable
 from typing import Any
@@ -22,6 +25,21 @@ NUM_SLEEPS_PER_TASK = 100
 
 # Global list to collect latency measurements
 latency_measurements = []
+
+
+@contextlib.contextmanager
+def corostart_implementation(implementation_class):
+    """Context manager to temporarily override CoroStart implementation."""
+    import asynkit.coroutine
+
+    original_corostart = asynkit.coroutine.CoroStart
+    try:
+        # Override the CoroStart class
+        asynkit.coroutine.CoroStart = implementation_class
+        yield
+    finally:
+        # Restore original
+        asynkit.coroutine.CoroStart = original_corostart
 
 
 async def latency_test_coro(creation_time: float) -> str:
@@ -55,6 +73,8 @@ class PerformanceTest:
     def __init__(self, factory_name: str, factory: Callable[..., Any] | None = None):
         self.factory_name = factory_name
         self.factory = factory
+        # Non-eager execution is when no factory is set (standard asyncio)
+        self.is_non_eager = factory is None
 
     async def setup_factory(self):
         """Set up the task factory for testing."""
@@ -67,6 +87,122 @@ class PerformanceTest:
         """Restore the original task factory."""
         loop = asyncio.get_running_loop()
         loop.set_task_factory(self.old_factory)
+
+    async def measure_latency(self, num_iterations: int = 1000) -> list[float]:
+        """Measure latency from create_task() to first yield point."""
+        global latency_measurements
+        latency_measurements.clear()  # Reset measurements
+
+        tasks = []
+        for _ in range(num_iterations):
+            # Record creation time and pass it to the coroutine
+            creation_time = time.perf_counter()
+            task = asyncio.create_task(latency_test_coro(creation_time))
+            tasks.append(task)
+
+        # Wait for all tasks to complete
+        await asyncio.gather(*tasks)
+
+        # Return the collected latency measurements
+        return latency_measurements.copy()
+
+    async def measure_throughput(self) -> float:
+        """Measure throughput for tasks that repeatedly sleep(0)."""
+        start_time = time.perf_counter()
+
+        # Create and run tasks
+        tasks = []
+        for _ in range(NUM_TASKS):
+            task = asyncio.create_task(throughput_test_coro())
+            tasks.append(task)
+
+        # Wait for all tasks to complete
+        await asyncio.gather(*tasks)
+
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+
+        # Calculate total operations and throughput
+        total_operations = NUM_TASKS * NUM_SLEEPS_PER_TASK
+        throughput = total_operations / total_time
+
+        return throughput
+
+    async def run_tests(self) -> dict[str, Any]:
+        """Run all performance tests and return results."""
+        await self.setup_factory()
+
+        try:
+            print(f"\n=== Testing {self.factory_name} ===")
+
+            # Measure latency
+            print("Measuring latency to first yield...")
+            latencies = await self.measure_latency()
+
+            # For non-eager execution, adjust latency by dividing by number of tasks
+            # since the measured latency includes the time to create all tasks.
+            # Note: This represents the MINIMUM possible non-eager latency (tight creation loop).
+            # In real scenarios, any work done between task creation and await increases latency.
+            # Eager tasks maintain consistent latency regardless of intervening work.
+            adjustment_factor = 1000 if self.is_non_eager else 1
+            adjusted_latencies = [lat / adjustment_factor for lat in latencies]
+
+            latency_stats = {
+                "mean": statistics.mean(adjusted_latencies)
+                * 1_000_000,  # Convert to microseconds
+                "median": statistics.median(adjusted_latencies) * 1_000_000,
+                "min": min(adjusted_latencies) * 1_000_000,
+                "max": max(adjusted_latencies) * 1_000_000,
+                "std_dev": statistics.stdev(adjusted_latencies) * 1_000_000,
+            }
+
+            print(f"  Mean latency: {latency_stats['mean']:.2f} μs")
+            if self.is_non_eager:
+                print("    (adjusted for per-task contribution in non-eager execution)")
+                print("    (minimum latency - increases with work done before await)")
+            print(f"  Median latency: {latency_stats['median']:.2f} μs")
+            print(f"  Min latency: {latency_stats['min']:.2f} μs")
+            print(f"  Max latency: {latency_stats['max']:.2f} μs")
+            print(f"  Std dev: {latency_stats['std_dev']:.2f} μs")
+
+            # Measure throughput
+            print(
+                f"\nMeasuring throughput ({NUM_TASKS} tasks × {NUM_SLEEPS_PER_TASK} sleeps)..."
+            )
+            throughput = await self.measure_throughput()
+
+            print(f"  Throughput: {throughput:.0f} operations/second")
+
+            return {
+                "factory_name": self.factory_name,
+                "latency": latency_stats,
+                "throughput": throughput,
+            }
+
+        finally:
+            await self.cleanup_factory()
+
+
+class AsynkitImplementationTest(PerformanceTest):
+    """Performance test for different asynkit CoroStart implementations."""
+
+    def __init__(self, factory_name: str, corostart_class):
+        super().__init__(factory_name, asynkit.eager_task_factory)
+        self.corostart_class = corostart_class
+        self.corostart_context = None
+
+    async def setup_factory(self):
+        """Set up both factory and CoroStart implementation."""
+        await super().setup_factory()
+        # Set up CoroStart override
+        self.corostart_context = corostart_implementation(self.corostart_class)
+        self.corostart_context.__enter__()
+
+    async def cleanup_factory(self):
+        """Restore both factory and CoroStart implementation."""
+        if self.corostart_context:
+            self.corostart_context.__exit__(None, None, None)
+        await super().cleanup_factory()
 
     async def measure_latency(self, num_iterations: int = 1000) -> list[float]:
         """Measure latency from create_task() to first yield point."""
@@ -160,12 +296,14 @@ async def compare_eager_start_parameter():
     # Check if eager_start parameter is available
     sig = inspect.signature(asyncio.create_task)
     if "eager_start" not in sig.parameters:
-        print("\n=== Python 3.12 eager_start Parameter ===")
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+        print(f"\n=== Python {python_version} eager_start Parameter ===")
         print("  eager_start parameter not available in this Python version")
         print("  (eager_start was added in Python 3.12.0a7+)")
         return
 
-    print("\n=== Testing Python 3.12 eager_start Parameter ===")
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    print(f"\n=== Testing Python {python_version} eager_start Parameter ===")
 
     global latency_measurements
 
@@ -217,18 +355,44 @@ async def test_asynkit_create_task_eager():
 
 async def main():
     """Run all performance comparisons."""
-    print("Python 3.12 vs asynkit Eager Task Factory Performance Comparison")
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    print(
+        f"Python {python_version} vs asynkit Eager Task Factory Performance Comparison"
+    )
     print("=" * 70)
     print("Test configuration:")
+    print(f"  Python version: {sys.version}")
     print("  Latency test: 1000 iterations")
     print(f"  Throughput test: {NUM_TASKS} tasks × {NUM_SLEEPS_PER_TASK} sleeps")
 
     # Test configurations
     test_configs = [
         PerformanceTest("Standard asyncio (no eager)", None),
-        PerformanceTest("Python 3.12 eager_task_factory", asyncio.eager_task_factory),
-        PerformanceTest("asynkit eager_task_factory", asynkit.eager_task_factory),
+        PerformanceTest(
+            f"Python {python_version} eager_task_factory", asyncio.eager_task_factory
+        ),
+        PerformanceTest(
+            "asynkit eager_task_factory (default)", asynkit.eager_task_factory
+        ),
     ]
+
+    # Add C extension vs Python implementation comparison for asynkit
+    if hasattr(asynkit.coroutine, "_PyCoroStart"):
+        test_configs.append(
+            AsynkitImplementationTest(
+                "asynkit (Pure Python)", asynkit.coroutine._PyCoroStart
+            )
+        )
+
+    if (
+        hasattr(asynkit.coroutine, "_CCoroStart")
+        and asynkit.coroutine._CCoroStart is not None
+    ):
+        test_configs.append(
+            AsynkitImplementationTest(
+                "asynkit (C Extension)", asynkit.coroutine._CCoroStart
+            )
+        )
 
     # Run all tests
     results = []
@@ -244,6 +408,10 @@ async def main():
     print("\n" + "=" * 70)
     print("SUMMARY COMPARISON")
     print("=" * 70)
+    print("Note: Non-eager latency adjusted for per-task contribution")
+    print("      Non-eager latency shows minimum possible delay (tight creation loop)")
+    print("      Real-world non-eager latency increases with work done before await")
+    print("      Eager latency remains consistent regardless of intervening work")
 
     print("\nLatency to First Yield (microseconds):")
     print(f"{'Factory':<30} {'Mean':<10} {'Median':<10} {'Min':<10} {'Max':<10}")
@@ -276,7 +444,7 @@ async def main():
         asynkit_latency = asynkit_eager["latency"]["mean"]
 
         print(
-            f"  Python 3.12 eager latency improvement: "
+            f"  Python {python_version} eager latency improvement: "
             f"{baseline_latency / python_latency:.1f}x"
         )
         print(
@@ -284,11 +452,11 @@ async def main():
             f"{baseline_latency / asynkit_latency:.1f}x"
         )
         print(
-            f"  Python 3.12 vs asynkit latency ratio: "
+            f"  Python {python_version} vs asynkit latency ratio: "
             f"{asynkit_latency / python_latency:.2f}"
         )
         print(
-            f"  Python 3.12 vs asynkit throughput ratio: "
+            f"  Python {python_version} vs asynkit throughput ratio: "
             f"{asynkit_eager['throughput'] / python_eager['throughput']:.2f}"
         )
 
