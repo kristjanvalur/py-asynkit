@@ -124,8 +124,8 @@ jobs:
       uses: astral-sh/setup-uv@v4
       with:
         enable-cache: true
-    - name: Set up Python 3.12
-      run: uv python install 3.12
+    - name: Set up Python 3.13
+      run: uv python install 3.13
 
     - name: Build sdist
       run: uv build --sdist
@@ -156,8 +156,8 @@ jobs:
       uses: astral-sh/setup-uv@v4
       with:
         enable-cache: true
-    - name: Set up Python 3.12
-      run: uv python install 3.12
+    - name: Set up Python 3.13
+      run: uv python install 3.13
 
     - name: Build pure Python wheel (no C extension)
       run: ASYNKIT_DISABLE_CEXT=1 uv build --wheel
