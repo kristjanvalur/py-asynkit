@@ -81,6 +81,70 @@ jobs:
         if: ${{ needs.tests.result != 'success' }}
         run: exit 1
 
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [tests, lint]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.16.2
+      env:
+        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+        CIBW_SKIP: "pp* *-musllinux_*"
+        CIBW_TEST_COMMAND: >
+          python -c "
+          import asynkit;
+          info = asynkit.get_implementation_info();
+          print(f'Implementation: {info[\"implementation\"]}');
+          assert info['c_extension_available'], 'C extension should be available in wheels'
+          "
+        CIBW_TEST_REQUIRES: pytest anyio
+        CIBW_BUILD_VERBOSITY: 1
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: wheels-${{ matrix.os }}
+        path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [tests, lint]
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        enable-cache: true
+    - name: Set up Python 3.12
+      run: uv python install 3.12
+
+    - name: Build sdist
+      run: uv build --sdist
+
+    - name: Test sdist installation
+      run: |
+        pip install dist/*.tar.gz
+        python -c "
+        import asynkit;
+        info = asynkit.get_implementation_info();
+        print(f'Implementation: {info[\"implementation\"]}');
+        print('✓ Source distribution imports successfully')
+        "
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: sdist
+        path: dist/*.tar.gz
+
   build-n-publish:
     name: Build and publish Python distributions to PyPI
     runs-on: ubuntu-latest
@@ -88,6 +152,8 @@ jobs:
     needs:
       - tests
       - lint
+      - build_wheels
+      - build_sdist
     environment:
       name: pypi
       url: https://pypi.org/p/asynkit
@@ -96,15 +162,27 @@ jobs:
       contents: write  # Required for creating GitHub releases
     steps:
     - uses: actions/checkout@v3
-    - name: Install uv
-      uses: astral-sh/setup-uv@v4
+    
+    # Download all wheel artifacts
+    - uses: actions/download-artifact@v3
       with:
-        enable-cache: true
-    - name: Set up Python 3.10
-      run: uv python install 3.10
-
-    - name: Build a binary wheel and a source tarball
-      run: uv build
+        name: wheels-ubuntu-latest
+        path: dist/
+        
+    - uses: actions/download-artifact@v3
+      with:
+        name: wheels-windows-latest
+        path: dist/
+        
+    - uses: actions/download-artifact@v3
+      with:
+        name: wheels-macos-latest
+        path: dist/
+        
+    - uses: actions/download-artifact@v3
+      with:
+        name: sdist
+        path: dist/
 
     - name: Extract release notes
       id: extract_notes
