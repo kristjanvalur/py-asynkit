@@ -48,13 +48,13 @@ except ImportError:
 
 def get_implementation_info() -> dict[str, Any]:
     """Return information about which coroutine implementation is active.
-    
+
     Returns:
         Dictionary with implementation details including:
         - implementation: "C extension" or "Pure Python"
         - performance_info: Description of expected performance
         - build_info: For C extension, compiler and optimization details
-    
+
     Example:
         >>> info = get_implementation_info()
         >>> print(f"Using {info['implementation']}")
@@ -68,19 +68,20 @@ def get_implementation_info() -> dict[str, Any]:
                 build_info = _get_c_build_info()
             except Exception:
                 build_info = {"status": "available but info unavailable"}
-        
+
         return {
-            'implementation': 'C extension',
-            'performance_info': '4-5x faster than pure Python',
-            'build_info': build_info,
-            'c_extension_available': True
+            "implementation": "C extension",
+            "performance_info": "4-5x faster than pure Python",
+            "build_info": build_info,
+            "c_extension_available": True,
         }
     else:
         return {
-            'implementation': 'Pure Python',
-            'performance_info': 'Baseline performance (install with build tools for 4x boost)',
-            'c_extension_available': False
+            "implementation": "Pure Python",
+            "performance_info": "Baseline performance (install with build tools for 4x boost)",
+            "c_extension_available": False,
         }
+
 
 __all__ = [
     "CoroStart",
