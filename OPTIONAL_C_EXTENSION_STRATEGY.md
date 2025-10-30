@@ -16,15 +16,15 @@ We already implement several best practices:
 **Standard Approach:**
 - Use **cibuildwheel** for automated wheel building across platforms
 - Cover major platforms: Windows (x64), macOS (x64/arm64), Linux (x64/aarch64)
-- Support Python 3.8-3.12+ (our current range: 3.10+)
-- Total wheels: ~30-50 variants
+- Support Python 3.10-3.14+ (our current range: 3.10+)
+- Total wheels: ~40-60 variants
 
 **Example from successful projects:**
 ```yaml
 # .github/workflows/wheels.yml (cibuildwheel approach)
 - uses: pypa/cibuildwheel@v2.16.2
   env:
-    CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
+    CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
     CIBW_SKIP: "*-musllinux_* pp*"  # Skip PyPy, musl variants
 ```
 
@@ -83,7 +83,7 @@ def get_implementation_info():
 ### **Phase 2: CI/CD Wheel Building**
 
 1. **GitHub Actions** workflow with cibuildwheel
-2. **Platform matrix**: Windows/macOS/Linux × Python 3.10-3.12
+2. **Platform matrix**: Windows/macOS/Linux × Python 3.10-3.14
 3. **PyPI upload** automation for releases
 
 ### **Phase 3: Documentation & User Experience**

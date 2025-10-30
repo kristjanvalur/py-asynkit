@@ -24,7 +24,7 @@ jobs:
       uses: pypa/cibuildwheel@v2.16.2
       env:
         # Configure which Python versions to build for
-        CIBW_BUILD: "cp310-* cp311-* cp312-*"
+        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
         
         # Skip PyPy (our C extension doesn't support it anyway)
         # Skip musllinux (most users don't need it)
@@ -60,7 +60,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.12'
 
     - name: Install build dependencies
       run: |
@@ -93,7 +93,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.12'
 
     - name: Install without build tools (force fallback)
       run: |
