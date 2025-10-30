@@ -38,6 +38,7 @@ dev = [
     "poethepoet>=0.29.0",
     "ruff>=0.4.0",
     "anyio>=4.0.0",
+    "types-setuptools",  # Type stubs for setuptools (dev/build only)
     "mdformat>=0.7.0",
     "mdformat-ruff>=0.1.0",
 ]
@@ -140,6 +141,9 @@ module = ["tests.*", "examples.*"]
 check_untyped_defs = false
 allow_untyped_defs = true
 allow_untyped_calls = true
+disallow_untyped_defs = false
+warn_return_any = false
+disable_error_code = ["call-arg", "no-untyped-def", "var-annotated", "truthy-function"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -151,6 +155,9 @@ module = [
     "tests.test_coro",
     "tests.test_anyio",
     "tests.conftest",
+    "tests.misc.eager_task_factory_benchmark",
+    "tests.test_implementation_params",
+    "tests.test_eager_task_factory_context",
 ]
 warn_unused_ignores=false
 

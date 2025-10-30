@@ -19,6 +19,7 @@ from collections.abc import (
 from contextvars import Context, copy_context
 from types import FrameType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Generic,
     TypeAlias,
@@ -34,10 +35,8 @@ from .tools import create_task as _create_task
 
 # Try to import C extension for performance-critical components
 try:
-    from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[import-untyped]
-    from ._cext import (
-        get_build_info as _get_c_build_info,  # type: ignore[import-untyped]
-    )
+    from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[attr-defined]
+    from ._cext import get_build_info as _get_c_build_info  # type: ignore[attr-defined]
 
     _HAVE_C_EXTENSION = (
         True  # Re-enabled - C extension now has continued/pending methods
@@ -391,6 +390,14 @@ class CoroStartMixin(Generic[T_co]):
     with both Python and C extension implementations.
     """
 
+    if TYPE_CHECKING:
+        # Abstract methods expected from base class - only for type checking
+        def _throw(self, exc: type[BaseException] | BaseException) -> None: ...
+        def done(self) -> bool: ...
+        def result(self) -> T_co: ...
+        def pending(self) -> bool: ...
+        def __await__(self) -> Generator[Any, Any, T_co]: ...
+
     @overload
     def throw(self, exc: type[BaseException]) -> T_co: ...
 
@@ -506,22 +513,22 @@ _PyCoroStart = CoroStart  # Keep reference to Python implementation
 
 if _HAVE_C_EXTENSION and _CCoroStartBase is not None:
     # Pure C implementation with Python mixin via multiple inheritance
-    class _CCoroStart(_CCoroStartBase, CoroStartMixin[T_co]):
+    class _CCoroStart(_CCoroStartBase, CoroStartMixin[T_co]):  # type: ignore[misc]
         """C CoroStartBase + Python CoroStartMixin via multiple inheritance"""
 
         pass
 
     # Public API uses C implementation when available (follows asyncio convention)
-    CoroStart = _CCoroStart  # type: ignore[misc,assignment]
+    CoroStart = _CCoroStart  # type: ignore[misc]
 
 else:
     # Python implementation only
-    _CCoroStart = None
-    CoroStart = _PyCoroStart  # type: ignore[misc,assignment]
+    _CCoroStart = None  # type: ignore[assignment,misc]
+    CoroStart = _PyCoroStart  # type: ignore[misc]
 
 # Always export Python implementation for advanced use cases
 # (follows asyncio convention)
-PyCoroStart = _PyCoroStart  # type: ignore[misc,assignment]
+PyCoroStart = _PyCoroStart
 
 
 async def coro_await(
