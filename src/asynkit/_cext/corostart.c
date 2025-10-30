@@ -106,8 +106,31 @@ static int corostart_start(CoroStartObject *self)
         TRACE_LOG("Direct coro.send(None) call");
     }
     
-    /* Call coro.send(None) */
-    self->s_value = PyObject_CallMethod(self->wrapped_coro, "send", "O", Py_None);
+    /* Call coro.send(None) using PyIter_Send API */
+    PyObject *result;
+    PySendResult send_result = PyIter_Send(self->wrapped_coro, Py_None, &result);
+    
+    TRACE_LOG("PyIter_Send returned: %d (NEXT=1, RETURN=0, ERROR=-1)", send_result);
+    
+    switch (send_result) {
+        case PYGEN_NEXT:
+            /* Coroutine yielded a value */
+            TRACE_LOG("PYGEN_NEXT: coroutine yielded a value");
+            self->s_value = result;
+            break;
+        case PYGEN_RETURN:
+            /* Coroutine completed normally - create StopIteration */
+            TRACE_LOG("PYGEN_RETURN: coroutine completed normally");
+            self->s_exc_type = Py_NewRef(PyExc_StopIteration);
+            self->s_exc_value = result;  /* StopIteration value */
+            self->s_exc_traceback = NULL;
+            break;
+        case PYGEN_ERROR:
+            /* Exception occurred - PyIter_Send already set the exception */
+            TRACE_LOG("PYGEN_ERROR: exception occurred");
+            PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
+            break;
+    }
     
     /* Exit context if we entered one */
     if (self->context != NULL) {
@@ -119,16 +142,12 @@ static int corostart_start(CoroStartObject *self)
 
     if(IS_PENDING(self)) {
         TRACE_LOG("Coroutine yielded a value - now pending");
-        /* Coroutine yielded a value - it's pending */
-        assert_corostart_invariant(self);
-        return 0; /* Success */
     } else {
         TRACE_LOG("Coroutine completed or raised exception");
-        /* Exception occurred - fetch and store it */
-        PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
-        assert_corostart_invariant(self);
-        return 0; /* Success (we handled the exception) */
     }
+    
+    assert_corostart_invariant(self);
+    return 0; /* Success (we handled the exception) */
 }
 
 /* CoroStartWrapper deallocation */
@@ -224,8 +243,9 @@ static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *
         TRACE_LOG("Direct coro.send for continued send");
     }
     
-    /* Call send() on the wrapped coroutine */
-    PyObject *result = PyObject_CallMethod(corostart->wrapped_coro, "send", "O", arg);
+    /* Call send() on the wrapped coroutine using PyIter_Send */
+    PyObject *result;
+    PySendResult send_result = PyIter_Send(corostart->wrapped_coro, arg, &result);
     
     /* Exit context if we entered one */
     if (corostart->context != NULL) {
@@ -235,7 +255,20 @@ static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *
         }
     }
     
-    return result;
+    /* Handle PyIter_Send result */
+    switch (send_result) {
+        case PYGEN_NEXT:
+            /* Coroutine yielded a value */
+            return result;
+        case PYGEN_RETURN:
+            /* Coroutine completed - raise StopIteration with value */
+            PyErr_SetObject(PyExc_StopIteration, result);
+            Py_XDECREF(result);
+            return NULL;
+        case PYGEN_ERROR:
+            /* Exception already set by PyIter_Send */
+            return NULL;
+    }
 }
 
 /* CoroStartWrapper throw method - required for coroutine protocol */
