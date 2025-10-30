@@ -4,13 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Breaking Changes
+## [0.14.2] - 2025-10-30
 
-- **CoroStart State Nomenclature**: Updated state method names for clarity
-  - `consumed()` → `continued()` - indicates coroutine has been awaited and finished
-  - `suspended()` → `pending()` - indicates coroutine is waiting for async operation
-  - Both Python and C extension implementations updated with new method names
-  - Old methods are no longer available - update code to use new names
+### Bug Fixes
+
+- **Context Truthiness Bug**: Fixed critical performance inconsistency in Python `CoroStart` implementation
+  - The Python implementation was incorrectly using `if self.context:` instead of `if self.context is not None:`
+  - Empty contexts (which evaluate to `False`) would bypass `context.run()` calls in Python but not in C extension
+  - This caused performance discrepancies between C and Python implementations
+  - Fixed in `_start()`, `__await__()`, and `athrow()` methods of `CoroStart` class
+  - Ensures consistent context handling behavior across both implementations
 
 ## [0.14.1] - 2025-10-25
 

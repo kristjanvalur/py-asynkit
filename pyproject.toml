@@ -1,6 +1,6 @@
 [project]
 name = "asynkit"
-version = "0.14.1"
+version = "0.14.2"
 description = "A toolkit for Python coroutines"
 authors = [
     {name = "Kristján Valur Jónsson", email = "sweskman@gmail.com"}
@@ -40,7 +40,6 @@ dev = [
     "anyio>=4.0.0",
     "mdformat>=0.7.0",
     "mdformat-ruff>=0.1.0",
-    "setuptools>=80.9.0",
 ]
 
 [project.optional-dependencies]
@@ -56,35 +55,27 @@ executor = {type = "simple"}
 [tool.poe.tasks]
 lint = "ruff check ."
 format = "ruff format ."
-format-c = "python scripts/format_c.py format"
 test = "pytest tests examples"
 cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 typing = "mypy -p asynkit -p tests -p examples"
 format-docs = "mdformat --number *.md docs/*.md"
-formatall = ["format", "format-c", "format-docs"]
-check = ["style", "style-c", "style-docs", "lint", "typing", "cov"]
+formatall = ["format", "format-docs"]
+check = ["style", "style-docs", "lint", "typing", "cov"]
 
 [tool.poe.tasks.style]
 help = "Validate code style"
 cmd  = "ruff format . --check --diff"
-
-[tool.poe.tasks.style-c]
-help = "Validate C code style"
-cmd  = "python scripts/format_c.py check"
 
 [tool.poe.tasks.style-docs]
 help = "Validate documentation style"
 cmd  = "mdformat --check --number *.md docs/*.md"
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-asynkit = ["py.typed"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/asynkit"]
 
 [tool.hatch.build.targets.sdist]
 include = [
