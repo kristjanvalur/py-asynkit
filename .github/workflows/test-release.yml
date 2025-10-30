@@ -1,0 +1,195 @@
+name: Test Release to PyPI Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to test (e.g., 0.15.0)'
+        required: true
+        default: '0.15.0'
+        type: string
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Build on Ubuntu (for Linux wheels), Windows, and macOS
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.16.2
+      env:
+        # Configure which Python versions to build for
+        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+        
+        # Skip PyPy (our C extension doesn't support it anyway)
+        # Skip musllinux (most users don't need it)
+        CIBW_SKIP: "pp* *-musllinux_*"
+        
+        # Test our wheels by importing and checking the C extension
+        CIBW_TEST_COMMAND: >
+          python -c "
+          import asynkit;
+          info = asynkit.get_implementation_info();
+          print(f'Implementation: {info[\"implementation\"]}');
+          print(f'Performance: {info[\"performance_info\"]}');
+          assert info['c_extension_available'], 'C extension should be available in wheels'
+          "
+        
+        # Install test dependencies
+        CIBW_TEST_REQUIRES: pytest anyio
+        
+        # Our package should always build successfully due to OptionalBuildExt
+        CIBW_BUILD_VERBOSITY: 1
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: wheels-${{ matrix.os }}
+        path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+
+    - name: Install build dependencies
+      run: |
+        pip install build
+
+    - name: Build sdist
+      run: python -m build --sdist
+
+    - name: Test sdist (should work without C extension)
+      run: |
+        pip install dist/*.tar.gz
+        python -c "
+        import asynkit;
+        info = asynkit.get_implementation_info();
+        print(f'Implementation: {info[\"implementation\"]}');
+        print('✓ Source distribution imports successfully')
+        "
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: sdist
+        path: dist/*.tar.gz
+
+  build_pure_python_wheel:
+    name: Build pure Python wheel
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+
+    - name: Install build dependencies
+      run: |
+        pip install build
+
+    - name: Build pure Python wheel (no C extension)
+      run: ASYNKIT_DISABLE_CEXT=1 python -m build --wheel
+
+    - name: Test pure Python wheel
+      run: |
+        pip install dist/*.whl
+        python -c "
+        import asynkit;
+        info = asynkit.get_implementation_info();
+        print(f'Implementation: {info[\"implementation\"]}');
+        print(f'C extension available: {info[\"c_extension_available\"]}');
+        assert info['implementation'] == 'Pure Python', 'Should be Pure Python implementation';
+        print('✓ Pure Python wheel works correctly')
+        "
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: pure-python-wheel
+        path: dist/*.whl
+
+  test_release_to_pypi_test:
+    name: Test Release to PyPI Test
+    needs: [build_wheels, build_sdist, build_pure_python_wheel]
+    runs-on: ubuntu-latest
+    environment: test-release
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: dist/
+
+    - name: Flatten artifact structure
+      run: |
+        # Move all wheels and sdist to a single dist/ directory
+        find dist/ -name "*.whl" -exec mv {} dist/ \;
+        find dist/ -name "*.tar.gz" -exec mv {} dist/ \;
+        # Remove empty directories
+        find dist/ -type d -empty -delete
+        # List what we have
+        echo "Files to upload:"
+        ls -la dist/
+
+    - name: Verify C extension wheels
+      run: |
+        echo "Checking for C extension wheels..."
+        wheel_count=$(ls -1 dist/*.whl | grep -v py3-none-any | wc -l)
+        pure_wheel_count=$(ls -1 dist/*.whl | grep py3-none-any | wc -l)
+        echo "C extension wheels: $wheel_count"
+        echo "Pure Python wheels: $pure_wheel_count"
+        echo "Source distributions: $(ls -1 dist/*.tar.gz | wc -l)"
+        
+        # Verify we have the expected wheels
+        if [ "$wheel_count" -lt 10 ]; then
+          echo "Warning: Expected more C extension wheels (got $wheel_count)"
+        fi
+        
+        if [ "$pure_wheel_count" -ne 1 ]; then
+          echo "Error: Expected exactly 1 pure Python wheel (got $pure_wheel_count)"
+          exit 1
+        fi
+
+    - name: Publish to PyPI Test
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        verbose: true
+
+    - name: Test installation from PyPI Test
+      run: |
+        # Wait a bit for PyPI Test to process the upload
+        sleep 30
+        
+        # Install from PyPI Test
+        pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ asynkit==${{ inputs.version }}
+        
+        # Test the installation
+        python -c "
+        import asynkit;
+        info = asynkit.get_implementation_info();
+        print(f'Implementation: {info[\"implementation\"]}');
+        print(f'Performance: {info[\"performance_info\"]}');
+        print(f'C extension available: {info[\"c_extension_available\"]}');
+        print('✓ PyPI Test installation successful')
+        "
+
+    - name: Summary
+      run: |
+        echo "🎉 Test release successful!"
+        echo "Version ${{ inputs.version }} has been uploaded to PyPI Test"
+        echo "You can install it with:"
+        echo "pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ asynkit==${{ inputs.version }}"
