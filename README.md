@@ -33,8 +33,10 @@ pip install --no-binary=asynkit asynkit
 - **Source distribution**: Custom compilation when using `--no-binary` flag
 
 Check your installation:
+
 ```python
 import asynkit
+
 info = asynkit.get_implementation_info()
 print(f"Using: {info['implementation']}")  # "C extension" or "Pure Python"
 ```

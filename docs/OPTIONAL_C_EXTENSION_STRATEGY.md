@@ -14,12 +14,14 @@ We already implement several best practices:
 ### **Wheel Distribution Strategy**
 
 **Standard Approach:**
+
 - Use **cibuildwheel** for automated wheel building across platforms
 - Cover major platforms: Windows (x64), macOS (x64/arm64), Linux (x64/aarch64)
 - Support Python 3.10-3.14+ (our current range: 3.10+)
 - Total wheels: ~40-60 variants
 
 **Example from successful projects:**
+
 ```yaml
 # .github/workflows/wheels.yml (cibuildwheel approach)
 - uses: pypa/cibuildwheel@v2.16.2
@@ -31,9 +33,11 @@ We already implement several best practices:
 ### **Fallback Mechanisms**
 
 **1. Import-Time Fallback (Current - GOOD):**
+
 ```python
 try:
     from ._cext import CoroStartBase as _CCoroStartBase
+
     _HAVE_C_EXTENSION = True
 except ImportError:
     _CCoroStartBase = None
@@ -41,10 +45,11 @@ except ImportError:
 ```
 
 **2. Enhanced Setup.py Error Handling:**
+
 ```python
 class OptionalBuildExt(build_ext):
     """Custom build_ext that gracefully handles C extension failures."""
-    
+
     def build_extension(self, ext):
         try:
             super().build_extension(ext)
@@ -55,20 +60,22 @@ class OptionalBuildExt(build_ext):
 ```
 
 **3. Runtime Feature Detection:**
+
 ```python
 def get_implementation_info():
     """Return information about which implementation is active."""
     if _HAVE_C_EXTENSION:
         import asynkit._cext
+
         return {
-            'implementation': 'C extension',
-            'build_info': asynkit._cext.get_build_info(),
-            'performance_multiplier': '4-5x faster'
+            "implementation": "C extension",
+            "build_info": asynkit._cext.get_build_info(),
+            "performance_multiplier": "4-5x faster",
         }
     else:
         return {
-            'implementation': 'Pure Python',
-            'performance_multiplier': '1x (baseline)'
+            "implementation": "Pure Python",
+            "performance_multiplier": "1x (baseline)",
         }
 ```
 
@@ -105,6 +112,7 @@ This would make `pip install asynkit` always succeed, even without build tools.
 ## Example Error Messages
 
 **Good user experience:**
+
 ```
 Building C extension... FAILED
 → Continuing with Python implementation
@@ -113,6 +121,7 @@ Building C extension... FAILED
 ```
 
 **Bad user experience:**
+
 ```
 error: Microsoft Visual C++ 14.0 is required
 Command "python setup.py egg_info" failed
@@ -123,5 +132,5 @@ Command "python setup.py egg_info" failed
 asynkit is already well-positioned with good fallback mechanisms. The main improvements needed are:
 
 1. **Robust build error handling** (highest impact)
-2. **Automated wheel building** (best user experience)  
+2. **Automated wheel building** (best user experience)
 3. **Clear documentation** (reduces support burden)

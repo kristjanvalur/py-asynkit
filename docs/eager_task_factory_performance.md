@@ -7,7 +7,7 @@ This document presents comprehensive performance analysis comparing asynkit's ea
 Eager task factory implementations provide **significant performance improvements** over standard asyncio task creation with enhanced C extension performance:
 
 - **Python 3.13 eager_task_factory**: **3.2x faster** startup latency (minimum case)
-- **asynkit eager_task_factory (C extension)**: **2.2x faster** startup latency (minimum case)  
+- **asynkit eager_task_factory (C extension)**: **2.2x faster** startup latency (minimum case)
 - **asynkit C extension**: **22% better throughput** than pure Python implementation
 - **Important**: Non-eager latency represents **minimum possible delay** - real-world eager advantages are much larger
 
@@ -30,6 +30,7 @@ The benchmark measures two key metrics:
 #### Critical Latency Measurement Notes
 
 **Non-eager latency measurement represents the absolute minimum possible delay:**
+
 - Measured during tight task creation loops with no intervening work
 - Real-world non-eager latency increases proportionally with work done between `create_task()` and `await`
 - **Eager latency remains consistent** regardless of intervening work patterns
@@ -65,12 +66,12 @@ async def latency_test_coro(creation_time: float) -> str:
 
 | Implementation | Mean | Median | Min | Max | Std Dev |
 |----------------|------|--------|-----|-----|---------|
-| Standard asyncio (non-eager)* | **2.01** | 1.98 | 1.81 | 2.39 | 0.13 |
+| Standard asyncio (non-eager)\* | **2.01** | 1.98 | 1.81 | 2.39 | 0.13 |
 | Python 3.13 eager | **0.63** | 0.55 | 0.45 | 11.56 | 0.41 |
 | asynkit eager (C extension) | **0.90** | 0.59 | 0.51 | 142.48 | 5.45 |
 | asynkit eager (Pure Python) | **1.13** | 0.66 | 0.54 | 133.22 | 4.89 |
 
-*_Adjusted for per-task contribution; represents minimum possible latency_
+\*_Adjusted for per-task contribution; represents minimum possible latency_
 
 ### Throughput (Operations/Second)
 
@@ -96,7 +97,7 @@ async def latency_test_coro(creation_time: float) -> str:
 The measured latency improvements represent **minimum case scenarios**:
 
 - **Standard asyncio (non-eager)**: ~2.0 μs minimum per-task delay
-- **Eager implementations**: 0.6-1.1 μs consistent execution time  
+- **Eager implementations**: 0.6-1.1 μs consistent execution time
 - **Critical advantage**: Eager latency remains constant regardless of work done between task creation and await
 - **Real-world impact**: Non-eager delays scale with application complexity; eager execution provides predictable performance
 
@@ -130,7 +131,7 @@ asynkit provides performance benefits across Python versions:
 
 **Advantages:**
 
-- Native C implementation with integrated asyncio optimization  
+- Native C implementation with integrated asyncio optimization
 - Consistent low-variance latency characteristics
 - Integrated with asyncio internals
 - Global application via `loop.set_task_factory()`
@@ -138,7 +139,7 @@ asynkit provides performance benefits across Python versions:
 **Limitations:**
 
 - Requires Python 3.13+ for optimal performance
-- All-or-nothing approach (affects all tasks)  
+- All-or-nothing approach (affects all tasks)
 - Slightly lower throughput than asynkit's C extension
 
 ### asynkit eager_task_factory (C Extension)
@@ -147,7 +148,7 @@ asynkit provides performance benefits across Python versions:
 
 - **Superior throughput performance** (22% faster than baseline)
 - **Cross-version compatibility** (Python 3.10+)
-- **Selective application** possible  
+- **Selective application** possible
 - **PyIter_Send optimization** for direct C API calls
 - **Same API** as Python's native for easy migration
 - **Implementation flexibility** (C extension with pure Python fallback)
@@ -164,7 +165,7 @@ asynkit provides performance benefits across Python versions:
 
 - Running Python 3.13+ exclusively
 - Seeking most consistent low-latency performance
-- Applying eager execution globally  
+- Applying eager execution globally
 - Working with latency-sensitive single-task scenarios
 
 ### Use asynkit eager_task_factory When:
@@ -186,7 +187,7 @@ For Python 3.13+ environments, consider using asynkit when throughput matters mo
 ```python
 import asyncio
 
-# Global eager execution  
+# Global eager execution
 loop = asyncio.get_running_loop()
 loop.set_task_factory(asyncio.eager_task_factory)
 
@@ -201,7 +202,7 @@ import asyncio
 import asynkit
 
 # Check implementation being used
-info = asynkit.get_implementation_info() 
+info = asynkit.get_implementation_info()
 print(f"Using: {info['implementation']}")  # "C extension" or "Pure Python"
 
 # Option 1: Global eager execution (compatible API)
@@ -255,7 +256,7 @@ The benchmark includes:
 ## Future Considerations
 
 - Continue optimizing the C extension for even better performance
-- Monitor Python's continued development of eager execution features  
+- Monitor Python's continued development of eager execution features
 - Consider adaptive strategies that use both implementations optimally
 - Evaluate performance impacts in production workloads across different Python versions
 - Explore further PyIter_Send API optimizations for additional performance gains
