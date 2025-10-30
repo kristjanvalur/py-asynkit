@@ -12,6 +12,14 @@
 #include <Python.h>
 #include <stdio.h>
 
+/* Debug logging macros */
+#define DEBUG_TRACE 0
+#if DEBUG_TRACE
+#define TRACE_LOG(fmt, ...) printf("[C-TRACE] " fmt "\n", ##__VA_ARGS__)
+#else
+#define TRACE_LOG(fmt, ...)
+#endif
+
 /* Forward declarations */
 static PyTypeObject CoroStartType;
 static PyTypeObject CoroStartWrapperType;
@@ -86,26 +94,36 @@ static inline void assert_corostart_invariant(CoroStartObject *self)
 /* CoroStart _start method - simplified eager execution logic */
 static int corostart_start(CoroStartObject *self)
 {
-    /* Try to send None to start the coroutine (with context support) */
-    if(self->context != NULL) {
-        /* Use context.run(coro.send, None) */
-        PyObject *send_method = PyObject_GetAttrString(self->wrapped_coro, "send");
-        if(send_method == NULL) {
+    TRACE_LOG("corostart_start called - about to start coroutine execution");
+    
+    /* Enter context if provided */
+    if (self->context != NULL) {
+        TRACE_LOG("Using context enter/exit for coroutine start");
+        if (PyContext_Enter(self->context) < 0) {
             return -1;
         }
-        self->s_value =
-            PyObject_CallMethod(self->context, "run", "OO", send_method, Py_None);
-        Py_DECREF(send_method);
     } else {
-        /* Direct call to coro.send(None) */
-        self->s_value = PyObject_CallMethod(self->wrapped_coro, "send", "O", Py_None);
+        TRACE_LOG("Direct coro.send(None) call");
+    }
+    
+    /* Call coro.send(None) */
+    self->s_value = PyObject_CallMethod(self->wrapped_coro, "send", "O", Py_None);
+    
+    /* Exit context if we entered one */
+    if (self->context != NULL) {
+        if (PyContext_Exit(self->context) < 0) {
+            Py_CLEAR(self->s_value);
+            return -1;
+        }
     }
 
     if(IS_PENDING(self)) {
+        TRACE_LOG("Coroutine yielded a value - now pending");
         /* Coroutine yielded a value - it's pending */
         assert_corostart_invariant(self);
         return 0; /* Success */
     } else {
+        TRACE_LOG("Coroutine completed or raised exception");
         /* Exception occurred - fetch and store it */
         PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
         assert_corostart_invariant(self);
@@ -156,8 +174,11 @@ static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *
 {
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
+    TRACE_LOG("corostart_wrapper_send() called");
+
     /* Check if we have start results (first call) */
     if(!IS_CONTINUED(corostart)) {
+        TRACE_LOG("First send call - processing eager execution result");
         /* This is the first send call - process the eager execution result */
         /* According to PEP 342, first send() must be None */
         if(arg != Py_None) {
@@ -167,6 +188,7 @@ static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *
         }
 
         if(IS_DONE(corostart)) {
+            TRACE_LOG("Coroutine completed during start - re-raising exception");
             /* Exception occurred during start - re-raise it and clear state */
             PyErr_Restore(corostart->s_exc_type,
                           corostart->s_exc_value,
@@ -180,6 +202,7 @@ static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *
         }
 
         // we are pending
+        TRACE_LOG("Coroutine yielded during start - returning yielded value");
         /* Coroutine yielded a value - return it and clear state to mark as continued */
         PyObject *result = corostart->s_value;
         corostart->s_value =
@@ -187,24 +210,32 @@ static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *
         return result;
     }
 
+    TRACE_LOG("Subsequent send call - delegating to wrapped coroutine");
     /* No start results - coroutine was already started, delegate to wrapped coroutine
      */
 
-    /* Call send() on the wrapped coroutine (with context support) */
-    if(corostart->context != NULL) {
-        PyObject *send_method = PyObject_GetAttrString(corostart->wrapped_coro, "send");
-        if(send_method == NULL) {
+    /* Enter context if provided */
+    if (corostart->context != NULL) {
+        TRACE_LOG("Using context enter/exit for continued send");
+        if (PyContext_Enter(corostart->context) < 0) {
             return NULL;
         }
-        /* Use context.run(coro.send, arg) */
-        PyObject *result =
-            PyObject_CallMethod(corostart->context, "run", "OO", send_method, arg);
-        Py_DECREF(send_method);
-        return result;
     } else {
-        /* Direct call to coro.send(arg) */
-        return PyObject_CallMethod(corostart->wrapped_coro, "send", "O", arg);
+        TRACE_LOG("Direct coro.send for continued send");
     }
+    
+    /* Call send() on the wrapped coroutine */
+    PyObject *result = PyObject_CallMethod(corostart->wrapped_coro, "send", "O", arg);
+    
+    /* Exit context if we entered one */
+    if (corostart->context != NULL) {
+        if (PyContext_Exit(corostart->context) < 0) {
+            Py_XDECREF(result);
+            return NULL;
+        }
+    }
+    
+    return result;
 }
 
 /* CoroStartWrapper throw method - required for coroutine protocol */
@@ -212,23 +243,26 @@ static PyObject *corostart_wrapper_throw(CoroStartWrapperObject *self, PyObject 
 {
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
-    /* Call throw() on the wrapped coroutine (with context support) */
-    /* Single exception argument - matches coroutine protocol */
-    if(corostart->context != NULL) {
-        /* Use context.run(coro.throw, exc) */
-        PyObject *throw_method = PyObject_GetAttrString(corostart->wrapped_coro,
-                                                        "throw");
-        if(throw_method == NULL) {
+    /* Enter context if provided */
+    if (corostart->context != NULL) {
+        TRACE_LOG("Using context enter/exit for throw");
+        if (PyContext_Enter(corostart->context) < 0) {
             return NULL;
         }
-        PyObject *result =
-            PyObject_CallMethod(corostart->context, "run", "OO", throw_method, exc);
-        Py_DECREF(throw_method);
-        return result;
-    } else {
-        /* Direct call to coro.throw(exc) */
-        return PyObject_CallMethod(corostart->wrapped_coro, "throw", "O", exc);
     }
+    
+    /* Call throw() on the wrapped coroutine */
+    PyObject *result = PyObject_CallMethod(corostart->wrapped_coro, "throw", "O", exc);
+    
+    /* Exit context if we entered one */
+    if (corostart->context != NULL) {
+        if (PyContext_Exit(corostart->context) < 0) {
+            Py_XDECREF(result);
+            return NULL;
+        }
+    }
+    
+    return result;
 }
 
 /* CoroStartWrapper close method - required for coroutine protocol */
@@ -237,22 +271,22 @@ static PyObject *corostart_wrapper_close(CoroStartWrapperObject *self,
 {
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
-    PyObject *result;
-
-    // If a context is provided, use context.run() to call close
-    if(corostart->context != Py_None && corostart->context != NULL) {
-        // Create a callable that will invoke close()
-        PyObject *close_callable = PyObject_GetAttrString(corostart->wrapped_coro,
-                                                          "close");
-        if(close_callable == NULL) {
+    /* Enter context if provided */
+    if (corostart->context != NULL) {
+        if (PyContext_Enter(corostart->context) < 0) {
             return NULL;
         }
-        // Call context.run(close_callable)
-        result = PyObject_CallMethod(corostart->context, "run", "O", close_callable);
-        Py_DECREF(close_callable);
-    } else {
-        // Direct call to coro.close()
-        result = PyObject_CallMethod(corostart->wrapped_coro, "close", NULL);
+    }
+    
+    /* Call close() on the wrapped coroutine */
+    PyObject *result = PyObject_CallMethod(corostart->wrapped_coro, "close", NULL);
+    
+    /* Exit context if we entered one */
+    if (corostart->context != NULL) {
+        if (PyContext_Exit(corostart->context) < 0) {
+            Py_XDECREF(result);
+            return NULL;
+        }
     }
 
     return result;
@@ -350,8 +384,10 @@ static PyObject *corostart_done(CoroStartObject *self, PyObject *args)
     // Return True if we have completed (indicated by having an exception)
     // Either StopIteration (normal completion) or any other exception (error)
     if(IS_DONE(self)) {
+        TRACE_LOG("corostart_done() -> True (coroutine completed)");
         Py_RETURN_TRUE;
     }
+    TRACE_LOG("corostart_done() -> False (coroutine still pending)");
     Py_RETURN_FALSE;
 }
 
@@ -379,8 +415,11 @@ static PyObject *corostart_pending(CoroStartObject *self, PyObject *Py_UNUSED(ar
 
 static PyObject *corostart_result(CoroStartObject *self, PyObject *args)
 {
+    TRACE_LOG("corostart_result() called");
+    
     // Check if we're done (must have an exception)
     if(self->s_exc_type == NULL) {
+        TRACE_LOG("corostart_result() -> InvalidStateError (not done)");
         // Use asyncio.InvalidStateError to match Python implementation
         PyObject *asyncio_module = PyImport_ImportModule("asyncio");
         if(asyncio_module) {
@@ -401,6 +440,7 @@ static PyObject *corostart_result(CoroStartObject *self, PyObject *args)
 
     // Check if it's StopIteration (normal completion)
     if(PyErr_GivenExceptionMatches(self->s_exc_type, PyExc_StopIteration)) {
+        TRACE_LOG("corostart_result() -> StopIteration value (normal completion)");
         // Check if s_exc_value is an instance of the exception type
         if(self->s_exc_value &&
            PyObject_IsInstance(self->s_exc_value, self->s_exc_type)) {
@@ -421,6 +461,7 @@ static PyObject *corostart_result(CoroStartObject *self, PyObject *args)
             }
         }
     } else {
+        TRACE_LOG("corostart_result() -> Re-raising exception (error completion)");
         // Re-raise other exceptions using Restore
         PyErr_Restore(Py_XNewRef(self->s_exc_type),
                       Py_XNewRef(self->s_exc_value),
@@ -499,13 +540,20 @@ static PyObject *corostart__throw(CoroStartObject *self, PyObject *exc)
 
     // Call throw() with context support
     if(self->context != NULL) {
-        PyObject *throw_method = PyObject_GetAttrString(self->wrapped_coro, "throw");
-        if(throw_method == NULL) {
+        /* Enter context */
+        if (PyContext_Enter(self->context) < 0) {
             Py_DECREF(value);
             return NULL;
         }
-        result = PyObject_CallMethod(self->context, "run", "OO", throw_method, value);
-        Py_DECREF(throw_method);
+        
+        result = PyObject_CallMethod(self->wrapped_coro, "throw", "O", value);
+        
+        /* Exit context (even if call failed) */
+        if (PyContext_Exit(self->context) < 0) {
+            Py_DECREF(value);
+            Py_XDECREF(result);
+            return NULL;
+        }
     } else {
         result = PyObject_CallMethod(self->wrapped_coro, "throw", "O", value);
     }
@@ -569,14 +617,19 @@ static PyObject *corostart_close(CoroStartObject *self, PyObject *args)
 
     // Always close the underlying coroutine
     if(self->context != NULL) {
-        // Create a callable that will invoke close()
-        PyObject *close_callable = PyObject_GetAttrString(self->wrapped_coro, "close");
-        if(close_callable == NULL) {
+        /* Enter context */
+        if (PyContext_Enter(self->context) < 0) {
             return NULL;
         }
-        // Call context.run(close_callable)
-        result = PyObject_CallMethod(self->context, "run", "O", close_callable);
-        Py_DECREF(close_callable);
+        
+        // Direct call to coro.close()
+        result = PyObject_CallMethod(self->wrapped_coro, "close", NULL);
+        
+        /* Exit context (even if call failed) */
+        if (PyContext_Exit(self->context) < 0) {
+            Py_XDECREF(result);
+            return NULL;
+        }
     } else {
         // Direct call to coro.close()
         result = PyObject_CallMethod(self->wrapped_coro, "close", NULL);
@@ -642,6 +695,8 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 
     static char *kwlist[] = {"coro", "context", NULL};
 
+    TRACE_LOG("CoroStart.__new__ called");
+
     if(!PyArg_ParseTupleAndKeywords(args, kwargs, "O|O", kwlist, &coro, &context)) {
         return NULL;
     }
@@ -651,6 +706,8 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
     if(cs == NULL) {
         return NULL;
     }
+
+    TRACE_LOG("CoroStart object allocated, about to start coroutine");
 
     /* Store the coroutine and context */
     cs->wrapped_coro = Py_NewRef(coro);
@@ -695,6 +752,12 @@ PyMODINIT_FUNC PyInit__cext(void)
 {
     PyObject *module = PyModule_Create(&cext_module);
     if(module == NULL) {
+        return NULL;
+    }
+
+    /* Add a simple test attribute first */
+    if(PyModule_AddStringConstant(module, "__test__", "C extension loaded") < 0) {
+        Py_DECREF(module);
         return NULL;
     }
 
