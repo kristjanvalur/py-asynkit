@@ -22,7 +22,7 @@
 
 /* Forward declarations */
 static PyTypeObject CoroStartType;
-static PyTypeObject CoroStartWrapperType;
+static PyTypeObject *CoroStartWrapperType = NULL;  /* Will be created from spec */
 
 /* Forward declaration of methods */
 static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs);
@@ -268,6 +268,11 @@ static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *
         case PYGEN_ERROR:
             /* Exception already set by PyIter_Send */
             return NULL;
+        default:
+            /* Should not happen, but handle gracefully */
+            PyErr_SetString(PyExc_RuntimeError, "Unexpected PyIter_Send result");
+            Py_XDECREF(result);
+            return NULL;
     }
 }
 
@@ -325,6 +330,17 @@ static PyObject *corostart_wrapper_close(CoroStartWrapperObject *self,
     return result;
 }
 
+#if DEBUG_TRACE
+/* CoroStartWrapper am_send implementation for PyIter_Send optimization (debug version) */
+static PyObject *corostart_wrapper_am_send(CoroStartWrapperObject *self, PyObject *arg)
+{
+    TRACE_LOG("corostart_wrapper_am_send() called - optimized PyIter_Send path");
+    
+    /* Delegate to the regular send method */
+    return corostart_wrapper_send(self, arg);
+}
+#endif
+
 /* CoroStartWrapper methods */
 static PyMethodDef corostart_wrapper_methods[] = {
     {"send",
@@ -338,18 +354,31 @@ static PyMethodDef corostart_wrapper_methods[] = {
     {"close", (PyCFunction) corostart_wrapper_close, METH_NOARGS, "Close the wrapper."},
     {NULL, NULL, 0, NULL}};
 
-/* CoroStartWrapper type definition */
-static PyTypeObject CoroStartWrapperType = {
-    PyVarObject_HEAD_INIT(NULL, 0).tp_name = "asynkit._cext.CoroStartWrapper",
-    .tp_basicsize = sizeof(CoroStartWrapperObject),
-    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
-    .tp_new = PyType_GenericNew,
-    .tp_dealloc = (destructor) corostart_wrapper_dealloc,
-    .tp_traverse = (traverseproc) corostart_wrapper_traverse,
-    .tp_clear = (inquiry) corostart_wrapper_clear,
-    .tp_iter = (getiterfunc) corostart_wrapper_iter,
-    .tp_iternext = (iternextfunc) corostart_wrapper_iternext,
-    .tp_methods = corostart_wrapper_methods,
+/* CoroStartWrapper type definition using PyType_Spec for am_send optimization */
+static PyType_Slot corostart_wrapper_slots[] = {
+    {Py_tp_dealloc, corostart_wrapper_dealloc},
+    {Py_tp_traverse, corostart_wrapper_traverse},
+    {Py_tp_clear, corostart_wrapper_clear},
+    {Py_tp_iter, corostart_wrapper_iter},
+    {Py_tp_iternext, corostart_wrapper_iternext},
+    {Py_tp_methods, corostart_wrapper_methods},
+    {Py_tp_new, PyType_GenericNew},
+    
+    /* Async protocol slot for PyIter_Send optimization */
+#if DEBUG_TRACE
+    {Py_am_send, corostart_wrapper_am_send},  /* Debug version with tracing */
+#else
+    {Py_am_send, corostart_wrapper_send},     /* Direct implementation for maximum performance */
+#endif
+    
+    {0, NULL},
+};
+
+static PyType_Spec corostart_wrapper_spec = {
+    .name = "asynkit._cext.CoroStartWrapper",
+    .basicsize = sizeof(CoroStartWrapperObject),
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
+    .slots = corostart_wrapper_slots,
 };
 
 /* CoroStart deallocation */
@@ -394,7 +423,7 @@ static PyObject *corostart_await(CoroStartObject *self)
 {
     /* Create our CoroStartWrapper that holds a reference to this CoroStart */
     CoroStartWrapperObject *wrapper = (CoroStartWrapperObject *) CoroStartWrapperType
-                                          .tp_alloc(&CoroStartWrapperType, 0);
+                                          ->tp_alloc(CoroStartWrapperType, 0);
     if(wrapper == NULL) {
         return NULL;
     }
@@ -822,8 +851,9 @@ PyMODINIT_FUNC PyInit__cext(void)
         return NULL;
     }
 
-    /* Initialize CoroStartWrapper type */
-    if(PyType_Ready(&CoroStartWrapperType) < 0) {
+    /* Create CoroStartWrapper type from spec for am_send optimization */
+    CoroStartWrapperType = (PyTypeObject *)PyType_FromSpec(&corostart_wrapper_spec);
+    if(CoroStartWrapperType == NULL) {
         Py_DECREF(module);
         return NULL;
     }
@@ -835,11 +865,11 @@ PyMODINIT_FUNC PyInit__cext(void)
     }
 
     /* Add types to module (for debugging/introspection) */
-    Py_INCREF(&CoroStartWrapperType);
+    Py_INCREF(CoroStartWrapperType);
     if(PyModule_AddObject(module,
                           "CoroStartWrapperType",
-                          (PyObject *) &CoroStartWrapperType) < 0) {
-        Py_DECREF(&CoroStartWrapperType);
+                          (PyObject *) CoroStartWrapperType) < 0) {
+        Py_DECREF(CoroStartWrapperType);
         Py_DECREF(module);
         return NULL;
     }
