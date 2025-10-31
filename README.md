@@ -28,7 +28,7 @@ pip install --no-binary=asynkit asynkit
 
 **Wheel selection priority:**
 
-- **Binary wheels** (Windows, macOS, Linux × Python 3.10-3.14): High-performance C extension provides **22% better throughput** and **20% lower latency**
+- **Binary wheels** (Windows, macOS, Linux × Python 3.10-3.14): High-performance C extension provides **8% better throughput** and **near-native latency**
 - **Pure Python wheel** (all other platforms): Universal compatibility, baseline performance
 - **Source distribution**: Custom compilation when using `--no-binary` flag
 
@@ -55,7 +55,7 @@ print(f"Using: {info['implementation']}")  # "C extension" or "Pure Python"
 
 ### `eager()` - lower latency IO
 
-> ℹ️ **Note:** Python 3.12+ introduced native eager task execution via `asyncio.eager_task_factory`. See [docs/eager_tasks.md](docs/eager_tasks.md) for a detailed comparison of Python's built-in eager tasks and asynkit's `eager()` feature. Performance analysis shows asynkit's C extension provides competitive or superior throughput compared to native implementations.
+> ℹ️ **Note:** Python 3.12+ introduced native eager task execution via `asyncio.eager_task_factory`. See [docs/eager_tasks.md](docs/eager_tasks.md) for a detailed comparison of Python's built-in eager tasks and asynkit's `eager()` feature. Performance analysis shows asynkit's C extension achieves near-native latency (0.80μs vs 0.74μs) with 8% better throughput than pure Python.
 
 Did you ever wish that your _coroutines_ started right away, and only returned control to
 the caller once they become blocked? Like the way the `async` and `await` keywords work in the __C#__ language?
@@ -215,12 +215,12 @@ Eager task factories provide **significant performance improvements** for task s
 
 - **Standard asyncio**: ~2.0 microseconds minimum per-task delay (scales with application complexity)
 - **Eager factories**: ~0.6-1.1 microseconds consistent execution time
-- **Improvement**: **2-3x faster** minimum latency, much larger improvements in real applications
-- **asynkit C extension**: **22% better throughput** than pure Python, competitive with or exceeding native Python implementations
+- **Improvement**: **1.8x faster** minimum latency, much larger improvements in real applications
+- **asynkit C extension**: **8% better throughput** than pure Python, achieving **93% of native Python 3.14 performance** with cross-platform compatibility
 
 **Key advantage**: Eager execution provides **predictable performance** - latency remains constant regardless of work done between task creation and await, while non-eager latency scales with application complexity.
 
-See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance.md) for detailed performance analysis comparing asynkit's implementation with Python 3.13's native `eager_task_factory`.
+See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance.md) for detailed performance analysis comparing asynkit's implementation with Python 3.14's native `eager_task_factory`.
 
 #### When to Use Task Factories vs. Decorators
 
