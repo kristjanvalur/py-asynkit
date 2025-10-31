@@ -32,13 +32,14 @@ jobs:
         CIBW_SKIP: "pp* *-musllinux_*"
         
         # Test our wheels by importing and checking the C extension
-        CIBW_TEST_COMMAND: >
+        CIBW_TEST_COMMAND: |
           python -c "
-          import asynkit;
-          info = asynkit.get_implementation_info();
-          print(f'Implementation: {info[\"implementation\"]}');
-          print(f'Performance: {info[\"performance_info\"]}');
+          import asynkit
+          info = asynkit.get_implementation_info()
+          print('Implementation:', info['implementation'])
+          print('Performance:', info['performance_info'])
           assert info['c_extension_available'], 'C extension should be available in wheels'
+          print('✓ C extension wheel test passed')
           "
         
         # Install test dependencies
@@ -74,9 +75,9 @@ jobs:
       run: |
         pip install dist/*.tar.gz
         python -c "
-        import asynkit;
-        info = asynkit.get_implementation_info();
-        print(f'Implementation: {info[\"implementation\"]}');
+        import asynkit
+        info = asynkit.get_implementation_info()
+        print('Implementation:', info['implementation'])
         print('✓ Source distribution imports successfully')
         "
 
@@ -107,11 +108,11 @@ jobs:
       run: |
         pip install dist/*.whl
         python -c "
-        import asynkit;
-        info = asynkit.get_implementation_info();
-        print(f'Implementation: {info[\"implementation\"]}');
-        print(f'C extension available: {info[\"c_extension_available\"]}');
-        assert info['implementation'] == 'Pure Python', 'Should be Pure Python implementation';
+        import asynkit
+        info = asynkit.get_implementation_info()
+        print('Implementation:', info['implementation'])
+        print('C extension available:', info['c_extension_available'])
+        assert info['implementation'] == 'Pure Python', 'Should be Pure Python implementation'
         print('✓ Pure Python wheel works correctly')
         "
 
@@ -179,11 +180,11 @@ jobs:
         
         # Test the installation
         python -c "
-        import asynkit;
-        info = asynkit.get_implementation_info();
-        print(f'Implementation: {info[\"implementation\"]}');
-        print(f'Performance: {info[\"performance_info\"]}');
-        print(f'C extension available: {info[\"c_extension_available\"]}');
+        import asynkit
+        info = asynkit.get_implementation_info()
+        print('Implementation:', info['implementation'])
+        print('Performance:', info['performance_info'])
+        print('C extension available:', info['c_extension_available'])
         print('✓ PyPI Test installation successful')
         "
 
