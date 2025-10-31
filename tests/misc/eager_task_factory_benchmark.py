@@ -174,7 +174,7 @@ class PerformanceTest:
                 throughput = await self.measure_throughput()
 
                 if is_warmup:
-                    print(f"  Warmup run completed (discarded)")
+                    print("  Warmup run completed (discarded)")
                 else:
                     print(
                         f"latency {run_latency_stats['mean']:.2f}μs, "
@@ -310,7 +310,6 @@ class AsynkitImplementationTest(PerformanceTest):
 
 async def compare_eager_start_parameter():
     """Test Python 3.12's per-task eager_start parameter if available."""
-    import inspect
 
     # Check if eager_start parameter is available
     sig = inspect.signature(asyncio.create_task)
@@ -488,7 +487,7 @@ async def main():
             c_throughput = c_ext_result["throughput"]
             py_throughput = py_result["throughput"]
 
-            print(f"\nC Extension vs Pure Python asynkit:")
+            print("\nC Extension vs Pure Python asynkit:")
             print(f"  C extension latency improvement: {py_latency / c_latency:.1f}x")
             print(
                 f"  C extension throughput improvement: {c_throughput / py_throughput:.2f}x"

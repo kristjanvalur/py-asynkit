@@ -1,12 +1,12 @@
 # C Extension Module
 # This module will be built as asynkit._cext
 
-from typing import Any, Dict
+from typing import Any
 
 from setuptools import Extension
 
 
-def build(setup_kwargs: Dict[str, Any]) -> None:
+def build(setup_kwargs: dict[str, Any]) -> None:
     """Build configuration for the C extension"""
 
     ext_modules = [
