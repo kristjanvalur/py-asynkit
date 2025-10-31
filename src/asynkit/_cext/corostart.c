@@ -47,6 +47,12 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc);
 static PyObject *corostart_close(PyObject *_self);
 static PyMethodDef corostart_methods[];
 
+/* Helper function forward declarations */
+static PyObject *invalid_state_error(void);
+
+/* Module initialization function */
+PyMODINIT_FUNC PyInit__cext(void);
+
 /* CoroStartWrapper - implements both iterator and coroutine protocols */
 typedef struct CoroStartWrapperObject {
     PyObject_HEAD;
@@ -185,18 +191,16 @@ static int corostart_start(CoroStartObject *self)
 /* CoroStartWrapper deallocation */
 static void corostart_wrapper_dealloc(PyObject *_self)
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
+    CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     PyObject_GC_UnTrack(self);
     Py_XDECREF(self->corostart);
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
 /* CoroStartWrapper garbage collection traversal */
-static int corostart_wrapper_traverse(PyObject *_self,
-                                      visitproc visit,
-                                      void *arg)
+static int corostart_wrapper_traverse(PyObject *_self, visitproc visit, void *arg)
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
+    CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     Py_VISIT(self->corostart);
     return 0;
 }
@@ -204,7 +208,7 @@ static int corostart_wrapper_traverse(PyObject *_self,
 /* CoroStartWrapper garbage collection clear */
 static int corostart_wrapper_clear(PyObject *_self)
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
+    CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     Py_CLEAR(self->corostart);
     return 0;
 }
@@ -212,7 +216,7 @@ static int corostart_wrapper_clear(PyObject *_self)
 /* CoroStartWrapper __iter__ method - required for iterator protocol */
 static PyObject *corostart_wrapper_iter(PyObject *_self)
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
+    CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     Py_INCREF(self);
     return (PyObject *) self;
 }
@@ -220,7 +224,6 @@ static PyObject *corostart_wrapper_iter(PyObject *_self)
 /* CoroStartWrapper __next__ method - alias for send(None) */
 static PyObject *corostart_wrapper_iternext(PyObject *_self)
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
     /* __next__ is equivalent to send(None) */
     return corostart_wrapper_send(_self, Py_None);
 }
@@ -229,7 +232,6 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
 /* CoroStartWrapper send method - delegates to am_send slot for optimization */
 static PyObject *corostart_wrapper_send(PyObject *_self, PyObject *arg)
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
     PyObject *result;
     PySendResult send_result = corostart_wrapper_am_send_slot(_self, arg, &result);
 
@@ -248,7 +250,7 @@ static PyObject *corostart_wrapper_send(PyObject *_self, PyObject *arg)
 /* CoroStartWrapper throw method - required for coroutine protocol */
 static PyObject *corostart_wrapper_throw(PyObject *_self, PyObject *exc)
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
+    CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
     /* Enter context if provided */
@@ -274,10 +276,9 @@ static PyObject *corostart_wrapper_throw(PyObject *_self, PyObject *exc)
 }
 
 /* CoroStartWrapper close method - required for coroutine protocol */
-static PyObject *corostart_wrapper_close(PyObject *_self,
-                                         PyObject *Py_UNUSED(ignored))
+static PyObject *corostart_wrapper_close(PyObject *_self, PyObject *Py_UNUSED(ignored))
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
+    CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
     /* Enter context if provided */
@@ -306,7 +307,7 @@ static PyObject *corostart_wrapper_close(PyObject *_self,
  */
 static PyObject *corostart_wrapper_am_send(PyObject *_self, PyObject *arg)
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
+    CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     TRACE_LOG("corostart_wrapper_am_send() called - optimized PyIter_Send path");
 
     /* Delegate to the regular send method */
@@ -319,7 +320,7 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
                                                    PyObject *arg,
                                                    PyObject **result)
 {
-    CoroStartWrapperObject *self = (CoroStartWrapperObject *)_self;
+    CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
     TRACE_LOG("corostart_wrapper_am_send_slot() called - PyIter_Send optimized path");
@@ -530,7 +531,7 @@ static PyObject *corostart_done(PyObject *_self)
 
 static PyObject *corostart_continued(PyObject *_self, PyObject *Py_UNUSED(args))
 {
-    CoroStartObject *self = (CoroStartObject *)_self;
+    CoroStartObject *self = (CoroStartObject *) _self;
     assert_corostart_invariant(self);
     // Return True if the coroutine has been continued (awaited) after initial start
     // In C implementation, continued means all start result fields are NULL
@@ -542,7 +543,7 @@ static PyObject *corostart_continued(PyObject *_self, PyObject *Py_UNUSED(args))
 
 static PyObject *corostart_pending(PyObject *_self, PyObject *Py_UNUSED(args))
 {
-    CoroStartObject *self = (CoroStartObject *)_self;
+    CoroStartObject *self = (CoroStartObject *) _self;
     assert_corostart_invariant(self);
     // Return True if the coroutine is pending, waiting for async operation
     // This means we have a yielded value (s_value != NULL)
@@ -552,7 +553,7 @@ static PyObject *corostart_pending(PyObject *_self, PyObject *Py_UNUSED(args))
     Py_RETURN_FALSE;
 }
 
-static PyObject *invalid_state_error()
+static PyObject *invalid_state_error(void)
 {
     // Use asyncio.InvalidStateError to match Python implementation
     PyObject *asyncio_module = PyImport_ImportModule("asyncio");
@@ -627,7 +628,7 @@ static PyObject *corostart_exception(PyObject *_self)
 
 static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
 {
-    CoroStartObject *self = (CoroStartObject *)_self;
+    CoroStartObject *self = (CoroStartObject *) _self;
     assert_corostart_invariant(self);
 
     // Convert exception type to instance if needed

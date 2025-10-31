@@ -121,6 +121,19 @@ def get_compile_args():
                 ]
             )
 
+    # Add strict warnings to catch MSVC compatibility issues
+    if not is_msvc:
+        # These warnings help catch issues that would fail on MSVC
+        args.extend(
+            [
+                "-Wstrict-prototypes",  # Require function prototypes
+                "-Wincompatible-pointer-types",  # Catch pointer type mismatches
+                "-Wold-style-definition",  # Require modern function definitions
+                "-Wmissing-prototypes",  # Require function declarations
+                "-Wunused-variable",  # Catch unused variables (like our typecasts)
+            ]
+        )
+
     # Allow override via CFLAGS environment variable
     env_cflags = os.environ.get("CFLAGS", "")
     if env_cflags:
