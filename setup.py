@@ -66,30 +66,52 @@ if os.environ.get("ASYNKIT_DISABLE_CEXT", "").lower() in ("1", "true", "yes"):
 
 # Define compilation flags based on build type
 def get_compile_args():
-    """Get compilation arguments based on environment variables."""
+    """Get compilation arguments based on environment variables and compiler."""
+    import platform
+
     args = []
+    is_msvc = platform.system() == "Windows"
 
     # Check for debug build
     if os.environ.get("ASYNKIT_DEBUG", "").lower() in ("1", "true", "yes"):
         print("Building C extension in DEBUG mode")
-        args.extend(
-            [
-                "-g",  # Debug symbols
-                "-O0",  # No optimization
-                "-DDEBUG",  # Debug macro
-                "-Wall",  # All warnings
-                "-Wextra",  # Extra warnings
-            ]
-        )
+        if is_msvc:
+            args.extend(
+                [
+                    "/Zi",  # Debug symbols
+                    "/Od",  # No optimization
+                    "/DDEBUG",  # Debug macro
+                    "/W3",  # Warning level 3
+                ]
+            )
+        else:
+            args.extend(
+                [
+                    "-g",  # Debug symbols
+                    "-O0",  # No optimization
+                    "-DDEBUG",  # Debug macro
+                    "-Wall",  # All warnings
+                    "-Wextra",  # Extra warnings
+                ]
+            )
     else:
         print("Building C extension in OPTIMIZED mode")
-        args.extend(
-            [
-                "-O3",  # Maximum optimization
-                "-DNDEBUG",  # Disable asserts
-                "-g",  # Keep debug symbols for profiling
-            ]
-        )
+        if is_msvc:
+            args.extend(
+                [
+                    "/O2",  # Maximum optimization
+                    "/DNDEBUG",  # Disable asserts
+                    "/Zi",  # Keep debug symbols for profiling
+                ]
+            )
+        else:
+            args.extend(
+                [
+                    "-O3",  # Maximum optimization
+                    "-DNDEBUG",  # Disable asserts
+                    "-g",  # Keep debug symbols for profiling
+                ]
+            )
 
     # Allow override via CFLAGS environment variable
     env_cflags = os.environ.get("CFLAGS", "")
