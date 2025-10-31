@@ -36,6 +36,19 @@ try:
     import asynkit._cext
     print(f'✓ C extension imports successfully: {dir(asynkit._cext)}')
     
+    # Check if this is actually a C extension or a Python module
+    module_file = getattr(asynkit._cext, '__file__', 'No __file__ attribute')
+    print(f'Module __file__: {module_file}')
+    
+    if module_file and module_file.endswith('.py'):
+        print('✗ WARNING: _cext is a Python module, not a C extension!')
+        print('This suggests the C extension failed to build and Python is importing a fallback.')
+        exit(1)
+    elif module_file and (module_file.endswith('.so') or module_file.endswith('.pyd')):
+        print('✓ Confirmed: _cext is a proper C extension')
+    else:
+        print(f'? Unknown module type: {module_file}')
+    
     # Check for CoroStartBase (the proper export)
     if hasattr(asynkit._cext, 'CoroStartBase'):
         CoroStartClass = asynkit._cext.CoroStartBase
