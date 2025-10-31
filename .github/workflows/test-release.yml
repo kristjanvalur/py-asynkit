@@ -47,7 +47,7 @@ jobs:
         # Our package should always build successfully due to OptionalBuildExt
         CIBW_BUILD_VERBOSITY: 1
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v5
       with:
         name: wheels-${{ matrix.os }}
         path: ./wheelhouse/*.whl
@@ -80,7 +80,7 @@ jobs:
         print('✓ Source distribution imports successfully')
         "
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v5
       with:
         name: sdist
         path: dist/*.tar.gz
@@ -115,7 +115,7 @@ jobs:
         print('✓ Pure Python wheel works correctly')
         "
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v5
       with:
         name: pure-python-wheel
         path: dist/*.whl
@@ -128,7 +128,7 @@ jobs:
     
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v5
       with:
         path: dist/
 

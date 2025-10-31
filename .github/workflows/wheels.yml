@@ -1,0 +1,144 @@
+name: Build and Test Wheels
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Build on Ubuntu (for Linux wheels), Windows, and macOS
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.16.2
+      env:
+        # Configure which Python versions to build for
+        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+        
+        # Skip PyPy (our C extension doesn't support it anyway)
+        # Skip musllinux (most users don't need it)
+        CIBW_SKIP: "pp* *-musllinux_*"
+        
+        # Test our wheels by importing and checking the C extension
+        CIBW_TEST_COMMAND: >
+          python -c "
+          import asynkit;
+          info = asynkit.get_implementation_info();
+          print(f'Implementation: {info[\"implementation\"]}');
+          print(f'Performance: {info[\"performance_info\"]}');
+          assert info['c_extension_available'], 'C extension should be available in wheels'
+          "
+        
+        # Install test dependencies
+        CIBW_TEST_REQUIRES: pytest anyio
+        
+        # Our package should always build successfully due to OptionalBuildExt
+        CIBW_BUILD_VERBOSITY: 1
+
+    - uses: actions/upload-artifact@v5
+      with:
+        name: wheels-${{ matrix.os }}
+        path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+
+    - name: Install build dependencies
+      run: |
+        pip install build
+
+    - name: Build sdist
+      run: python -m build --sdist
+
+    - name: Test sdist (should work without C extension)
+      run: |
+        pip install dist/*.tar.gz
+        python -c "
+        import asynkit;
+        info = asynkit.get_implementation_info();
+        print(f'Implementation: {info[\"implementation\"]}');
+        print('✓ Source distribution imports successfully')
+        "
+
+    - uses: actions/upload-artifact@v5
+      with:
+        name: sdist
+        path: dist/*.tar.gz
+
+  test_fallback:
+    name: Test pure Python fallback
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+
+    - name: Install without build tools (force fallback)
+      run: |
+        # Remove build tools to force pure Python fallback
+        pip install --no-build-isolation -e . || echo "Expected: C extension build failed"
+        
+    - name: Test pure Python implementation
+      run: |
+        python -c "
+        import asynkit;
+        info = asynkit.get_implementation_info();
+        print(f'Implementation: {info[\"implementation\"]}');
+        print(f'C extension available: {info[\"c_extension_available\"]}');
+        print('✓ Pure Python fallback works')
+        "
+
+  upload_pypi:
+    name: Upload to PyPI
+    needs: [build_wheels, build_sdist, test_fallback]
+    runs-on: ubuntu-latest
+    # Only upload on tagged releases
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/download-artifact@v5
+      with:
+        name: wheels-ubuntu-latest
+        path: dist/
+        
+    - uses: actions/download-artifact@v5
+      with:
+        name: wheels-windows-latest
+        path: dist/
+        
+    - uses: actions/download-artifact@v5
+      with:
+        name: wheels-macos-latest
+        path: dist/
+        
+    - uses: actions/download-artifact@v5
+      with:
+        name: sdist
+        path: dist/
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}

@@ -8,11 +8,10 @@ All notable changes to this project will be documented in this file.
 
 ### Performance Improvements
 
-- **C Extension Optimization**: Implemented major performance enhancements for coroutine operations
-  - Added PyIter_Send API optimization providing 4.66x direct performance improvement over Python method calls
-  - Integrated PyContext_Enter/Exit direct C API calls for context handling optimization
-  - C extension now delivers 5.52x speedup compared to baseline Python implementation
-  - Performance within 13% of Python 3.12 native asyncio implementation
+- **C Extension for CoroStart**: Created a C extension to optimize the speed of the CoroStart class by implementing core functionality in C
+  - Provides significant performance improvements for eager coroutine execution
+  - Maintains full compatibility with the Python implementation
+  - Automatically falls back to Python implementation if C extension is unavailable
 
 ### Build System Enhancements
 

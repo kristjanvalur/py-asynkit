@@ -108,7 +108,7 @@ jobs:
         CIBW_TEST_REQUIRES: pytest anyio
         CIBW_BUILD_VERBOSITY: 1
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v5
       with:
         name: wheels-${{ matrix.os }}
         path: ./wheelhouse/*.whl
@@ -140,7 +140,7 @@ jobs:
         print('✓ Source distribution imports successfully')
         "
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v5
       with:
         name: sdist
         path: dist/*.tar.gz
@@ -173,7 +173,7 @@ jobs:
         print('✓ Pure Python wheel works correctly')
         "
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v5
       with:
         name: pure-python-wheel
         path: dist/*.whl
@@ -198,27 +198,27 @@ jobs:
     - uses: actions/checkout@v3
     
     # Download all wheel artifacts
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v5
       with:
         name: wheels-ubuntu-latest
         path: dist/
         
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v5
       with:
         name: wheels-windows-latest
         path: dist/
         
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v5
       with:
         name: wheels-macos-latest
         path: dist/
         
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v5
       with:
         name: pure-python-wheel
         path: dist/
         
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v5
       with:
         name: sdist
         path: dist/
