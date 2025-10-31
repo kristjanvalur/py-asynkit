@@ -45,18 +45,17 @@ typedef struct {
     PyObject_HEAD;
     PyObject *wrapped_coro;
     PyObject *context;
-    PyObject *s_value;          // completed value (if not exception)
-    PyObject *s_exc_type;       // exception type (if completed with exception)
-    PyObject *s_exc_value;      // exception value
-    PyObject *s_exc_traceback;  // exception traceback
+    PySendResult initial_result; /* Result from initial PyIter_Send call */
+    PyObject *s_value;           // completed value (if not exception)
+    PyObject *s_exc_type;        // exception type (if completed with exception)
+    PyObject *s_exc_value;       // exception value
+    PyObject *s_exc_traceback;   // exception traceback
 } CoroStartObject;
 
 /* State checking macros for CoroStart objects */
-#define IS_DONE(self) ((self)->s_exc_type != NULL)
-#define IS_PENDING(self) ((self)->s_value != NULL)
-#define IS_CONTINUED(self)                                                             \
-    ((self)->s_value == NULL && (self)->s_exc_type == NULL &&                          \
-     (self)->s_exc_value == NULL && (self)->s_exc_traceback == NULL)
+#define IS_DONE(self) ((self)->initial_result != PYGEN_NEXT)
+#define IS_CONTINUED(self) ((self)->s_value == NULL && (self)->s_exc_type == NULL)
+#define IS_PENDING(self) (!IS_DONE(self) && !IS_CONTINUED(self))
 
 /* State invariant checker for debugging and validation */
 static inline void assert_corostart_invariant(CoroStartObject *self)
@@ -111,23 +110,19 @@ static int corostart_start(CoroStartObject *self)
     }
 
     /* Call coro.send(None) using PyIter_Send API */
-    PyObject *result;
-    PySendResult send_result = PyIter_Send(self->wrapped_coro, Py_None, &result);
+    self->initial_result = PyIter_Send(self->wrapped_coro, Py_None, &self->s_value);
 
-    TRACE_LOG("PyIter_Send returned: %d (NEXT=1, RETURN=0, ERROR=-1)", send_result);
+    TRACE_LOG("PyIter_Send returned: %d (NEXT=1, RETURN=0, ERROR=-1)",
+              self->initial_result);
 
-    switch(send_result) {
+    switch(self->initial_result) {
         case PYGEN_NEXT:
             /* Coroutine yielded a value */
             TRACE_LOG("PYGEN_NEXT: coroutine yielded a value");
-            self->s_value = result;
             break;
         case PYGEN_RETURN:
             /* Coroutine completed normally - create StopIteration */
             TRACE_LOG("PYGEN_RETURN: coroutine completed normally");
-            self->s_exc_type = Py_NewRef(PyExc_StopIteration);
-            self->s_exc_value = result; /* StopIteration value */
-            self->s_exc_traceback = NULL;
             break;
         case PYGEN_ERROR:
             /* Exception occurred - PyIter_Send already set the exception */
@@ -294,57 +289,33 @@ static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self,
         if(arg != Py_None) {
             PyErr_SetString(PyExc_TypeError,
                             "can't send non-None value to a just-started coroutine");
+            *result = NULL;
             return PYGEN_ERROR;
         }
 
         if(IS_DONE(corostart)) {
-            TRACE_LOG("Coroutine completed during start - checking exception type");
-
-            /* Check if it's StopIteration (normal completion) */
-            if(PyErr_GivenExceptionMatches(corostart->s_exc_type,
-                                           PyExc_StopIteration)) {
-                TRACE_LOG("StopIteration detected - converting to PYGEN_RETURN");
-
-                /* Extract the StopIteration value */
-                if(corostart->s_exc_value &&
-                   PyObject_IsInstance(corostart->s_exc_value, corostart->s_exc_type)) {
-                    /* s_exc_value is an actual StopIteration instance */
-                    PyObject *value = PyObject_GetAttrString(corostart->s_exc_value,
-                                                             "value");
-                    if(value == NULL) {
-                        PyErr_Clear();
-                        value = Py_NewRef(Py_None);
-                    }
-                    *result = value;
-                } else {
-                    /* s_exc_value is the raw value (Python optimization) */
-                    if(corostart->s_exc_value) {
-                        *result = Py_NewRef(corostart->s_exc_value);
-                    } else {
-                        *result = Py_NewRef(Py_None);
-                    }
-                }
-
-                /* Clear stored exception state - marks as continued */
-                Py_CLEAR(corostart->s_exc_type);
-                Py_CLEAR(corostart->s_exc_value);
-                Py_CLEAR(corostart->s_exc_traceback);
-
+            TRACE_LOG(
+                "Coroutine completed during start - we have a result or an exception");
+            if(corostart->s_value != NULL) {
+                // We have a result
+                TRACE_LOG("Coroutine completed with result");
+                *result = corostart->s_value;
+                corostart->s_value =
+                    NULL; /* Clear and transfer ownership - marks as continued */
                 return PYGEN_RETURN;
-            } else {
-                TRACE_LOG("Other exception during start - re-raising");
-                /* Other exception occurred during start - re-raise it and clear state
-                 */
-                PyErr_Restore(corostart->s_exc_type,
-                              corostart->s_exc_value,
-                              corostart->s_exc_traceback);
-                /* Clear the fields (PyErr_Restore steals references) - marks as
-                 * continued */
-                corostart->s_exc_type = NULL;
-                corostart->s_exc_value = NULL;
-                corostart->s_exc_traceback = NULL;
-                return PYGEN_ERROR;
             }
+
+            // we have an exception, restore it and return error
+            PyErr_Restore(corostart->s_exc_type,
+                          corostart->s_exc_value,
+                          corostart->s_exc_traceback);
+            /* Clear the fields (PyErr_Restore steals references) - marks as continued
+             */
+            corostart->s_exc_type = NULL;
+            corostart->s_exc_value = NULL;
+            corostart->s_exc_traceback = NULL;
+            *result = NULL;
+            return PYGEN_ERROR;
         }
 
         // we are pending
@@ -364,6 +335,7 @@ static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self,
     if(corostart->context != NULL) {
         TRACE_LOG("Using context enter/exit for continued am_send");
         if(PyContext_Enter(corostart->context) < 0) {
+            *result = NULL;
             return PYGEN_ERROR;
         }
     } else {
@@ -376,8 +348,9 @@ static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self,
     /* Exit context if we entered one */
     if(corostart->context != NULL) {
         if(PyContext_Exit(corostart->context) < 0) {
-            Py_XDECREF(*result);
-            *result = NULL;
+            if(send_result != PYGEN_ERROR) {
+                Py_CLEAR(*result);
+            }
             return PYGEN_ERROR;
         }
     }
@@ -531,61 +504,45 @@ static PyObject *corostart_pending(CoroStartObject *self, PyObject *Py_UNUSED(ar
     Py_RETURN_FALSE;
 }
 
+static PyObject *invalid_state_error()
+{
+    // Use asyncio.InvalidStateError to match Python implementation
+    PyObject *asyncio_module = PyImport_ImportModule("asyncio");
+    if(asyncio_module) {
+        PyObject *invalid_state_error = PyObject_GetAttrString(asyncio_module,
+                                                               "InvalidStateError");
+        Py_DECREF(asyncio_module);
+        if(invalid_state_error) {
+            PyErr_SetString(invalid_state_error, "CoroStart: coroutine not done()");
+            Py_DECREF(invalid_state_error);
+            return NULL;
+        }
+    }
+    PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
+    return NULL;
+}
+
 static PyObject *corostart_result(CoroStartObject *self, PyObject *args)
 {
     TRACE_LOG("corostart_result() called");
 
     // Check if we're done (must have an exception)
-    if(self->s_exc_type == NULL) {
+    if(!IS_DONE(self)) {
         TRACE_LOG("corostart_result() -> InvalidStateError (not done)");
-        // Use asyncio.InvalidStateError to match Python implementation
-        PyObject *asyncio_module = PyImport_ImportModule("asyncio");
-        if(asyncio_module) {
-            PyObject *invalid_state_error = PyObject_GetAttrString(asyncio_module,
-                                                                   "InvalidStateError");
-            Py_DECREF(asyncio_module);
-            if(invalid_state_error) {
-                PyErr_SetString(invalid_state_error, "CoroStart: coroutine not done()");
-                Py_DECREF(invalid_state_error);
-            } else {
-                PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
-            }
-        } else {
-            PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
-        }
-        return NULL;
+        return invalid_state_error();
     }
 
     // Check if it's StopIteration (normal completion)
-    if(PyErr_GivenExceptionMatches(self->s_exc_type, PyExc_StopIteration)) {
+    if(self->initial_result == PYGEN_RETURN) {
         TRACE_LOG("corostart_result() -> StopIteration value (normal completion)");
-        // Check if s_exc_value is an instance of the exception type
-        if(self->s_exc_value &&
-           PyObject_IsInstance(self->s_exc_value, self->s_exc_type)) {
-            // s_exc_value is an actual StopIteration instance
-            PyObject *value = PyObject_GetAttrString(self->s_exc_value, "value");
-            if(value == NULL) {
-                PyErr_Clear();
-                Py_RETURN_NONE;
-            }
-            return value;
-        } else {
-            // s_exc_value is the raw value (Python optimization)
-            if(self->s_exc_value) {
-                Py_INCREF(self->s_exc_value);
-                return self->s_exc_value;
-            } else {
-                Py_RETURN_NONE;
-            }
-        }
+        return Py_NewRef(self->s_value);
     } else {
         TRACE_LOG("corostart_result() -> Re-raising exception (error completion)");
         // Re-raise other exceptions using Restore (steals references)
-        PyErr_Restore(self->s_exc_type, self->s_exc_value, self->s_exc_traceback);
-        // Clear our fields since PyErr_Restore stole the references
-        self->s_exc_type = NULL;
-        self->s_exc_value = NULL;
-        self->s_exc_traceback = NULL;
+        // Use Py_XNewRef to handle potential NULL values safely
+        PyErr_Restore(Py_XNewRef(self->s_exc_type),
+                      Py_XNewRef(self->s_exc_value),
+                      Py_XNewRef(self->s_exc_traceback));
         return NULL;
     }
 }
@@ -593,45 +550,28 @@ static PyObject *corostart_result(CoroStartObject *self, PyObject *args)
 static PyObject *corostart_exception(CoroStartObject *self, PyObject *args)
 {
     // Check if we're done (must have an exception)
-    if(self->s_exc_type == NULL) {
-        // Use asyncio.InvalidStateError to match Python implementation
-        PyObject *asyncio_module = PyImport_ImportModule("asyncio");
-        if(asyncio_module) {
-            PyObject *invalid_state_error = PyObject_GetAttrString(asyncio_module,
-                                                                   "InvalidStateError");
-            Py_DECREF(asyncio_module);
-            if(invalid_state_error) {
-                PyErr_SetString(invalid_state_error, "CoroStart: coroutine not done()");
-                Py_DECREF(invalid_state_error);
-            } else {
-                PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
-            }
-        } else {
-            PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
-        }
-        return NULL;
+    if(!IS_DONE(self)) {
+        return invalid_state_error();
+    }
+    if(self->initial_result != PYGEN_ERROR) {
+        // No exception occurred
+        Py_RETURN_NONE;
     }
 
-    // Check if it's StopIteration (normal completion)
-    if(PyErr_GivenExceptionMatches(self->s_exc_type, PyExc_StopIteration)) {
-        // Normal completion - return None
-        Py_RETURN_NONE;
+
+    // Return the exception (not re-raise it like result() does)
+    if(self->s_exc_value && PyObject_IsInstance(self->s_exc_value, self->s_exc_type)) {
+        // s_exc_value is an actual exception instance
+        Py_INCREF(self->s_exc_value);
+        return self->s_exc_value;
     } else {
-        // Return the exception (not re-raise it like result() does)
-        if(self->s_exc_value &&
-           PyObject_IsInstance(self->s_exc_value, self->s_exc_type)) {
-            // s_exc_value is an actual exception instance
-            Py_INCREF(self->s_exc_value);
-            return self->s_exc_value;
-        } else {
-            // s_exc_value is the raw value, need to construct exception
-            PyObject *exc_instance = PyObject_CallFunction(self->s_exc_type,
-                                                           "O",
-                                                           self->s_exc_value
-                                                               ? self->s_exc_value
-                                                               : Py_None);
-            return exc_instance;
-        }
+        // s_exc_value is the raw value, need to construct exception
+        PyObject *exc_instance = PyObject_CallFunction(self->s_exc_type,
+                                                       "O",
+                                                       self->s_exc_value
+                                                           ? self->s_exc_value
+                                                           : Py_None);
+        return exc_instance;
     }
 }
 
@@ -685,6 +625,8 @@ static PyObject *corostart__throw(CoroStartObject *self, PyObject *exc)
         Py_CLEAR(self->s_exc_value);
         Py_CLEAR(self->s_exc_traceback);
         self->s_value = result;  // Store new yielded value (becomes pending state)
+        self->initial_result =
+            PYGEN_NEXT;  // Update initial_result for new state macros
 
         Py_DECREF(value);
         Py_RETURN_NONE;
@@ -701,10 +643,31 @@ static PyObject *corostart__throw(CoroStartObject *self, PyObject *exc)
         Py_CLEAR(self->s_exc_value);
         Py_CLEAR(self->s_exc_traceback);
 
-        // Set done state with StopIteration exception
-        self->s_exc_type = exc_type;
-        self->s_exc_value = exc_value;
-        self->s_exc_traceback = exc_traceback;
+        // For PYGEN_RETURN, store the return value in s_value (like corostart_start
+        // does) Extract the value from StopIteration - it might be an instance or raw
+        // value
+        if(exc_value && PyObject_IsInstance(exc_value, exc_type)) {
+            // exc_value is an actual StopIteration instance - extract .value
+            PyObject *return_value = PyObject_GetAttrString(exc_value, "value");
+            if(return_value == NULL) {
+                PyErr_Clear();
+                return_value = Py_NewRef(Py_None);
+            }
+            self->s_value = return_value;
+            Py_DECREF(exc_value);  // Clean up the StopIteration instance
+        } else {
+            // exc_value is the raw value (Python optimization)
+            if(exc_value) {
+                self->s_value = exc_value;  // Transfer ownership from PyErr_Fetch
+            } else {
+                self->s_value = Py_NewRef(Py_None);
+            }
+        }
+        self->initial_result = PYGEN_RETURN;  // Update for new state macros
+
+        // Clean up the exception objects we don't need
+        Py_DECREF(exc_type);
+        Py_XDECREF(exc_traceback);
 
         Py_DECREF(value);
         Py_RETURN_NONE;
@@ -723,6 +686,7 @@ static PyObject *corostart__throw(CoroStartObject *self, PyObject *exc)
     self->s_exc_type = exc_type;
     self->s_exc_value = exc_value;
     self->s_exc_traceback = exc_traceback;
+    self->initial_result = PYGEN_ERROR;  // Update for new state macros
 
     Py_DECREF(value);
     Py_RETURN_NONE;
