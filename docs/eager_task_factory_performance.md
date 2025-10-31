@@ -65,7 +65,7 @@ async def latency_test_coro(creation_time: float) -> str:
 
 ### Latency to First Yield (Microseconds) - Python 3.14
 
-| Implementation | Mean ± Std | Median ± Std | Min | Max | 
+| Implementation | Mean ± Std | Median ± Std | Min | Max |
 |----------------|-------------|--------------|-----|-----|
 | Standard asyncio (non-eager)\* | **1.37 ± 0.07** | 1.36 ± 0.08 | 1.27 | 1.46 |
 | Python 3.14 eager | **0.74 ± 0.06** | 0.59 ± 0.02 | 0.53 | 89.71 |
