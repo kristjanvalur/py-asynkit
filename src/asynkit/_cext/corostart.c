@@ -21,11 +21,12 @@
 #endif
 
 /* Forward declarations */
-static PyTypeObject CoroStartType;
+static PyTypeObject *CoroStartType = NULL;        /* Will be created from spec */
 static PyTypeObject *CoroStartWrapperType = NULL; /* Will be created from spec */
 
 /* Forward declaration of methods */
 static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs);
+static PyMethodDef corostart_methods[];
 
 /* CoroStartWrapper - implements both iterator and coroutine protocols */
 typedef struct {
@@ -436,9 +437,24 @@ static PyObject *corostart_await(CoroStartObject *self)
     return (PyObject *) wrapper;
 }
 
-/* Async protocol support */
-static PyAsyncMethods corostart_as_async = {
-    .am_await = (unaryfunc) corostart_await,
+/* CoroStart slots for PyType_Spec */
+static PyType_Slot corostart_slots[] = {
+    {Py_tp_new, corostart_new},
+    {Py_tp_dealloc, corostart_dealloc},
+    {Py_tp_traverse, corostart_traverse},
+    {Py_tp_clear, corostart_clear},
+    {Py_tp_methods, corostart_methods},
+    {Py_am_await,
+     corostart_await}, /* Direct implementation - no need for debug wrapper */
+
+    {0, NULL},
+};
+
+static PyType_Spec corostart_spec = {
+    .name = "asynkit._cext.CoroStart",
+    .basicsize = sizeof(CoroStartObject),
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_BASETYPE,
+    .slots = corostart_slots,
 };
 
 /* CoroStart methods */
@@ -738,20 +754,7 @@ static PyMethodDef corostart_methods[] =
      {"close", (PyCFunction) corostart_close, METH_NOARGS, "Close the coroutine"},
      {NULL, NULL, 0, NULL}};
 
-/* CoroStart type definition */
-static PyTypeObject CoroStartType = {
-    PyVarObject_HEAD_INIT(NULL, 0).tp_name = "asynkit._cext.CoroStart",
-    .tp_basicsize = sizeof(CoroStartObject),
-    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_BASETYPE,
-    .tp_new = corostart_new,
-    .tp_dealloc = (destructor) corostart_dealloc,
-    .tp_traverse = (traverseproc) corostart_traverse,
-    .tp_clear = (inquiry) corostart_clear,
-    .tp_methods = corostart_methods,
-    .tp_as_async = &corostart_as_async,
-};
-
-/* CoroStart type constructor */
+/* CoroStart type constructor (will be used by PyType_FromSpec) */
 static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
     PyObject *coro;
@@ -861,8 +864,9 @@ PyMODINIT_FUNC PyInit__cext(void)
         return NULL;
     }
 
-    /* Initialize CoroStart type */
-    if(PyType_Ready(&CoroStartType) < 0) {
+    /* Create CoroStart type from spec for am_await optimization */
+    CoroStartType = (PyTypeObject *) PyType_FromSpec(&corostart_spec);
+    if(CoroStartType == NULL) {
         Py_DECREF(module);
         return NULL;
     }
@@ -878,9 +882,9 @@ PyMODINIT_FUNC PyInit__cext(void)
     }
 
     /* Add CoroStartBase type to module */
-    Py_INCREF(&CoroStartType);
-    if(PyModule_AddObject(module, "CoroStartBase", (PyObject *) &CoroStartType) < 0) {
-        Py_DECREF(&CoroStartType);
+    Py_INCREF(CoroStartType);
+    if(PyModule_AddObject(module, "CoroStartBase", (PyObject *) CoroStartType) < 0) {
+        Py_DECREF(CoroStartType);
         Py_DECREF(module);
         return NULL;
     }
