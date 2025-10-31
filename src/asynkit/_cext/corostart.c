@@ -45,7 +45,6 @@ static PyObject *corostart_result(PyObject *_self);
 static PyObject *corostart_exception(PyObject *_self);
 static PyObject *corostart__throw(PyObject *_self, PyObject *exc);
 static PyObject *corostart_close(PyObject *_self);
-static PyMethodDef corostart_methods[];
 
 /* Helper function forward declarations */
 static PyObject *invalid_state_error(void);
@@ -71,7 +70,6 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self);
 static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
                                                    PyObject *arg,
                                                    PyObject **result);
-static PyMethodDef corostart_wrapper_methods[];
 
 /* CoroStart object structure */
 typedef struct CoroStartObject {
@@ -494,6 +492,35 @@ static PyObject *corostart_await(CoroStartObject *self)
     return (PyObject *) wrapper;
 }
 
+/* CoroStart method definitions - defined before slots to avoid MSVC forward declaration issues */
+static PyMethodDef corostart_methods[] =
+    {{"done",
+      (PyCFunction) corostart_done,
+      METH_NOARGS,
+      "Return True if coroutine finished synchronously during initial start"},
+     {"continued",
+      (PyCFunction) corostart_continued,
+      METH_NOARGS,
+      "Return True if coroutine has been continued (awaited) after initial start"},
+     {"pending",
+      (PyCFunction) corostart_pending,
+      METH_NOARGS,
+      "Return True if coroutine is pending, waiting for async operation"},
+     {"result",
+      (PyCFunction) corostart_result,
+      METH_NOARGS,
+      "Return result or raise exception"},
+     {"exception",
+      (PyCFunction) corostart_exception,
+      METH_NOARGS,
+      "Return exception or None"},
+     {"_throw",
+      (PyCFunction) corostart__throw,
+      METH_O,
+      "Core throw method - throw an exception into the coroutine"},
+     {"close", (PyCFunction) corostart_close, METH_NOARGS, "Close the coroutine"},
+     {NULL, NULL, 0, NULL}};
+
 /* CoroStart slots for PyType_Spec */
 static PyType_Slot corostart_slots[] = {
     {Py_tp_new, corostart_new},
@@ -782,34 +809,6 @@ static PyObject *corostart_close(PyObject *_self)
     assert_corostart_invariant(self);
     return result;
 }
-
-static PyMethodDef corostart_methods[] =
-    {{"done",
-      (PyCFunction) corostart_done,
-      METH_NOARGS,
-      "Return True if coroutine finished synchronously during initial start"},
-     {"continued",
-      (PyCFunction) corostart_continued,
-      METH_NOARGS,
-      "Return True if coroutine has been continued (awaited) after initial start"},
-     {"pending",
-      (PyCFunction) corostart_pending,
-      METH_NOARGS,
-      "Return True if coroutine is pending, waiting for async operation"},
-     {"result",
-      (PyCFunction) corostart_result,
-      METH_NOARGS,
-      "Return result or raise exception"},
-     {"exception",
-      (PyCFunction) corostart_exception,
-      METH_NOARGS,
-      "Return exception or None"},
-     {"_throw",
-      (PyCFunction) corostart__throw,
-      METH_O,
-      "Core throw method - throw an exception into the coroutine"},
-     {"close", (PyCFunction) corostart_close, METH_NOARGS, "Close the coroutine"},
-     {NULL, NULL, 0, NULL}};
 
 
 /* CoroStart type constructor (will be used by PyType_FromSpec) */
