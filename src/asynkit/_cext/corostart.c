@@ -20,6 +20,18 @@
     #define TRACE_LOG(fmt, ...)
 #endif
 
+// Silence function pointer cast warnings for PyMethodDef tables
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wcast-function-type"
+#elif defined(__clang__)
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wcast-function-type"
+#elif defined(_MSC_VER)
+    #pragma warning(push)
+    #pragma warning(disable : 4152)
+#endif
+
 /* Forward declarations */
 static PyTypeObject *CoroStartType = NULL;        /* Will be created from spec */
 static PyTypeObject *CoroStartWrapperType = NULL; /* Will be created from spec */
@@ -360,6 +372,7 @@ static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self,
 }
 
 /* CoroStartWrapper methods */
+
 static PyMethodDef corostart_wrapper_methods[] = {
     {"send",
      (PyCFunction) corostart_wrapper_send,
@@ -371,6 +384,7 @@ static PyMethodDef corostart_wrapper_methods[] = {
      "Throw an exception into the wrapper."},
     {"close", (PyCFunction) corostart_wrapper_close, METH_NOARGS, "Close the wrapper."},
     {NULL, NULL, 0, NULL}};
+
 
 /* CoroStartWrapper type definition using PyType_Spec for am_send optimization */
 static PyType_Slot corostart_wrapper_slots[] = {
@@ -469,8 +483,9 @@ static PyType_Spec corostart_spec = {
 };
 
 /* CoroStart methods */
-static PyObject *corostart_done(CoroStartObject *self, PyObject *args)
+static PyObject *corostart_done(PyObject *_self)
 {
+    CoroStartObject *self = (CoroStartObject *) _self;
     assert_corostart_invariant(self);
     // Return True if we have completed (indicated by having an exception)
     // Either StopIteration (normal completion) or any other exception (error)
@@ -522,8 +537,9 @@ static PyObject *invalid_state_error()
     return NULL;
 }
 
-static PyObject *corostart_result(CoroStartObject *self, PyObject *args)
+static PyObject *corostart_result(PyObject *_self)
 {
+    CoroStartObject *self = (CoroStartObject *) _self;
     TRACE_LOG("corostart_result() called");
 
     // Check if we're done (must have an exception)
@@ -547,8 +563,9 @@ static PyObject *corostart_result(CoroStartObject *self, PyObject *args)
     }
 }
 
-static PyObject *corostart_exception(CoroStartObject *self, PyObject *args)
+static PyObject *corostart_exception(PyObject *_self)
 {
+    CoroStartObject *self = (CoroStartObject *) _self;
     // Check if we're done (must have an exception)
     if(!IS_DONE(self)) {
         return invalid_state_error();
@@ -693,8 +710,9 @@ static PyObject *corostart__throw(CoroStartObject *self, PyObject *exc)
 }
 
 
-static PyObject *corostart_close(CoroStartObject *self, PyObject *args)
+static PyObject *corostart_close(PyObject *_self)
 {
+    CoroStartObject *self = (CoroStartObject *) _self;
     assert_corostart_invariant(self);
 
     PyObject *result;
@@ -758,6 +776,7 @@ static PyMethodDef corostart_methods[] =
      {"close", (PyCFunction) corostart_close, METH_NOARGS, "Close the coroutine"},
      {NULL, NULL, 0, NULL}};
 
+
 /* CoroStart type constructor (will be used by PyType_FromSpec) */
 static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
@@ -809,8 +828,9 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 }
 
 /* Module methods */
-static PyObject *cext_get_build_info(PyObject *self, PyObject *args)
+static PyObject *cext_get_build_info(PyObject *_self)
 {
+    (void) _self;
     /* Return build configuration information */
     PyObject *info = PyDict_New();
     if(info == NULL) {
@@ -835,17 +855,23 @@ static PyObject *cext_get_build_info(PyObject *self, PyObject *args)
 }
 
 static PyMethodDef module_methods[] = {{"get_build_info",
-                                        cext_get_build_info,
+                                        (PyCFunction) cext_get_build_info,
                                         METH_NOARGS,
                                         "Get build configuration information"},
                                        {NULL, NULL, 0, NULL}};
 
 /* Module definition */
-static struct PyModuleDef cext_module = {PyModuleDef_HEAD_INIT,
-                                         "asynkit._cext",
-                                         "Simple C extension for CoroStart",
-                                         -1,
-                                         module_methods};
+static struct PyModuleDef cext_module = {
+    PyModuleDef_HEAD_INIT,
+    "asynkit._cext",
+    "Simple C extension for CoroStart",
+    -1,
+    module_methods,
+    NULL, /* m_slots */
+    NULL, /* m_traverse */
+    NULL, /* m_clear */
+    NULL  /* m_free */
+};
 
 /* Module initialization */
 PyMODINIT_FUNC PyInit__cext(void)
@@ -895,3 +921,12 @@ PyMODINIT_FUNC PyInit__cext(void)
 
     return module;
 }
+
+// Restore warnings
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC diagnostic pop
+#elif defined(__clang__)
+    #pragma clang diagnostic pop
+#elif defined(_MSC_VER)
+    #pragma warning(pop)
+#endif
