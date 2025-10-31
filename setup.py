@@ -72,6 +72,14 @@ def get_compile_args():
     args = []
     is_msvc = platform.system() == "Windows"
 
+    # Enable modern C standards
+    if is_msvc:
+        # Enable C17 standard for MSVC (latest C standard)
+        args.append("/std:c17")
+    else:
+        # Enable C17 standard for GCC/Clang (latest C standard)
+        args.append("-std=c17")
+
     # Check for debug build
     if os.environ.get("ASYNKIT_DEBUG", "").lower() in ("1", "true", "yes"):
         print("Building C extension in DEBUG mode")
