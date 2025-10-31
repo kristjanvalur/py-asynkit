@@ -492,7 +492,8 @@ static PyObject *corostart_await(CoroStartObject *self)
     return (PyObject *) wrapper;
 }
 
-/* CoroStart method definitions - defined before slots to avoid MSVC forward declaration issues */
+/* CoroStart method definitions - defined before slots to avoid MSVC forward declaration
+ * issues */
 static PyMethodDef corostart_methods[] =
     {{"done",
       (PyCFunction) corostart_done,
