@@ -36,6 +36,9 @@ typedef struct {
 
 /* Forward declaration of wrapper methods */
 static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg);
+static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self,
+                                                   PyObject *arg,
+                                                   PyObject **result);
 
 /* CoroStart object structure */
 typedef struct {
@@ -190,90 +193,21 @@ static PyObject *corostart_wrapper_iternext(CoroStartWrapperObject *self)
 }
 
 /* CoroStartWrapper send method - simplified to handle start state */
+/* CoroStartWrapper send method - delegates to am_send slot for optimization */
 static PyObject *corostart_wrapper_send(CoroStartWrapperObject *self, PyObject *arg)
 {
-    CoroStartObject *corostart = (CoroStartObject *) self->corostart;
-
-    TRACE_LOG("corostart_wrapper_send() called");
-
-    /* Check if we have start results (first call) */
-    if(!IS_CONTINUED(corostart)) {
-        TRACE_LOG("First send call - processing eager execution result");
-        /* This is the first send call - process the eager execution result */
-        /* According to PEP 342, first send() must be None */
-        if(arg != Py_None) {
-            PyErr_SetString(PyExc_TypeError,
-                            "can't send non-None value to a just-started coroutine");
-            return NULL;
-        }
-
-        if(IS_DONE(corostart)) {
-            TRACE_LOG("Coroutine completed during start - re-raising exception");
-            /* Exception occurred during start - re-raise it and clear state */
-            PyErr_Restore(corostart->s_exc_type,
-                          corostart->s_exc_value,
-                          corostart->s_exc_traceback);
-            /* Clear the fields (PyErr_Restore steals references) - marks as continued
-             */
-            corostart->s_exc_type = NULL;
-            corostart->s_exc_value = NULL;
-            corostart->s_exc_traceback = NULL;
-            return NULL;
-        }
-
-        // we are pending
-        TRACE_LOG("Coroutine yielded during start - returning yielded value");
-        /* Coroutine yielded a value - return it and clear state to mark as continued */
-        PyObject *result = corostart->s_value;
-        corostart->s_value =
-            NULL; /* Clear and transfer ownership - marks as continued */
-        return result;
-    }
-
-    TRACE_LOG("Subsequent send call - delegating to wrapped coroutine");
-    /* No start results - coroutine was already started, delegate to wrapped coroutine
-     */
-
-    /* Enter context if provided */
-    if(corostart->context != NULL) {
-        TRACE_LOG("Using context enter/exit for continued send");
-        if(PyContext_Enter(corostart->context) < 0) {
-            return NULL;
-        }
-    } else {
-        TRACE_LOG("Direct coro.send for continued send");
-    }
-
-    /* Call send() on the wrapped coroutine using PyIter_Send */
     PyObject *result;
-    PySendResult send_result = PyIter_Send(corostart->wrapped_coro, arg, &result);
+    PySendResult send_result = corostart_wrapper_am_send_slot(self, arg, &result);
 
-    /* Exit context if we entered one */
-    if(corostart->context != NULL) {
-        if(PyContext_Exit(corostart->context) < 0) {
-            Py_XDECREF(result);
-            return NULL;
-        }
-    }
-
-    /* Handle PyIter_Send result */
-    switch(send_result) {
-        case PYGEN_NEXT:
-            /* Coroutine yielded a value */
-            return result;
-        case PYGEN_RETURN:
-            /* Coroutine completed - raise StopIteration with value */
-            PyErr_SetObject(PyExc_StopIteration, result);
-            Py_XDECREF(result);
-            return NULL;
-        case PYGEN_ERROR:
-            /* Exception already set by PyIter_Send */
-            return NULL;
-        default:
-            /* Should not happen, but handle gracefully */
-            PyErr_SetString(PyExc_RuntimeError, "Unexpected PyIter_Send result");
-            Py_XDECREF(result);
-            return NULL;
+    if(send_result == PYGEN_ERROR) {
+        return NULL;
+    } else if(send_result == PYGEN_RETURN) {
+        PyErr_SetObject(PyExc_StopIteration, result);
+        Py_DECREF(result);
+        return NULL;
+    } else {
+        /* PYGEN_NEXT - return the yielded value */
+        return result;
     }
 }
 
@@ -344,7 +278,9 @@ static PyObject *corostart_wrapper_am_send(CoroStartWrapperObject *self, PyObjec
 #endif
 
 /* CoroStartWrapper am_send implementation for PyIter_Send optimization */
-static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self, PyObject *arg, PyObject **result)
+static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self,
+                                                   PyObject *arg,
+                                                   PyObject **result)
 {
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
@@ -363,16 +299,18 @@ static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self,
 
         if(IS_DONE(corostart)) {
             TRACE_LOG("Coroutine completed during start - checking exception type");
-            
+
             /* Check if it's StopIteration (normal completion) */
-            if(PyErr_GivenExceptionMatches(corostart->s_exc_type, PyExc_StopIteration)) {
+            if(PyErr_GivenExceptionMatches(corostart->s_exc_type,
+                                           PyExc_StopIteration)) {
                 TRACE_LOG("StopIteration detected - converting to PYGEN_RETURN");
-                
+
                 /* Extract the StopIteration value */
                 if(corostart->s_exc_value &&
                    PyObject_IsInstance(corostart->s_exc_value, corostart->s_exc_type)) {
                     /* s_exc_value is an actual StopIteration instance */
-                    PyObject *value = PyObject_GetAttrString(corostart->s_exc_value, "value");
+                    PyObject *value = PyObject_GetAttrString(corostart->s_exc_value,
+                                                             "value");
                     if(value == NULL) {
                         PyErr_Clear();
                         value = Py_NewRef(Py_None);
@@ -386,20 +324,22 @@ static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self,
                         *result = Py_NewRef(Py_None);
                     }
                 }
-                
+
                 /* Clear stored exception state - marks as continued */
                 Py_CLEAR(corostart->s_exc_type);
                 Py_CLEAR(corostart->s_exc_value);
                 Py_CLEAR(corostart->s_exc_traceback);
-                
+
                 return PYGEN_RETURN;
             } else {
                 TRACE_LOG("Other exception during start - re-raising");
-                /* Other exception occurred during start - re-raise it and clear state */
+                /* Other exception occurred during start - re-raise it and clear state
+                 */
                 PyErr_Restore(corostart->s_exc_type,
                               corostart->s_exc_value,
                               corostart->s_exc_traceback);
-                /* Clear the fields (PyErr_Restore steals references) - marks as continued */
+                /* Clear the fields (PyErr_Restore steals references) - marks as
+                 * continued */
                 corostart->s_exc_type = NULL;
                 corostart->s_exc_value = NULL;
                 corostart->s_exc_traceback = NULL;
@@ -411,12 +351,14 @@ static PySendResult corostart_wrapper_am_send_slot(CoroStartWrapperObject *self,
         TRACE_LOG("Coroutine yielded during start - returning yielded value");
         /* Coroutine yielded a value - return it and clear state to mark as continued */
         *result = corostart->s_value;
-        corostart->s_value = NULL; /* Clear and transfer ownership - marks as continued */
+        corostart->s_value =
+            NULL; /* Clear and transfer ownership - marks as continued */
         return PYGEN_NEXT;
     }
 
     TRACE_LOG("Subsequent am_send call - delegating to wrapped coroutine");
-    /* No start results - coroutine was already started, delegate to wrapped coroutine */
+    /* No start results - coroutine was already started, delegate to wrapped coroutine
+     */
 
     /* Enter context if provided */
     if(corostart->context != NULL) {
@@ -467,7 +409,7 @@ static PyType_Slot corostart_wrapper_slots[] = {
     {Py_tp_methods, corostart_wrapper_methods},
     {Py_tp_new, PyType_GenericNew},
 
-/* Async protocol slot for PyIter_Send optimization */
+    /* Async protocol slot for PyIter_Send optimization */
     {Py_am_send, corostart_wrapper_am_send_slot}, /* Proper am_send implementation */
 
     {0, NULL},
@@ -639,9 +581,7 @@ static PyObject *corostart_result(CoroStartObject *self, PyObject *args)
     } else {
         TRACE_LOG("corostart_result() -> Re-raising exception (error completion)");
         // Re-raise other exceptions using Restore (steals references)
-        PyErr_Restore(self->s_exc_type,
-                      self->s_exc_value,
-                      self->s_exc_traceback);
+        PyErr_Restore(self->s_exc_type, self->s_exc_value, self->s_exc_traceback);
         // Clear our fields since PyErr_Restore stole the references
         self->s_exc_type = NULL;
         self->s_exc_value = NULL;
