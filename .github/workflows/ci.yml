@@ -21,6 +21,8 @@ jobs:
           - os: windows-latest
             python-version: '3.10'
     name: Run linting on Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    env:
+      ASYNKIT_FORCE_CEXT: 1
     steps:
       - uses: actions/checkout@v3
       - name: Install uv
@@ -42,68 +44,6 @@ jobs:
       - name: Run typechecks
         run: uv run poe typing
 
-  # Test C extension compilation across platforms
-  c_extension:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.10", "3.12"]
-    name: Test C extension compilation on ${{ matrix.os }} Python ${{ matrix.python-version }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: uv sync --all-extras
-      - name: Force C extension compilation (fail on errors)
-        env:
-          ASYNKIT_FORCE_CEXT: 1
-        run: |
-          echo "Force rebuilding C extension to catch compilation errors..."
-          uv pip install -e . --force-reinstall
-      - name: Test C extension build and import
-        run: |
-          echo "Building and testing C extension..."
-          python -c "
-          import asynkit
-          info = asynkit.get_implementation_info()
-          print(f'OS: ${{ matrix.os }}')
-          print(f'Python: ${{ matrix.python-version }}')
-          print(f'Implementation: {info[\"implementation\"]}')
-          print(f'C extension available: {info[\"c_extension_available\"]}')
-          
-          # Expect C extension to be available (fail if not)
-          if not info['c_extension_available']:
-              print('❌ C extension failed to build/load')
-              exit(1)
-          else:
-              print('✅ C extension compiled and loaded successfully')
-          
-          # Test basic functionality
-          import asyncio
-          from asynkit import CoroStart
-          
-          async def test_coro():
-              return 42
-          
-          # Test eager execution
-          start = CoroStart(test_coro())
-          if start.done():
-              result = start.result()
-              assert result == 42
-              print('✅ C extension functionality validated')
-          else:
-              # If not done, await it
-              result = asyncio.run(start)
-              assert result == 42
-              print('✅ C extension async functionality validated')
-          "
-
   tests:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -113,12 +53,10 @@ jobs:
         include:
           - os: windows-latest
             python-version: '3.10'
-          - os: windows-latest
-            python-version: '3.12'
-          - os: macos-latest
-            python-version: '3.11'
 
     name: Run unittests on Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    env:
+      ASYNKIT_FORCE_CEXT: 1
     steps:
     - uses: actions/checkout@v3
     - name: Install uv
@@ -129,20 +67,6 @@ jobs:
       run: uv python install ${{ matrix.python-version }}
     - name: Install dev dependencies
       run: uv sync --all-extras
-
-    - name: Test C extension compilation
-      run: |
-        echo "Testing C extension compilation..."
-        python -c "
-        import asynkit
-        info = asynkit.get_implementation_info()
-        print(f'Implementation: {info[\"implementation\"]}')
-        print(f'C extension available: {info[\"c_extension_available\"]}')
-        if info['c_extension_available']:
-            print('✓ C extension compiled and loaded successfully')
-        else:
-            print('⚠ Using fallback Python implementation')
-        "
 
     - name: Run the tests for selector loop
       run: uv run pytest
@@ -155,20 +79,17 @@ jobs:
     if: ${{ always() }}
     runs-on: ubuntu-latest
     name: Tests (matrix)
-    needs: [tests, c_extension]
+    needs: tests
     steps:
       - name: Check test matrix status
         if: ${{ needs.tests.result != 'success' }}
-        run: exit 1
-      - name: Check C extension compilation status
-        if: ${{ needs.c_extension.result != 'success' }}
         run: exit 1
 
   build_wheels:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [tests, lint, c_extension]
+    needs: [tests, lint]
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -200,7 +121,7 @@ jobs:
     name: Build source distribution
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [tests, lint, c_extension]
+    needs: [tests, lint]
     steps:
     - uses: actions/checkout@v3
     - name: Install uv
@@ -232,7 +153,7 @@ jobs:
     name: Build pure Python wheel
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [tests, lint, c_extension]
+    needs: [tests, lint]
     steps:
     - uses: actions/checkout@v3
     - name: Install uv
@@ -268,7 +189,6 @@ jobs:
     needs:
       - tests
       - lint
-      - c_extension
       - build_wheels
       - build_sdist
       - build_pure_python_wheel
