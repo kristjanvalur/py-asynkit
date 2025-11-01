@@ -102,11 +102,11 @@ jobs:
       env:
         CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
         CIBW_SKIP: "pp* *-musllinux_*"
-        CIBW_TEST_COMMAND: >
+        CIBW_TEST_COMMAND: |
           python -c "
-          import asynkit;
-          info = asynkit.get_implementation_info();
-          print(f'Implementation: {info[\"implementation\"]}');
+          import asynkit
+          info = asynkit.get_implementation_info()
+          print('Implementation:', info['implementation'])
           assert info['c_extension_available'], 'C extension should be available in wheels'
           "
         CIBW_TEST_REQUIRES: pytest anyio
@@ -138,9 +138,9 @@ jobs:
       run: |
         pip install dist/*.tar.gz
         python -c "
-        import asynkit;
-        info = asynkit.get_implementation_info();
-        print(f'Implementation: {info[\"implementation\"]}');
+        import asynkit
+        info = asynkit.get_implementation_info()
+        print('Implementation:', info['implementation'])
         print('✓ Source distribution imports successfully')
         "
 
@@ -170,10 +170,10 @@ jobs:
       run: |
         pip install dist/*.whl
         python -c "
-        import asynkit;
-        info = asynkit.get_implementation_info();
-        print(f'Implementation: {info[\"implementation\"]}');
-        assert info['implementation'] == 'Pure Python', 'Should be pure Python implementation';
+        import asynkit
+        info = asynkit.get_implementation_info()
+        print('Implementation:', info['implementation'])
+        assert info['implementation'] == 'Pure Python', 'Should be pure Python implementation'
         print('✓ Pure Python wheel works correctly')
         "
 
