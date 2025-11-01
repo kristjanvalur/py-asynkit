@@ -54,8 +54,9 @@ PyMODINIT_FUNC PyInit__cext(void);
 
 /* CoroStartWrapper - implements both iterator and coroutine protocols */
 typedef struct CoroStartWrapperObject {
-    PyObject_HEAD;
-    PyObject *corostart; /* Reference to our CoroStart object */
+    PyObject_HEAD
+        /* Type-specific fields go here */
+        PyObject *corostart; /* Reference to our CoroStart object */
 } CoroStartWrapperObject;
 
 /* Forward declaration of wrapper methods */
@@ -73,14 +74,15 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
 
 /* CoroStart object structure */
 typedef struct CoroStartObject {
-    PyObject_HEAD;
-    PyObject *wrapped_coro;
+    PyObject_HEAD
+        /* Type-specific fields go here */
+        PyObject *wrapped_coro;
     PyObject *context;
-    PySendResult initial_result; /* Result from initial PyIter_Send call */
-    PyObject *s_value;           // completed value (if not exception)
-    PyObject *s_exc_type;        // exception type (if completed with exception)
-    PyObject *s_exc_value;       // exception value
-    PyObject *s_exc_traceback;   // exception traceback
+    PySendResult initial_result;  // Result from initial PyIter_Send call */
+    PyObject *s_value;            // completed value (if not exception)
+    PyObject *s_exc_type;         // exception type (if completed with exception)
+    PyObject *s_exc_value;        // exception value
+    PyObject *s_exc_traceback;    // exception traceback
 } CoroStartObject;
 
 /* Forward declaration of CoroStart object methods */
