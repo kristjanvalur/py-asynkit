@@ -20,13 +20,13 @@ class OptionalBuildExt(_build_ext):
     def build_extension(self, ext):
         try:
             super().build_extension(ext)
-            print(f"✓ Successfully built C extension: {ext.name}")
-            print("  → asynkit will use high-performance C implementation")
+            print(f"[OK] Successfully built C extension: {ext.name}")
+            print("  -> asynkit will use high-performance C implementation")
         except Exception as e:
-            print(f"⚠ Failed to build C extension {ext.name}:")
-            print(f"  → {e}")
-            print("  → asynkit will use Python implementation")
-            print("  → For 4x performance boost, install build tools:")
+            print(f"[WARNING] Failed to build C extension {ext.name}:")
+            print(f"  -> {e}")
+            print("  -> asynkit will use Python implementation")
+            print("  -> For 4x performance boost, install build tools:")
 
             # Platform-specific guidance
             import platform
