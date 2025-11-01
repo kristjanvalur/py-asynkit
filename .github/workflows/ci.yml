@@ -60,6 +60,12 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
       - name: Install dependencies
         run: uv sync --all-extras
+      - name: Force C extension compilation (fail on errors)
+        env:
+          ASYNKIT_FORCE_CEXT: 1
+        run: |
+          echo "Force rebuilding C extension to catch compilation errors..."
+          uv pip install -e . --force-reinstall
       - name: Test C extension build and import
         run: |
           echo "Building and testing C extension..."

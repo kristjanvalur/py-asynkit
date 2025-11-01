@@ -23,6 +23,15 @@ class OptionalBuildExt(_build_ext):
             print(f"✓ Successfully built C extension: {ext.name}")
             print("  → asynkit will use high-performance C implementation")
         except Exception as e:
+            # Check if we should force compilation and fail on errors
+            force_cext = os.environ.get("ASYNKIT_FORCE_CEXT", "").lower() in ("1", "true", "yes")
+            
+            if force_cext:
+                print(f"✗ C extension compilation FAILED (forced mode):")
+                print(f"  → {e}")
+                print("  → Set ASYNKIT_FORCE_CEXT=0 to allow fallback to Python implementation")
+                raise  # Re-raise the exception to fail the build
+            
             print(f"⚠ Failed to build C extension {ext.name}:")
             print(f"  → {e}")
             print("  → asynkit will use Python implementation")
@@ -47,6 +56,14 @@ class OptionalBuildExt(_build_ext):
         try:
             super().run()
         except Exception as e:
+            # Check if we should force compilation and fail on errors
+            force_cext = os.environ.get("ASYNKIT_FORCE_CEXT", "").lower() in ("1", "true", "yes")
+            
+            if force_cext:
+                print(f"✗ C extension build FAILED (forced mode): {e}")
+                print("  → Set ASYNKIT_FORCE_CEXT=0 to allow fallback to Python implementation")
+                raise  # Re-raise the exception to fail the build
+                
             print(f"⚠ C extension build failed: {e}")
             print("  → Continuing with Python-only installation")
 
