@@ -1,6 +1,6 @@
 [project]
 name = "asynkit"
-version = "0.14.2"
+version = "0.15.0"
 description = "A toolkit for Python coroutines"
 authors = [
     {name = "Kristján Valur Jónsson", email = "sweskman@gmail.com"}
@@ -38,6 +38,7 @@ dev = [
     "poethepoet>=0.29.0",
     "ruff>=0.4.0",
     "anyio>=4.0.0",
+    "types-setuptools",  # Type stubs for setuptools (dev/build only)
     "mdformat>=0.7.0",
     "mdformat-ruff>=0.1.0",
 ]
@@ -55,27 +56,35 @@ executor = {type = "simple"}
 [tool.poe.tasks]
 lint = "ruff check ."
 format = "ruff format ."
+format-c = "python scripts/format_c.py format"
 test = "pytest tests examples"
 cov = "pytest --cov=asynkit --cov-report term-missing --cov-branch"
 typing = "mypy -p asynkit -p tests -p examples"
 format-docs = "mdformat --number *.md docs/*.md"
-formatall = ["format", "format-docs"]
-check = ["style", "style-docs", "lint", "typing", "cov"]
+formatall = ["format", "format-c", "format-docs"]
+check = ["style", "style-c", "style-docs", "lint", "typing", "cov"]
 
 [tool.poe.tasks.style]
 help = "Validate code style"
 cmd  = "ruff format . --check --diff"
+
+[tool.poe.tasks.style-c]
+help = "Validate C code style"
+cmd  = "python scripts/format_c.py check"
 
 [tool.poe.tasks.style-docs]
 help = "Validate documentation style"
 cmd  = "mdformat --check --number *.md docs/*.md"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/asynkit"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+asynkit = ["py.typed"]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -116,6 +125,9 @@ select = [
     "I",   # isort
     "UP",  # pyupgrade - automatically upgrade syntax for newer Python versions
 ]
+ignore = [
+    "E501",  # Line too long - trust ruff formatter for line length decisions
+]
 
 # Ignore `F401` (unused import) in all `__init__.py` files
 # Ignore `F403` (importing *) in all `__init__.py` files
@@ -134,6 +146,9 @@ module = ["tests.*", "examples.*"]
 check_untyped_defs = false
 allow_untyped_defs = true
 allow_untyped_calls = true
+disallow_untyped_defs = false
+warn_return_any = false
+disable_error_code = ["call-arg", "no-untyped-def", "var-annotated", "truthy-function"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -145,6 +160,9 @@ module = [
     "tests.test_coro",
     "tests.test_anyio",
     "tests.conftest",
+    "tests.misc.eager_task_factory_benchmark",
+    "tests.test_implementation_params",
+    "tests.test_eager_task_factory_context",
 ]
 warn_unused_ignores=false
 

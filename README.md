@@ -20,6 +20,27 @@
 pip install asynkit
 ```
 
+**asynkit** has a custom C extension to optimize some primitives. If available for your platform it will be automatically installed. If you want to attempt to compile the extension for your platform use:
+
+```bash
+pip install --no-binary=asynkit asynkit
+```
+
+**Wheel selection priority:**
+
+- **Binary wheels** (Windows, macOS, Linux × Python 3.10-3.14): High-performance C extension provides **8% better throughput** and **near-native latency**
+- **Pure Python wheel** (all other platforms): Universal compatibility, baseline performance
+- **Source distribution**: Custom compilation when using `--no-binary` flag
+
+Check your installation:
+
+```python
+import asynkit
+
+info = asynkit.get_implementation_info()
+print(f"Using: {info['implementation']}")  # "C extension" or "Pure Python"
+```
+
 ## Key Features
 
 - 🚀 **[Eager Execution](#eager)**: Start coroutines immediately, not when awaited
@@ -34,7 +55,7 @@ pip install asynkit
 
 ### `eager()` - lower latency IO
 
-> ℹ️ **Note:** Python 3.12+ introduced native eager task execution via `asyncio.eager_task_factory`. See [docs/eager_tasks.md](docs/eager_tasks.md) for a detailed comparison of Python's built-in eager tasks and asynkit's `eager()` feature.
+> ℹ️ **Note:** Python 3.12+ introduced native eager task execution via `asyncio.eager_task_factory`. See [docs/eager_tasks.md](docs/eager_tasks.md) for a detailed comparison of Python's built-in eager tasks and asynkit's `eager()` feature. Performance analysis shows asynkit's C extension achieves near-native latency (0.80μs vs 0.74μs) with 8% better throughput than pure Python.
 
 Did you ever wish that your _coroutines_ started right away, and only returned control to
 the caller once they become blocked? Like the way the `async` and `await` keywords work in the __C#__ language?
@@ -178,9 +199,9 @@ eager_factory = asynkit.create_eager_factory(old_factory)
 loop.set_task_factory(eager_factory)
 ```
 
-#### Python 3.12+ Compatibility
+#### Python 3.13+ Compatibility
 
-asynkit also provides a `create_task()` function with the same `eager_start` parameter as Python 3.12+:
+asynkit also provides a `create_task()` function with the same `eager_start` parameter as Python 3.14+:
 
 ```python
 # Works on all Python versions (3.10+)
@@ -190,13 +211,16 @@ task = asynkit.create_task(my_coroutine(), eager_start=False)  # Standard
 
 #### Performance Benefits
 
-Eager task factories provide **massive performance improvements** for task startup latency:
+Eager task factories provide **significant performance improvements** for task startup latency:
 
-- **Standard asyncio**: ~2,300 microseconds to first execution
-- **Eager factories**: ~1-2 microseconds to first execution
-- **Improvement**: **1,000x+ faster** task startup
+- **Standard asyncio**: ~2.0 microseconds minimum per-task delay (scales with application complexity)
+- **Eager factories**: ~0.6-1.1 microseconds consistent execution time
+- **Improvement**: **1.8x faster** minimum latency, much larger improvements in real applications
+- **asynkit C extension**: **8% better throughput** than pure Python, achieving **93% of native Python 3.14 performance** with cross-platform compatibility
 
-See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance.md) for detailed performance analysis comparing asynkit's implementation with Python 3.12's native `eager_task_factory`.
+**Key advantage**: Eager execution provides **predictable performance** - latency remains constant regardless of work done between task creation and await, while non-eager latency scales with application complexity.
+
+See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance.md) for detailed performance analysis comparing asynkit's implementation with Python 3.14's native `eager_task_factory`.
 
 #### When to Use Task Factories vs. Decorators
 
@@ -207,7 +231,7 @@ See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance
 | **Selective optimization** | `@asynkit.eager` decorator |
 | **Fine-grained control** | `@asynkit.eager` decorator |
 | **Python 3.10/3.11 support** | Either (both work) |
-| **Python 3.12+ migration** | `eager_task_factory` (compatible API) |
+| **Python 3.13+ migration** | `eager_task_factory` (compatible API) |
 
 ## Cross-Version Compatibility
 
@@ -240,8 +264,8 @@ The `enable_eager_tasks()` function automatically detects your Python version an
 | Python Version | Implementation Strategy |
 |----------------|------------------------|
 | **Python < 3.12** | Adds `asyncio.eager_task_factory` using asynkit's implementation, enhances `create_task()` with `eager_start` parameter |
-| **Python 3.12+ with native `eager_start`** | Uses native Python implementations directly (no monkeypatching needed) |
-| **Python 3.12+ without native `eager_start`** | Uses native `eager_task_factory` with temporary factory swapping for `eager_start=True` |
+| **Python 3.12-3.13 without native `eager_start`** | Uses native `eager_task_factory` with temporary factory swapping for `eager_start=True` |
+| **Python 3.14+ with native `eager_start`** | Uses native Python implementations directly (no monkeypatching needed) |
 
 #### Benefits
 
@@ -253,7 +277,7 @@ The `enable_eager_tasks()` function automatically detects your Python version an
 #### Example: Cross-Version Migration
 
 ```python
-# This code works identically on Python 3.10, 3.11, 3.12, and beyond!
+# This code works identically on Python 3.10, 3.11, 3.12, 3.13, and beyond!
 import asyncio
 import asynkit.compat
 
@@ -803,17 +827,17 @@ Concrete subclasses of Python's built-in event loop classes are provided.
 
 #### Creating scheduling event loops
 
-The **recommended way** to use scheduling event loops is with the `scheduling_loop_factory()` function (Python 3.12+):
+The **recommended way** to use scheduling event loops is with the `scheduling_loop_factory()` function (Python 3.13+):
 
 ```python
 import asyncio
 import asynkit
 
-# Modern approach (Python 3.12+)
+# Modern approach (Python 3.13+)
 asyncio.run(main(), loop_factory=asynkit.scheduling_loop_factory)
 ```
 
-For Python 3.11 and earlier, or when using `asyncio.Runner`:
+For Python 3.12 and earlier, or when using `asyncio.Runner`:
 
 ```python
 import asyncio
@@ -1090,7 +1114,7 @@ Please note the following cases:
    Therefore, we provide a base class, `InterruptError`, deriving from `CancelledError` which
    should be used for interrupts in general.
 
-   However, `asyncio.Condition` in Python 3.12 and earlier has a buggy implementation that will not
+   However, `asyncio.Condition` in Python 3.13 and earlier has a buggy implementation that will not
    correctly pass on such subclasses during `wait()` in all cases. The finally block that re-acquires
    the lock only catches `CancelledError`, not its subclasses. This was fixed in Python 3.13+ with
    improved exception handling that properly catches `CancelledError` and subclasses

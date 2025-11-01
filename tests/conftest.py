@@ -4,6 +4,7 @@ import sys
 import pytest
 
 import asynkit
+import asynkit.coroutine as coroutine_module
 
 DefaultLoop = asynkit.DefaultSchedulingEventLoop
 SelectorLoop = asynkit.SchedulingSelectorEventLoop
@@ -41,6 +42,7 @@ def pytest_collection_modifyitems(config, items):
     skip_trio = pytest.mark.skip(
         reason="trio not available or incompatible with this Python version"
     )
+
     for item in items:
         # Mark and potentially skip tests that use trio backend
         if "anyio_backend" in item.fixturenames:
@@ -66,6 +68,18 @@ def pytest_collection_modifyitems(config, items):
 def pytest_addoption(parser):
     parser.addoption("--proactor", action="store_true", default=False)
     parser.addoption("--selector", action="store_true", default=False)
+    parser.addoption(
+        "--no-py",
+        action="store_true",
+        default=False,
+        help="Skip Python implementation tests",
+    )
+    parser.addoption(
+        "--no-c",
+        action="store_true",
+        default=False,
+        help="Skip C extension implementation tests",
+    )
 
 
 def scheduling_loop_type(request):
@@ -116,3 +130,47 @@ def make_anyio_backend(request, eager_tasks=False):
     """
     policy = SchedulingEventLoopPolicy(request, eager_tasks=eager_tasks)
     return ("asyncio", {"loop_factory": make_loop_factory(policy)})
+
+
+def c_implementation_available():
+    """Check if C implementation is available."""
+    return (
+        hasattr(coroutine_module, "_CCoroStart")
+        and coroutine_module._CCoroStart is not None
+        and coroutine_module._CCoroStart is not coroutine_module.PyCoroStart
+    )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param("python", id="py"),
+        pytest.param("c", id="c"),
+    ],
+    scope="function",
+)
+def corostart_type(request):
+    """
+    Parametrized fixture that returns the appropriate CoroStart class.
+
+    This fixture provides the actual class (not a context manager) so tests can
+    directly instantiate CoroStart with: cs = corostart_type(coro)
+    """
+    implementation_name = request.param
+
+    # Check if C implementation should be skipped
+    if implementation_name == "c" and not c_implementation_available():
+        pytest.skip("C implementation not available")
+
+    # Check command line skip options
+    if implementation_name == "python" and request.config.getoption("--no-py"):
+        pytest.skip("Python implementation tests skipped")
+    if implementation_name == "c" and request.config.getoption("--no-c"):
+        pytest.skip("C implementation tests skipped")
+
+    # Return the appropriate class
+    if implementation_name == "python":
+        return coroutine_module.PyCoroStart
+    elif implementation_name == "c":
+        return coroutine_module._CCoroStart
+    else:
+        raise ValueError(f"Unknown implementation: {implementation_name}")
