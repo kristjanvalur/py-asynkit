@@ -126,6 +126,8 @@ jobs:
     needs: [build_wheels, build_sdist, build_pure_python_wheel]
     runs-on: ubuntu-latest
     environment: test-release
+    permissions:
+      id-token: write  # For trusted publishing to PyPI
     
     steps:
     - name: Download all artifacts
@@ -167,7 +169,6 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: https://test.pypi.org/legacy/
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
         verbose: true
 
     - name: Test installation from PyPI Test
