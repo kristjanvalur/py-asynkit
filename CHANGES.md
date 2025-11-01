@@ -8,12 +8,11 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
-- **Context Truthiness Bug**: Fixed critical performance inconsistency in Python `CoroStart` implementation
-  - The Python implementation was incorrectly using `if self.context:` instead of `if self.context is not None:`
-  - Empty contexts (which evaluate to `False`) would bypass `context.run()` calls in Python but not in C extension
-  - This caused performance discrepancies between C and Python implementations
+- **Context Truthiness Bug**: Fixed critical context bug in `CoroStart`
+  - We were incorrectly using `if self.context:` instead of `if self.context is not None:`
+  - Empty contexts (which evaluate to `False`) would bypass `context.run()` calls.
   - Fixed in `_start()`, `__await__()`, and `athrow()` methods of `CoroStart` class
-  - Ensures consistent context handling behavior across both implementations
+  - Ensures correct context handling even for empty contexts.
 
 ## [0.14.1] - 2025-10-25
 
