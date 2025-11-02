@@ -199,8 +199,8 @@ jobs:
         # Wait a bit for PyPI Test to process the upload
         sleep 30
         
-        # Install from PyPI Test
-        pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ asynkit==${{ inputs.version }}
+        # Install from PyPI Test ONLY - no fallback to regular PyPI
+        pip install --index-url https://test.pypi.org/simple/ --no-deps asynkit==${{ inputs.version }}
         
         # Test the installation
         python -c "
