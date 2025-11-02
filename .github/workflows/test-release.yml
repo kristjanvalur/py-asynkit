@@ -68,9 +68,6 @@ jobs:
         
         # Install test dependencies
         CIBW_TEST_REQUIRES: pytest anyio
-        
-        # Our package should always build successfully due to OptionalBuildExt
-        CIBW_BUILD_VERBOSITY: 1
 
     - uses: actions/upload-artifact@v5
       with:
