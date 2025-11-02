@@ -1,3 +1,4 @@
+!
 name: Test Release to PyPI Test
 
 on:
@@ -22,14 +23,15 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Build wheels
-      uses: pypa/cibuildwheel@v2.21.3
+      uses: pypa/cibuildwheel@v2.22.0
       env:
         # Configure which Python versions to build for
         CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
         
         # Skip PyPy (our C extension doesn't support it anyway)
         # Skip musllinux (most users don't need it)
-        CIBW_SKIP: "pp* *-musllinux_*"
+        # Skip 32-bit Windows (legacy platform)
+        CIBW_SKIP: "pp* *-musllinux_* *-win32"
         
         # Test our wheels by importing and checking the C extension
         CIBW_TEST_COMMAND: |
