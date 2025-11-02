@@ -22,6 +22,21 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        enable-cache: true
+
+    - name: Set up Python
+      run: uv python install 3.13
+
+    - name: Update version to input version
+      run: |
+        echo "Updating version to ${{ inputs.version }}"
+        uv version ${{ inputs.version }}
+        echo "Verifying version update:"
+        uv run python -c "import tomllib; print('Version in pyproject.toml:', tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
+
     - name: Build wheels
       uses: pypa/cibuildwheel@v2.22.0
       env:
@@ -61,17 +76,21 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
       with:
-        python-version: '3.13'
+        enable-cache: true
 
-    - name: Install build dependencies
+    - name: Set up Python
+      run: uv python install 3.13
+
+    - name: Update version to input version
       run: |
-        pip install build
+        echo "Updating version to ${{ inputs.version }}"
+        uv version ${{ inputs.version }}
 
     - name: Build sdist
-      run: python -m build --sdist
+      run: uv build --sdist
 
     - name: Test sdist (should work without C extension)
       run: |
@@ -94,17 +113,21 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
       with:
-        python-version: '3.13'
+        enable-cache: true
 
-    - name: Install build dependencies
+    - name: Set up Python
+      run: uv python install 3.13
+
+    - name: Update version to input version
       run: |
-        pip install build
+        echo "Updating version to ${{ inputs.version }}"
+        uv version ${{ inputs.version }}
 
     - name: Build pure Python wheel (no C extension)
-      run: ASYNKIT_DISABLE_CEXT=1 python -m build --wheel
+      run: ASYNKIT_DISABLE_CEXT=1 uv build --wheel
 
     - name: Test pure Python wheel
       run: |
