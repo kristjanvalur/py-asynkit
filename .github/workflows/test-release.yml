@@ -30,9 +30,6 @@ jobs:
     - name: Set up Python
       run: uv python install 3.13
 
-    - name: Install Python 3.14 for wheel building
-      run: uv python install 3.14
-
     - name: Update version to input version
       run: |
         echo "Updating version to ${{ inputs.version }}"
@@ -41,7 +38,7 @@ jobs:
         uv run python -c "import tomllib; print('Version in pyproject.toml:', tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
 
     - name: Build wheels
-      uses: pypa/cibuildwheel@v2.22.0
+      uses: pypa/cibuildwheel@v3.2.1
       env:
         # Configure which Python versions to build for
         CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
@@ -62,9 +59,6 @@ jobs:
           assert info['c_extension_available'], 'C extension should be available in wheels'
           print('✓ C extension wheel test passed')
           "
-        
-        # Maximum verbosity to debug Python 3.14 discovery issues
-        CIBW_BUILD_VERBOSITY: 3
         
         # Install test dependencies
         CIBW_TEST_REQUIRES: pytest anyio
