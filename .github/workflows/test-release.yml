@@ -30,6 +30,9 @@ jobs:
     - name: Set up Python
       run: uv python install 3.13
 
+    - name: Install Python 3.14 for wheel building
+      run: uv python install 3.14
+
     - name: Update version to input version
       run: |
         echo "Updating version to ${{ inputs.version }}"
@@ -46,7 +49,8 @@ jobs:
         # Skip PyPy (our C extension doesn't support it anyway)
         # Skip musllinux (most users don't need it)
         # Skip 32-bit Windows (legacy platform)
-        CIBW_SKIP: "pp* *-musllinux_* *-win32"
+        # Skip 32-bit Linux (legacy platform)
+        CIBW_SKIP: "pp* *-musllinux_* *-win32 *-linux_i686"
         
         # Test our wheels by importing and checking the C extension
         CIBW_TEST_COMMAND: |
@@ -58,6 +62,9 @@ jobs:
           assert info['c_extension_available'], 'C extension should be available in wheels'
           print('✓ C extension wheel test passed')
           "
+        
+        # Maximum verbosity to debug Python 3.14 discovery issues
+        CIBW_BUILD_VERBOSITY: 3
         
         # Install test dependencies
         CIBW_TEST_REQUIRES: pytest anyio
