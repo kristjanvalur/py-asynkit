@@ -43,11 +43,9 @@ jobs:
         # Configure which Python versions to build for
         CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
         
-        # Skip PyPy (our C extension doesn't support it anyway)
         # Skip musllinux (most users don't need it)
         # Skip 32-bit Windows (legacy platform)
-        # Skip 32-bit Linux (legacy platform)
-        CIBW_SKIP: "pp* *-musllinux_* *-win32 *-linux_i686"
+        CIBW_SKIP: "*-musllinux_* *-win32"
         
         # Test our wheels by importing and checking the C extension
         CIBW_TEST_COMMAND: |
