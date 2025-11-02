@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.1] - 2025-11-02
+
+### Distribution and Packaging
+
+- **Python 3.14 Support**: Added full support for Python 3.14 final release
+  - Updated cibuildwheel to v3.2.1 with native Python 3.14 support
+  - Added cp314 wheel building across all platforms (Windows, macOS, Linux)
+  - Python 3.14 wheels now built automatically in CI/CD pipeline
+  - Maintains compatibility with Python 3.10-3.14 across all wheel variants
+
 ## [0.15.0] - 2025-10-30
 
 ### Performance Improvements
