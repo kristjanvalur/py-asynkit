@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from weakref import ReferenceType
 
@@ -147,21 +147,13 @@ if PY_314:
         try:
             yield
         finally:
-            _swap_current_task(loop, old)
+            _swap_current_task(loop, old)  # type: ignore[arg-type]
 
 else:
 
     def patch_pytask() -> None:
         """No-op for Python versions < 3.14."""
         pass
-
-    def _patch_context() -> Iterator[None]:
-        """Patch the context for the duration of the context manager."""
-        original_context = asyncio.current_task().get_context()
-        try:
-            yield
-        finally:
-            asyncio.current_task().set_context(original_context)
 
     @contextlib.contextmanager
     def switch_current_task(
@@ -256,7 +248,7 @@ else:
 # Eager task execution compatibility
 # State tracking for monkeypatching
 _eager_tasks_enabled = False
-_original_create_task = None
+_original_create_task: Callable[..., asyncio.Task[Any]] | None = None
 
 
 def _detect_eager_start_support() -> bool:

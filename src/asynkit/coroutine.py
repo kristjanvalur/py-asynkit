@@ -837,7 +837,7 @@ def create_task(
         kwargs.pop("eager_start", None)
 
         def real_task_factory(coro_arg: Coroutine[Any, Any, T]) -> CAwaitable[T]:
-            return _create_task(coro_arg, name=name, context=context, **kwargs)
+            return _create_task(coro_arg, name=name, context=context, **kwargs)  # type: ignore[call-arg]
 
         return coro_eager_task_helper(
             asyncio.get_running_loop(), coro, name, context, real_task_factory
@@ -885,8 +885,11 @@ def coro_eager_task_helper(
 
     # this inner factory must not be eager!
     task = real_task_factory(helper.run())
+    # For the wrapper task approach, real_task_factory must return an actual Task
+    assert isinstance(task, asyncio.Task)
 
     # start the coroutine in the task context
+    cs: CoroStart[T]
     with switch_current_task(loop, task):
         if context is not None:
             # Enter the context only for the initial start, then use None for CoroStart
@@ -920,7 +923,7 @@ class EagerTaskWrapper:
     pending_tasks: set[asyncio.Task[Any]] = set()
 
     def __init__(self) -> None:
-        self.awaitable = None
+        self.awaitable: CoroStart[Any] | None = None
 
     async def run(self) -> Any:
         if self.awaitable is not None:
