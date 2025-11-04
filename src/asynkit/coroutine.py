@@ -864,9 +864,15 @@ def coro_eager_task_helper(
     context: Context | None,
     real_task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]],
 ) -> CAwaitable[T]:
-    """_summary_
-    create a CoroStart object and start it witin the context
-    of an existing task
+    """
+    Create a task with eager execution.
+    We create a task early with the coroutine from a EagerTaskWrapper,
+    then start the coroutine in the task context.
+    If the coroutine blocks, we set it as the awaitable for the wrapper
+    and return the task.
+    If the coroutine completes synchronously, we return a TaskLikeFuture
+    wrapping the result.
+    This ensures that all parts of the execution runs in the correct task context.
     """
 
     # In Python < 3.11, context parameter doesn't exist for create_task()

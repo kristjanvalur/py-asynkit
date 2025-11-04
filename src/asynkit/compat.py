@@ -89,10 +89,12 @@ if PY_314:
     def _py_c_get_running_loop() -> AbstractEventLoop:
         return _c__get_running_loop()  # type: ignore[misc]
 
-    def _py_c_swap_current_task(task: _TaskAny) -> _TaskAny | None:
-        prev = _orig_py_swap_current_task(task)
-        _c__swap_current_task(task)  # type: ignore[misc]
-        return prev  # type: ignore[no-any-return]
+    def _py_c_swap_current_task(
+        loop: AbstractEventLoop, task: _TaskAny
+    ) -> _TaskAny | None:
+        _orig_py_swap_current_task(loop, task)  # Keep Python bookkeeping in sync
+        result = _c__swap_current_task(loop, task)  # type: ignore[misc]
+        return result  # type: ignore[no-any-return]  # Use C version's return value
 
     def _py_c_enter_task(loop: AbstractEventLoop, task: _TaskAny) -> None:
         _orig_py_enter_task(loop, task)
@@ -135,16 +137,17 @@ if PY_314:
         context temporarily, such as when implementing eager task execution.
 
         Args:
+            loop: The event loop the tasks belong to.
             new_task: The task to set as the current task within the context.
         Yields:
 
             None
         """
-        old = _swap_current_task(new_task)
+        old = _swap_current_task(loop, new_task)
         try:
             yield
         finally:
-            _swap_current_task(old)
+            _swap_current_task(loop, old)
 
 else:
 
