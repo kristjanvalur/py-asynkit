@@ -12,6 +12,8 @@ __all__ = [
     "patch_pytask",
     "enable_eager_tasks",
     "disable_eager_tasks",
+    "enter_task",
+    "leave_task",
 ]
 
 # Python version checks
@@ -118,11 +120,24 @@ if PY_314:
         asyncio.tasks._py_leave_task = _py_c_leave_task  # type: ignore[assignment,attr-defined]
         asyncio.tasks._py_swap_current_task = _py_c_swap_current_task  # type: ignore[assignment,attr-defined]
 
+    # helper function to call the right ones
+    if _c__enter_task is not _py_c_enter_task:
+        enter_task = _py_c_enter_task
+        leave_task = _py_c_leave_task
+    else:
+        enter_task = _py_enter_task
+        leave_task = _py_leave_task
+        
 else:
 
     def patch_pytask() -> None:
         """No-op for Python versions < 3.14."""
         pass
+    
+    from asyncio.tasks import (  # type: ignore[attr-defined]
+        _py_enter_task as enter_task,
+        _py_leave_task as leave_task,
+    )
 
 
 # InterruptCondition compatibility
