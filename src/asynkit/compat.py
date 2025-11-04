@@ -143,6 +143,12 @@ if PY_314:
 
             None
         """
+        # Only swap if loop is running (required in Python 3.14+)
+        # During shutdown, task factory may be called but loop is no longer running
+        if not loop.is_running():
+            yield
+            return
+
         old = _swap_current_task(loop, new_task)
         try:
             yield
