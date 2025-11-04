@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- **Eager Task Context Fix**: Fixed critical issue where eager task execution was not running in the correct task context
+  - Implemented "wrapper task" approach: creates Task early, then starts coroutine in task context
+  - `asyncio.current_task()` now returns consistent values throughout eager execution
+  - Previously coroutine ran in parent task's context until first await, now runs in own task context from start
+  - Fixes compatibility with FastAPI/uvicorn's sniffio library detection
+  - Fixes anyio framework task tracking with eager tasks
+  - Ensures correct task context for all code using `asyncio.current_task()`
+
+### Python 3.14 Compatibility
+
+- **Dual Bookkeeping Support**: Added support for Python 3.14's dual C/Python task bookkeeping
+  - Python 3.14 maintains separate `_c__swap_current_task` (C) and `_py_swap_current_task` (Python) implementations
+  - Updated `_py_c_swap_current_task` to synchronize both implementations
+  - Returns C version's result as source of truth while keeping Python bookkeeping updated
+  - Updated `switch_current_task` context manager to use `(loop, task)` signature on 3.14
+  - Fixes anyio and other frameworks that rely on C bookkeeping exclusively
+
+### Code Quality
+
+- **Type Safety Improvements**: Enhanced type annotations for mypy strict mode compliance
+  - Added proper type annotations for `_original_create_task` and `EagerTaskWrapper.awaitable`
+  - Imported `Callable` from `collections.abc` for type hints
+  - Added type ignores for internal asyncio APIs where needed
+  - All type checks now pass with mypy strict mode
+  - Removed dead code (`_patch_context` function)
+
+### Documentation
+
+- **Updated Eager Tasks Documentation**: Corrected documentation to reflect fixed behavior
+  - Removed outdated limitation about parent task context execution
+  - Added feature documentation confirming correct task context behavior throughout
+  - Clarified that `asyncio.current_task()` returns consistent values in eager execution
+
+### Testing
+
+- **Python 3.14 Validation**: All tests pass on Python 3.14.0rc2
+  - 567 tests passing on both Python 3.13.7 and 3.14.0rc2
+  - 95% code coverage maintained
+  - All linting and type checking passes
+
 ## [0.15.1] - 2025-11-02
 
 ### Distribution and Packaging
