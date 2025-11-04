@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from weakref import ReferenceType
 
@@ -87,10 +89,12 @@ if PY_314:
     def _py_c_get_running_loop() -> AbstractEventLoop:
         return _c__get_running_loop()  # type: ignore[misc]
 
-    def _py_c_swap_current_task(task: _TaskAny) -> _TaskAny | None:
-        prev = _orig_py_swap_current_task(task)
-        _c__swap_current_task(task)  # type: ignore[misc]
-        return prev  # type: ignore[no-any-return]
+    def _py_c_swap_current_task(
+        loop: AbstractEventLoop, task: _TaskAny
+    ) -> _TaskAny | None:
+        _orig_py_swap_current_task(loop, task)  # Keep Python bookkeeping in sync
+        result = _c__swap_current_task(loop, task)  # type: ignore[misc]
+        return result  # type: ignore[no-any-return]  # Use C version's return value
 
     def _py_c_enter_task(loop: AbstractEventLoop, task: _TaskAny) -> None:
         _orig_py_enter_task(loop, task)
@@ -118,11 +122,69 @@ if PY_314:
         asyncio.tasks._py_leave_task = _py_c_leave_task  # type: ignore[assignment,attr-defined]
         asyncio.tasks._py_swap_current_task = _py_c_swap_current_task  # type: ignore[assignment,attr-defined]
 
+    if _orig_py_swap_current_task != _c__swap_current_task:
+        _swap_current_task = _py_c_swap_current_task
+    else:
+        _swap_current_task = _orig_py_swap_current_task
+
+    @contextlib.contextmanager
+    def switch_current_task(
+        loop: asyncio.AbstractEventLoop, new_task: _TaskAny
+    ) -> Iterator[None]:
+        """Context manager to temporarily switch current_task().
+
+        This is useful for libraries that need to manipulate the current task
+        context temporarily, such as when implementing eager task execution.
+
+        Args:
+            loop: The event loop the tasks belong to.
+            new_task: The task to set as the current task within the context.
+        Yields:
+
+            None
+        """
+        # Only swap if loop is running (required in Python 3.14+)
+        # During shutdown, task factory may be called but loop is no longer running
+        if not loop.is_running():
+            yield
+            return
+
+        old = _swap_current_task(loop, new_task)
+        try:
+            yield
+        finally:
+            _swap_current_task(loop, old)  # type: ignore[arg-type]
+
 else:
 
     def patch_pytask() -> None:
         """No-op for Python versions < 3.14."""
         pass
+
+    @contextlib.contextmanager
+    def switch_current_task(
+        loop: asyncio.AbstractEventLoop, new_task: _TaskAny
+    ) -> Iterator[None]:
+        """Context manager to temporarily switch current_task().
+
+        This is useful for libraries that need to manipulate the current task
+        context temporarily, such as when implementing eager task execution.
+
+        Args:
+            new_task: The task to set as the current task within the context.
+        Yields:
+            None
+        """
+        old_task = asyncio.current_task()
+        if old_task is not None:
+            asyncio.tasks._leave_task(loop, old_task)
+        asyncio.tasks._enter_task(loop, new_task)
+        try:
+            yield
+        finally:
+            asyncio.tasks._leave_task(loop, new_task)
+            if old_task is not None:
+                asyncio.tasks._enter_task(loop, old_task)
 
 
 # InterruptCondition compatibility
@@ -192,7 +254,7 @@ else:
 # Eager task execution compatibility
 # State tracking for monkeypatching
 _eager_tasks_enabled = False
-_original_create_task = None
+_original_create_task: Callable[..., asyncio.Task[Any]] | None = None
 
 
 def _detect_eager_start_support() -> bool:
