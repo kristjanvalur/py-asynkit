@@ -72,7 +72,7 @@ def simulate_uvicorn_protocol():
 
         try:
             await task
-            print(f"[UVICORN] ✓ Request handled successfully")
+            print("[UVICORN] ✓ Request handled successfully")
         except Exception as e:
             print(f"[UVICORN] ❌ Request failed: {e}")
             raise
