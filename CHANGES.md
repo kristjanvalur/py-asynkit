@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.0] - 2025-11-04
+
 ### Bug Fixes
 
 - **Eager Task Context Fix**: Fixed critical issue where eager task execution was not running in the correct task context
@@ -25,6 +27,12 @@ All notable changes to this project will be documented in this file.
   - Fixes anyio and other frameworks that rely on C bookkeeping exclusively
   - Fixes uvicorn/FastAPI sniffio detection with eager tasks
 
+### Python 3.10 Compatibility
+
+- **Backward Compatibility**: Added support for Python 3.10's older asyncio API
+  - Added try/except fallback for `context` parameter in `create_task()` (added in Python 3.11)
+  - Ensures wrapper task approach works correctly on Python 3.10.16+
+
 ### Code Quality
 
 - **Type Safety Improvements**: Enhanced type annotations for mypy strict mode compliance
@@ -43,10 +51,12 @@ All notable changes to this project will be documented in this file.
 
 ### Testing
 
-- **Python 3.14 Validation**: All tests pass on Python 3.14.0rc2
-  - 567 tests passing on both Python 3.13.7 and 3.14.0rc2
+- **Multi-Version Validation**: All tests pass on Python 3.10, 3.13, and 3.14
+  - 567 tests passing on Python 3.13.7 and 3.14.0rc2
+  - 562 tests passing on Python 3.10.16 (some tests skipped for version-specific features)
   - 95% code coverage maintained
   - All linting and type checking passes
+  - Added uvicorn/sniffio reproduction test to verify fix
 
 ## [0.15.1] - 2025-11-02
 
