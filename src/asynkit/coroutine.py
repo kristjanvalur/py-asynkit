@@ -744,16 +744,7 @@ def create_eager_factory(
         - `coro_eager()`: Lower-level eager execution function
         - `TaskLikeFuture`: Future subclass with Task-like methods
     """
-    class TaskHelper:
-        def __init__(self) -> None:
-            self.awaitable = None
-            
-        async def run(self) -> Any:
-            if self.awaitable is not None:
-                return await self.awaitable
-            
-    pending_tasks: set[asyncio.Task[Any]] = set()
-
+   
     def factory(
         loop: asyncio.AbstractEventLoop, coro: Coroutine[Any, Any, Any], **kwargs: Any
     ) -> Any:
@@ -767,23 +758,16 @@ def create_eager_factory(
         context = kwargs.get("context")
         name = kwargs.get("name")
         
-        helper = TaskHelper()
-
         # this inner factory must not be eager!
         kwargs.pop("eager_start", None)  # remove incompatible eager_start
-        # Use inner_factory if provided, otherwise use asyncio.Task
-        if inner_factory is not None:
-            task = inner_factory(loop, helper.run(), **kwargs)
-        else:
-            task = asyncio.Task(helper.run(), loop=loop, **kwargs)
+        def real_task_factory(coro: Coroutine[Any, Any, Any]) -> CAwaitable[Any]:
+            if inner_factory is not None:
+                return inner_factory(loop, coro, **kwargs)
+            else:
+                return asyncio.Task(coro, loop=loop, **kwargs)
         
-        cs = eager_task_helper2(loop, task, context, coro)
-        if not cs.done():
-            helper.awaitable  = cs
-            return task
-        pending_tasks.add(task)
-        task.add_done_callback(pending_tasks.discard)
-        return TaskLikeFuture(cs.as_future(), name=name, context=context)
+        return  eager_task_helper2(loop, coro, name, context, real_task_factory)
+        
         
     return factory
 
@@ -848,21 +832,20 @@ def create_task(
         - Works on all Python versions, not just 3.12+
     """
     if eager_start:
-        # Use our enhanced eager implementation with Task compatibility
-        def continuation_factory(c: Coroutine[Any, Any, T]) -> CAwaitable[T]:
-            # Pass the context to the continuation task
-            try:
-                return _create_task(c, name=name, context=context, **kwargs)  # type: ignore[call-arg]
-            except TypeError:
-                # Fallback for Python < 3.11 which doesn't support context parameter
-                # Note: The coroutine is already running in the correct context from
-                # coro_eager_task_helper, so we don't need to pass context here
-                return _create_task(c, name=name, **kwargs)
-
-        # Use the refactored function that handles both eager execution and wrapping
-        return coro_eager_task_helper(
-            coro, construct_task=continuation_factory, context=context, name=name
+        # Remove eager_start from kwargs as it's not supported by _create_task
+        kwargs.pop("eager_start", None)
+        
+        def real_task_factory(coro_arg: Coroutine[Any, Any, T]) -> CAwaitable[T]:
+            return _create_task(coro_arg, name=name, context=context, **kwargs)
+        
+        return eager_task_helper2(
+            asyncio.get_running_loop(),
+            coro,
+            name,
+            context,
+            real_task_factory
         )
+    
     else:
         # Delegate to standard asyncio.create_task()
         # Handle context parameter compatibility (added in Python 3.11)
@@ -876,6 +859,16 @@ def create_task(
                 pass
             return _create_task(coro, name=name, **kwargs)
 
+class EagerTaskHelper:
+    # this wrapper allows us to create a task early, then modify what
+    # the task awaits on later, in case of synchronous completion.
+    pending_tasks: set[asyncio.Task[Any]] = set()
+    def __init__(self) -> None:
+        self.awaitable = None
+        
+    async def run(self) -> Any:
+        if self.awaitable is not None:
+            return await self.awaitable
 
 def coro_eager_task_helper(
     coro: Coroutine[Any, Any, T],
@@ -950,14 +943,22 @@ def task_context_manager(loop, new_task: asyncio.Task[Any]) -> Generator[None, N
 
 def eager_task_helper2(
     loop,
-    task,
+    coro,
+    name,
     context,
-    coro):
+    real_task_factory,
+    ):
     """_summary_
     create a CoroStart object and start it witin the context
     of an existing task
     """
+        
+    helper = EagerTaskHelper()
+
+    # this inner factory must not be eager!
+    task = real_task_factory(helper.run())
     
+    # start the coroutine in the task context
     with task_context_manager(loop, task):
         if context is not None:
             # Enter the context only for the initial start, then use None for CoroStart
@@ -965,12 +966,25 @@ def eager_task_helper2(
             def start_in_context() -> CoroStart[T]:
                 return CoroStart(coro, context=None)
 
-            return context.run(start_in_context)
+            cs = context.run(start_in_context)
         else:
             # No explicit context - use copy_context() as before
-            return CoroStart(coro, context=copy_context())
+            cs = CoroStart(coro, context=copy_context())
     
-        
+    # if the corutine is not done, set it as the awaitable for the helper and
+    # return the task
+    if not cs.done():
+        helper.awaitable  = cs
+        return task
+    else:
+        # put the task we created on a pending list to avoid it being
+        # garbage collected too early, then return a TaskLikeFuture
+        EagerTaskHelper.pending_tasks.add(task)
+        task.add_done_callback(EagerTaskHelper.pending_tasks.discard)
+        return TaskLikeFuture(cs.as_future(), name=name, context=context)
+    
+    
+    
    
 
 
