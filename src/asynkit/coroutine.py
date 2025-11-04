@@ -837,7 +837,12 @@ def create_task(
         kwargs.pop("eager_start", None)
 
         def real_task_factory(coro_arg: Coroutine[Any, Any, T]) -> CAwaitable[T]:
-            return _create_task(coro_arg, name=name, context=context, **kwargs)  # type: ignore[call-arg]
+            # Handle context parameter compatibility (added in Python 3.11)
+            try:
+                return _create_task(coro_arg, name=name, context=context, **kwargs)  # type: ignore[call-arg]
+            except TypeError:
+                # Fallback for Python < 3.11 which doesn't support context parameter
+                return _create_task(coro_arg, name=name, **kwargs)
 
         return coro_eager_task_helper(
             asyncio.get_running_loop(), coro, name, context, real_task_factory
