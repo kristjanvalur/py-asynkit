@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from weakref import ReferenceType
 
@@ -12,8 +14,6 @@ __all__ = [
     "patch_pytask",
     "enable_eager_tasks",
     "disable_eager_tasks",
-    "enter_task",
-    "leave_task",
 ]
 
 # Python version checks
@@ -120,24 +120,70 @@ if PY_314:
         asyncio.tasks._py_leave_task = _py_c_leave_task  # type: ignore[assignment,attr-defined]
         asyncio.tasks._py_swap_current_task = _py_c_swap_current_task  # type: ignore[assignment,attr-defined]
 
-    # helper function to call the right ones
-    if _c__enter_task is not _py_c_enter_task:
-        enter_task = _py_c_enter_task
-        leave_task = _py_c_leave_task
+    if _orig_py_swap_current_task != _c__swap_current_task:
+        _swap_current_task = _py_c_swap_current_task
     else:
-        enter_task = _py_enter_task
-        leave_task = _py_leave_task
-        
+        _swap_current_task = _orig_py_swap_current_task
+
+    @contextlib.contextmanager
+    def switch_current_task(
+        loop: asyncio.AbstractEventLoop, new_task: _TaskAny
+    ) -> Iterator[None]:
+        """Context manager to temporarily switch current_task().
+
+        This is useful for libraries that need to manipulate the current task
+        context temporarily, such as when implementing eager task execution.
+
+        Args:
+            new_task: The task to set as the current task within the context.
+        Yields:
+
+            None
+        """
+        old = _swap_current_task(new_task)
+        try:
+            yield
+        finally:
+            _swap_current_task(old)
+
 else:
 
     def patch_pytask() -> None:
         """No-op for Python versions < 3.14."""
         pass
-    
-    from asyncio.tasks import (  # type: ignore[attr-defined]
-        _py_enter_task as enter_task,
-        _py_leave_task as leave_task,
-    )
+
+    def _patch_context() -> Iterator[None]:
+        """Patch the context for the duration of the context manager."""
+        original_context = asyncio.current_task().get_context()
+        try:
+            yield
+        finally:
+            asyncio.current_task().set_context(original_context)
+
+    @contextlib.contextmanager
+    def switch_current_task(
+        loop: asyncio.AbstractEventLoop, new_task: _TaskAny
+    ) -> Iterator[None]:
+        """Context manager to temporarily switch current_task().
+
+        This is useful for libraries that need to manipulate the current task
+        context temporarily, such as when implementing eager task execution.
+
+        Args:
+            new_task: The task to set as the current task within the context.
+        Yields:
+            None
+        """
+        old_task = asyncio.current_task()
+        if old_task is not None:
+            asyncio.tasks._leave_task(loop, old_task)
+        asyncio.tasks._enter_task(loop, new_task)
+        try:
+            yield
+        finally:
+            asyncio.tasks._leave_task(loop, new_task)
+            if old_task is not None:
+                asyncio.tasks._enter_task(loop, old_task)
 
 
 # InterruptCondition compatibility
