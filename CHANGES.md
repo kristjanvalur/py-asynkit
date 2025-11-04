@@ -21,7 +21,9 @@ All notable changes to this project will be documented in this file.
   - Updated `_py_c_swap_current_task` to synchronize both implementations
   - Returns C version's result as source of truth while keeping Python bookkeeping updated
   - Updated `switch_current_task` context manager to use `(loop, task)` signature on 3.14
+  - Added `loop.is_running()` check to handle asyncio.run() shutdown gracefully
   - Fixes anyio and other frameworks that rely on C bookkeeping exclusively
+  - Fixes uvicorn/FastAPI sniffio detection with eager tasks
 
 ### Code Quality
 
