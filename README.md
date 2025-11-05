@@ -38,6 +38,7 @@ pip install --no-binary=asynkit asynkit
 - `ASYNKIT_DEBUG=1`: Build C extension with debug symbols and assertions
 
 Example:
+
 ```bash
 # Force C extension build (fail if compilation fails)
 ASYNKIT_FORCE_CEXT=1 pip install --no-binary=asynkit asynkit
