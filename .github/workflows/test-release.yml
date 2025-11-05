@@ -103,48 +103,9 @@ jobs:
         name: sdist
         path: dist/*.tar.gz
 
-  build_pure_python_wheel:
-    name: Build pure Python wheel
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install uv
-      uses: astral-sh/setup-uv@v4
-      with:
-        enable-cache: true
-
-    - name: Set up Python
-      run: uv python install 3.13
-
-    - name: Update version to input version
-      run: |
-        echo "Updating version to ${{ inputs.version }}"
-        uv version ${{ inputs.version }}
-
-    - name: Build pure Python wheel (no C extension)
-      run: ASYNKIT_DISABLE_CEXT=1 uv build --wheel
-
-    - name: Test pure Python wheel
-      run: |
-        pip install dist/*.whl
-        python -c "
-        import asynkit
-        info = asynkit.get_implementation_info()
-        print('Implementation:', info['implementation'])
-        print('C extension available:', info['c_extension_available'])
-        assert info['implementation'] == 'Pure Python', 'Should be Pure Python implementation'
-        print('✓ Pure Python wheel works correctly')
-        "
-
-    - uses: actions/upload-artifact@v5
-      with:
-        name: pure-python-wheel
-        path: dist/*.whl
-
   test_release_to_pypi_test:
     name: Test Release to PyPI Test
-    needs: [build_wheels, build_sdist, build_pure_python_wheel]
+    needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
     environment: test-release
     permissions:
@@ -170,20 +131,13 @@ jobs:
     - name: Verify C extension wheels
       run: |
         echo "Checking for C extension wheels..."
-        wheel_count=$(ls -1 dist/*.whl | grep -v py3-none-any | wc -l)
-        pure_wheel_count=$(ls -1 dist/*.whl | grep py3-none-any | wc -l)
+        wheel_count=$(ls -1 dist/*.whl | wc -l)
         echo "C extension wheels: $wheel_count"
-        echo "Pure Python wheels: $pure_wheel_count"
         echo "Source distributions: $(ls -1 dist/*.tar.gz | wc -l)"
         
         # Verify we have the expected wheels
         if [ "$wheel_count" -lt 10 ]; then
           echo "Warning: Expected more C extension wheels (got $wheel_count)"
-        fi
-        
-        if [ "$pure_wheel_count" -ne 1 ]; then
-          echo "Error: Expected exactly 1 pure Python wheel (got $pure_wheel_count)"
-          exit 1
         fi
 
     - name: Publish to PyPI Test

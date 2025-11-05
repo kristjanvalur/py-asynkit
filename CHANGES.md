@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.1] - 2025-11-05
+
+### Build System
+
+- **Removed Universal Wheel**: No longer publishing universal (`py3-none-any`) wheel to PyPI
+  - Only platform-specific wheels (with C extension) and source distribution are now published
+  - Prevents package managers from incorrectly selecting the pure Python fallback wheel
+  - Ensures users get optimal performance with C extension by default
+  - Follows best practice of projects like PyYAML and MarkupSafe
+  - Source distribution still available for platforms without pre-built wheels
+
 ## [0.16.0] - 2025-11-04
 
 ### Bug Fixes
