@@ -20,17 +20,16 @@
 pip install asynkit
 ```
 
-**asynkit** has a custom C extension to optimize some primitives. If available for your platform it will be automatically installed. If you want to attempt to compile the extension for your platform use:
+**asynkit** has a custom C extension to optimize some primitives. If available for your platform it will be automatically installed. If you want to force compilation from source for your platform use:
 
 ```bash
 pip install --no-binary=asynkit asynkit
 ```
 
-**Wheel selection priority:**
+**Wheel selection:**
 
 - **Binary wheels** (Windows, macOS, Linux × Python 3.10-3.14): High-performance C extension provides **8% better throughput** and **near-native latency**
-- **Pure Python wheel** (all other platforms): Universal compatibility, baseline performance
-- **Source distribution**: Custom compilation when using `--no-binary` flag
+- **Source distribution**: For platforms without pre-built wheels, or when using `--no-binary` flag
 
 Check your installation:
 
