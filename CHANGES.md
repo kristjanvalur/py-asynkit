@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.3] - 2025-11-05
+
+### Code Quality
+
+- **C Extension Improvements**: Refactored `corostart.c` for improved maintainability
+  - Added module-level documentation explaining performance optimization approach
+  - Reorganized forward declarations for better code structure
+  - Added `get_build_info()` function to expose build configuration (debug/optimized mode)
+  - Extracted `extract_stopiteration_value()` helper function for better code reuse
+  - Improved memory safety with proper exception handling
+  - No functional changes - purely internal cleanup and documentation
+
+### Developer Tools
+
+- **Build Script Consolidation**: Unified fast build scripts into canonical location
+  - Moved `fast_build.sh` from root to `scripts/` directory
+  - Enhanced script with simplified testing using `get_build_info()`
+  - Added `ASYNKIT_FORCE_CEXT=1` flag for stricter builds
+  - Removed duplicate and stray test files from repository
+
 ## [0.16.2] - 2025-11-05
 
 ### Packaging Fix
