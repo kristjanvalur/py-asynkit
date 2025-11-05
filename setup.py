@@ -82,6 +82,7 @@ def get_compile_args():
                     "/Zi",  # Debug symbols
                     "/Od",  # No optimization
                     "/DDEBUG",  # Debug macro
+                    "/UNDEBUG",  # Undefine NDEBUG to enable asserts
                     "/W3",  # Warning level 3
                 ]
             )
@@ -91,6 +92,7 @@ def get_compile_args():
                     "-g",  # Debug symbols
                     "-O0",  # No optimization
                     "-DDEBUG",  # Debug macro
+                    "-UNDEBUG",  # Undefine NDEBUG to enable asserts
                     "-Wall",  # All warnings
                     "-Wextra",  # Extra warnings
                 ]
