@@ -31,6 +31,21 @@ pip install --no-binary=asynkit asynkit
 - **Binary wheels** (Windows, macOS, Linux × Python 3.10-3.14): High-performance C extension provides **8% better throughput** and **near-native latency**
 - **Source distribution**: For platforms without pre-built wheels, or when using `--no-binary` flag
 
+**Build environment variables:**
+
+- `ASYNKIT_FORCE_CEXT=1`: Force C extension compilation and fail if it cannot be built (ensures no silent fallback to pure Python)
+- `ASYNKIT_DISABLE_CEXT=1`: Disable C extension completely, use pure Python implementation
+- `ASYNKIT_DEBUG=1`: Build C extension with debug symbols and assertions
+
+Example:
+```bash
+# Force C extension build (fail if compilation fails)
+ASYNKIT_FORCE_CEXT=1 pip install --no-binary=asynkit asynkit
+
+# Build with debug symbols for development
+ASYNKIT_DEBUG=1 pip install --no-binary=asynkit asynkit
+```
+
 Check your installation:
 
 ```python
