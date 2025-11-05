@@ -1,6 +1,6 @@
 [project]
 name = "asynkit"
-version = "0.16.1"
+version = "0.16.2"
 description = "A toolkit for Python coroutines"
 authors = [
     {name = "Kristján Valur Jónsson", email = "sweskman@gmail.com"}
@@ -82,9 +82,13 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+exclude = ["asynkit._cext"]
 
 [tool.setuptools.package-data]
 asynkit = ["py.typed"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["_cext/*"]
 
 [tool.hatch.build.targets.sdist]
 include = [

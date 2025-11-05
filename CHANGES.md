@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.2] - 2025-11-05
+
+### Packaging Fix
+
+- **Binary Wheel Fix**: Fixed wheel packaging to exclude C extension source directory
+  - Added `exclude = ["asynkit._cext"]` to `[tool.setuptools.packages.find]` to exclude source package
+  - Added `[tool.setuptools.exclude-package-data]` with `"*" = ["_cext/*"]` to exclude source files
+  - Binary wheels now contain only the compiled extension module (`.so`/`.pyd`), not the source directory
+  - Fixes issue with Bazel's `rules_python` which automatically creates `__init__.py` in directories
+  - Python's import system was resolving `_cext` as an empty package instead of the compiled module
+  - Resolves 4-5x performance degradation when C extension fails to load
+  - Source distributions (sdist) still correctly include the `_cext/` directory for building
+
 ## [0.16.1] - 2025-11-05
 
 ### Build System
