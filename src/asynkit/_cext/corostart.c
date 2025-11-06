@@ -102,6 +102,8 @@ static PyObject *corostart_await(CoroStartObject *self);
  * CONTINUED means all fields are NULL (exception or value has
  *   been consumed by the PyIter_Send)
  * PENDING is derived.  it is not Done, and not yet consumed.
+ * these are the three valid states, further validation is done
+ * in the invariant checker.
  */
 
 #define _IS_DONE(self) ((self)->initial_result != PYGEN_NEXT)
@@ -149,43 +151,37 @@ static inline void assert_corostart_invariant_impl(CoroStartObject *self,
     if(is_done) {
         /* done() state can have either s_value (PYGEN_RETURN) or exception
          * (PYGEN_ERROR) */
-        if(self->initial_result == PYGEN_RETURN) {
-            if(!(self->s_value != NULL)) {
-                fprintf(stderr, __FILE__ ":%d: ", line_number);
-            }
-            assert(self->s_value != NULL && "PYGEN_RETURN should have s_value");
-            if(!(self->s_exc_type == NULL)) {
-                fprintf(stderr, __FILE__ ":%d: ", line_number);
-            }
-            assert(self->s_exc_type == NULL &&
-                   "PYGEN_RETURN should not have exception");
-        } else if(self->initial_result == PYGEN_ERROR) {
-            if(!(self->s_value == NULL)) {
-                fprintf(stderr, __FILE__ ":%d: ", line_number);
-            }
-            assert(self->s_value == NULL && "PYGEN_ERROR should not have s_value");
-            if(!(self->s_exc_type != NULL)) {
-                fprintf(stderr, __FILE__ ":%d: ", line_number);
-            }
-            assert(self->s_exc_type != NULL && "PYGEN_ERROR should have exception");
-        }
-    }
-    if(is_pending) {
-        /* pending() state - should not have exception fields */
-        if(!(self->s_exc_type == NULL)) {
+        if(!(self->initial_result == PYGEN_RETURN ||
+             self->initial_result == PYGEN_ERROR)) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
-        assert(self->s_exc_type == NULL && "pending() state should not have exception");
-        if(!(self->s_exc_value == NULL)) {
+        assert(self->initial_result == PYGEN_RETURN ||
+               self->initial_result == PYGEN_ERROR);
+        // either s_value is non-NULL or s_exc_type is non-NULL (exclusive or)
+        if(!((self->s_value != NULL) ^ (self->s_exc_type != NULL))) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
-        assert(self->s_exc_value == NULL &&
-               "pending() state should not have exception value");
-        if(!(self->s_exc_traceback == NULL)) {
+        assert((self->s_value != NULL) ^ (self->s_exc_type != NULL));
+    } else if(is_pending) {
+        /* pending() state - should only have s_value set */
+        if(!(self->initial_result == PYGEN_NEXT)) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
-        assert(self->s_exc_traceback == NULL &&
-               "pending() state should not have exception traceback");
+        assert(self->initial_result == PYGEN_NEXT);
+        if(!(self->s_value != NULL && self->s_exc_type == NULL)) {
+            fprintf(stderr, __FILE__ ":%d: ", line_number);
+        }
+        assert(self->s_value != NULL && self->s_exc_type == NULL);
+    } else {
+        /* continued() state - all fields should be NULL */
+        if(!(self->initial_result == PYGEN_NEXT)) {
+            fprintf(stderr, __FILE__ ":%d: ", line_number);
+        }
+        assert(self->initial_result == PYGEN_NEXT);
+        if(!(self->s_value == NULL && self->s_exc_type == NULL)) {
+            fprintf(stderr, __FILE__ ":%d: ", line_number);
+        }
+        assert(self->s_value == NULL && self->s_exc_type == NULL);
     }
 #endif
 }
@@ -712,15 +708,20 @@ static PyObject *corostart_exception(PyObject *_self)
     }
 
     // Return the exception (not re-raise it like result() does)
-    if(self->s_exc_value && PyObject_IsInstance(self->s_exc_value, self->s_exc_type)) {
-        // s_exc_value is an actual exception instance
-        return Py_NewRef(self->s_exc_value);
-    } else {
-        // s_exc_value is the raw value, need to construct exception
-        // if it is null, it is omitted by the following call
-        // any failure is propagated to the caller.
-        return PyObject_CallFunctionObjArgs(self->s_exc_type, self->s_exc_value, NULL);
+    if(self->s_exc_value) {
+        int res = PyObject_IsInstance(self->s_exc_value, self->s_exc_type);
+        if(res < 0) {
+            return NULL;  // error during IsInstance check
+        }
+        if(res == 1) {
+            // s_exc_value is an actual exception instance
+            return Py_NewRef(self->s_exc_value);
+        }
     }
+    // s_exc_value is the raw value, need to construct exception
+    // if it is null, it is omitted by the following call
+    // any failure is propagated to the caller.
+    return PyObject_CallFunctionObjArgs(self->s_exc_type, self->s_exc_value, NULL);
 }
 
 
