@@ -91,7 +91,7 @@ PyMODINIT_FUNC PyInit__cext(void);
 /* CoroStart object structure */
 typedef struct CoroStartObject {
     PyObject_HEAD
-        /* Type-specific fields go here */
+        // Type-specific fields go here
         PyObject *await_iter;
     PyObject *context;
     PySendResult initial_result;  // Result from initial PyIter_Send call
@@ -104,8 +104,8 @@ typedef struct CoroStartObject {
 /* CoroStartWrapper - implements both iterator and coroutine protocols */
 typedef struct CoroStartWrapperObject {
     PyObject_HEAD
-        /* Type-specific fields go here */
-        PyObject *corostart; /* Reference to our CoroStart object */
+        // Type-specific fields go here
+        PyObject *corostart;  // Reference to our CoroStart object
 } CoroStartWrapperObject;
 
 /* Forward declaration of CoroStart object methods */
@@ -144,31 +144,30 @@ static inline void assert_corostart_invariant_impl(CoroStartObject *self,
                                                    int line_number)
 {
 #ifdef NDEBUG
-    /* Skip checks in release builds */
+    // Skip checks in release builds
     (void) self;
     (void) line_number;
 #else
-    /* Validate state model invariants:
-     * 1. Exactly one of three states: done, pending, or continued
-     * 2. done: s_exc_type != NULL (and s_value == NULL)
-     * 3. pending: s_value != NULL (and s_exc_type == NULL)
-     * 4. continued: all fields are NULL
-     */
+    // Validate state model invariants:
+    // 1. Exactly one of three states: done, pending, or continued
+    // 2. done: s_exc_type != NULL (and s_value == NULL)
+    // 3. pending: s_value != NULL (and s_exc_type == NULL)
+    // 4. continued: all fields are NULL
     int is_done = _IS_DONE(self);
     int is_pending = _IS_PENDING(self);
     int is_continued = _IS_CONTINUED(self);
 
-    /* Exactly one state should be true */
+    // Exactly one state should be true
     int state_count = is_done + is_pending + is_continued;
     if(state_count != 1) {
         fprintf(stderr, __FILE__ ":%d: ", line_number);
     }
     assert(state_count == 1 && "CoroStart must be in exactly one state");
 
-    /* Additional consistency checks */
+    // Additional consistency checks
     if(is_done) {
-        /* done() state can have either s_value (PYGEN_RETURN) or exception
-         * (PYGEN_ERROR) */
+        // done() state can have either s_value (PYGEN_RETURN) or exception
+        // (PYGEN_ERROR)
         if(!(self->initial_result == PYGEN_RETURN ||
              self->initial_result == PYGEN_ERROR)) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
@@ -181,7 +180,7 @@ static inline void assert_corostart_invariant_impl(CoroStartObject *self,
         }
         assert((self->s_value != NULL) ^ (self->s_exc_type != NULL));
     } else if(is_pending) {
-        /* pending() state - should only have s_value set */
+        // pending() state - should only have s_value set
         if(!(self->initial_result == PYGEN_NEXT)) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
@@ -191,7 +190,7 @@ static inline void assert_corostart_invariant_impl(CoroStartObject *self,
         }
         assert(self->s_value != NULL && self->s_exc_type == NULL);
     } else {
-        /* continued() state - all fields should be NULL */
+        // continued() state - all fields should be NULL
         if(!(self->initial_result == PYGEN_NEXT)) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
@@ -304,7 +303,7 @@ static PyObject *check_stopiteration_value(PyObject **exc_type,
         Py_CLEAR(*exc_value);
         Py_CLEAR(*exc_traceback);
         PyErr_Fetch(exc_type, exc_value, exc_traceback);
-        return NULL; /* Error during IsSubclass check */
+        return NULL;  // Error during IsSubclass check
     }
     if(res == 0) {
         // it is not a stopiteration, return NULL to indicate exception is set
@@ -319,7 +318,7 @@ static PyObject *check_stopiteration_value(PyObject **exc_type,
     if(result == NULL) {
         // error during extraction, return that exception
         PyErr_Fetch(exc_type, exc_value, exc_traceback);
-        return NULL; /* Error during extraction */
+        return NULL;  // Error during extraction
     }
     return result;
 }
@@ -381,7 +380,7 @@ static PyObject *extract_stopiteration_value(PyObject *exc_type,
 static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
     PyObject *coro;
-    PyObject *context = NULL; /* Optional context parameter */
+    PyObject *context = NULL;  // Optional context parameter
 
     static char *kwlist[] = {"coro", "context", NULL};
 
@@ -393,11 +392,11 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 
     PyObject *await_iterator = coro_get_iterator(coro);
     if(await_iterator == NULL) {
-        /* Failed to get await iterator */
+        // Failed to get await iterator
         return NULL;
     }
 
-    /* Create CoroStart object */
+    // Create CoroStart object
     CoroStartObject *cs = (CoroStartObject *) type->tp_alloc(type, 0);
     if(cs == NULL) {
         Py_DECREF(await_iterator);
@@ -406,10 +405,10 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 
     TRACE_LOG("CoroStart object allocated, about to start coroutine");
 
-    /* Store the coroutine and context */
+    // Store the coroutine and context
     cs->await_iter = await_iterator;
 
-    /* Convert None to NULL for context - this makes context checks work properly */
+    // Convert None to NULL for context - this makes context checks work properly
     if(context == Py_None) {
         cs->context = NULL;
     } else {
@@ -417,15 +416,15 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
         Py_XINCREF(cs->context);
     }
 
-    /* STATE INITIALIZATION: All state fields start as NULL */
+    // STATE INITIALIZATION: All state fields start as NULL
     cs->s_value = NULL;
     cs->s_exc_type = NULL;
     cs->s_exc_value = NULL;
     cs->s_exc_traceback = NULL;
 
-    /* Perform eager execution */
+    // Perform eager execution
     if(corostart_start(cs) < 0) {
-        /* _start failed */
+        // _start failed
         Py_DECREF(cs);
         return NULL;
     }
@@ -439,38 +438,37 @@ static int corostart_start(CoroStartObject *self)
 {
     TRACE_LOG("corostart_start called");
 
-    /* Enter context if provided */
+    // Enter context if provided
     if(self->context != NULL) {
         if(PyContext_Enter(self->context) < 0) {
             return -1;
         }
     }
 
-    /* Call coro.send(None) using PyIter_Send API */
-    /* STATE MODIFICATION: Sets initial_result and may set s_value or exception fields
-     */
+    // Call coro.send(None) using PyIter_Send API
+    // STATE MODIFICATION: Sets initial_result and may set s_value or exception fields
     self->initial_result = call_iter_next_result(self->await_iter, &self->s_value);
 
     switch(self->initial_result) {
         case PYGEN_NEXT:
-            /* Coroutine yielded a value */
-            /* STATE: PENDING (s_value set by PyIter_Send) */
+            // Coroutine yielded a value
+            // STATE: PENDING (s_value set by PyIter_Send)
             assert(IS_PENDING(self));
             break;
         case PYGEN_RETURN:
-            /* Coroutine completed normally - create StopIteration */
-            /* STATE: DONE (s_value set by PyIter_Send) */
+            // Coroutine completed normally - create StopIteration
+            // STATE: DONE (s_value set by PyIter_Send)
             assert(IS_DONE(self));
             break;
         case PYGEN_ERROR:
-            /* Exception occurred - PyIter_Send already set the exception */
-            /* STATE MODIFICATION: Transition to DONE with exception */
+            // Exception occurred - PyIter_Send already set the exception
+            // STATE MODIFICATION: Transition to DONE with exception
             PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
             assert(IS_DONE(self));
             break;
     }
 
-    /* Exit context if we entered one */
+    // Exit context if we entered one
     if(self->context != NULL) {
         if(PyContext_Exit(self->context) < 0) {
             Py_CLEAR(self->s_value);
@@ -479,7 +477,7 @@ static int corostart_start(CoroStartObject *self)
     }
 
     ASSERT_COROSTART_INVARIANT(self);
-    return 0; /* Success (we handled the exception) */
+    return 0;  // Success (we handled the exception)
 }
 
 /* CoroStart deallocation */
@@ -522,7 +520,7 @@ static int corostart_clear(CoroStartObject *self)
 /* __await__ method - return our CoroStartWrapper */
 static PyObject *corostart_await(CoroStartObject *self)
 {
-    /* Create our CoroStartWrapper that holds a reference to this CoroStart */
+    // Create our CoroStartWrapper that holds a reference to this CoroStart
     CoroStartWrapperObject *wrapper = (CoroStartWrapperObject *) CoroStartWrapperType
                                           ->tp_alloc(CoroStartWrapperType, 0);
     if(wrapper == NULL) {
@@ -648,7 +646,7 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
     // Call throw() with context support
     PyObject *result;
     if(self->context != NULL) {
-        /* Enter context */
+        // Enter context
         if(PyContext_Enter(self->context) < 0) {
             Py_DECREF(value);
             return NULL;
@@ -656,7 +654,7 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
 
         result = PyObject_CallMethod(self->await_iter, "throw", "O", value);
 
-        /* Exit context (even if call failed) */
+        // Exit context (even if call failed)
         if(PyContext_Exit(self->context) < 0) {
             Py_DECREF(value);
             Py_XDECREF(result);
@@ -667,14 +665,14 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
     }
     Py_DECREF(value);  // done with this
 
-    /* STATE MODIFICATION: Clear all state fields before setting new state */
+    // STATE MODIFICATION: Clear all state fields before setting new state
     Py_CLEAR(self->s_value);
     Py_CLEAR(self->s_exc_type);
     Py_CLEAR(self->s_exc_value);
     Py_CLEAR(self->s_exc_traceback);
 
     if(result != NULL) {
-        /* STATE MODIFICATION: Transition to PENDING with new yielded value */
+        // STATE MODIFICATION: Transition to PENDING with new yielded value
         // Coroutine yielded a value - update state to pending with the new value
         self->s_value = result;  // Store new yielded value (becomes pending state)
         self->initial_result = PYGEN_NEXT;
@@ -684,10 +682,10 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
 
     // Check if we got StopIteration (normal completion)
     if(PyErr_ExceptionMatches(PyExc_StopIteration)) {
-        /* STATE MODIFICATION: Transition to DONE with return value */
+        // STATE MODIFICATION: Transition to DONE with return value
         self->s_value = extract_current_stopiteration_value();
         if(self->s_value == NULL) {
-            /* STATE MODIFICATION: extract failed, transition to DONE with exception */
+            // STATE MODIFICATION: extract failed, transition to DONE with exception
             // something wrong with extract_current_stopiteration_value, store it as
             // regular exception
             PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
@@ -696,7 +694,7 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
             self->initial_result = PYGEN_RETURN;
         }
     } else {
-        /* STATE MODIFICATION: Transition to DONE with exception */
+        // STATE MODIFICATION: Transition to DONE with exception
         // any other exception
         PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
         self->initial_result = PYGEN_ERROR;
@@ -715,7 +713,7 @@ static PyObject *corostart_close(PyObject *_self)
 
     // Always close the underlying coroutine
     if(self->context != NULL) {
-        /* Enter context */
+        // Enter context
         if(PyContext_Enter(self->context) < 0) {
             return NULL;
         }
@@ -723,7 +721,7 @@ static PyObject *corostart_close(PyObject *_self)
         // Direct call to coro.close()
         result = PyObject_CallMethod(self->await_iter, "close", NULL);
 
-        /* Exit context (even if call failed) */
+        // Exit context (even if call failed)
         if(PyContext_Exit(self->context) < 0) {
             Py_XDECREF(result);
             return NULL;
@@ -733,7 +731,7 @@ static PyObject *corostart_close(PyObject *_self)
         result = PyObject_CallMethod(self->await_iter, "close", NULL);
     }
 
-    /* STATE MODIFICATION: Transition to CONTINUED state */
+    // STATE MODIFICATION: Transition to CONTINUED state
     // Transition to continued() state so that subsequent await attempts
     // trigger the "cannot reuse already awaited coroutine" error in __await__
     Py_CLEAR(self->s_value);
@@ -835,15 +833,15 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
 {
 #if 0
     TRACE_LOG("corostart_wrapper_iternext() called - delegating to send(None)");
-    /* __next__ is equivalent to send(None) */
+    // __next__ is equivalent to send(None)
     return corostart_wrapper_send(_self, Py_None);
 #else
     CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
-    /* Check if we have start results (first call) */
+    // Check if we have start results (first call)
     if(!IS_CONTINUED(corostart)) {
-        /* This is the first send call - process the eager execution result */
+        // This is the first send call - process the eager execution result
 
         if(IS_DONE(corostart)) {
             if(corostart->s_value != NULL) {
@@ -861,18 +859,18 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
                                   NULL);
                     corostart->s_value = NULL;
                 }
-                /* STATE MODIFICATION: Transfer ownership, transition to CONTINUED */
+                // STATE MODIFICATION: Transfer ownership, transition to CONTINUED
                 corostart->initial_result = PYGEN_NEXT;  // Mark as continued
                 assert(IS_CONTINUED(corostart));
                 return NULL;
             }
 
             // we have an exception, restore it and return error
-            /* STATE MODIFICATION: Transfer exception, transition to CONTINUED */
+            // STATE MODIFICATION: Transfer exception, transition to CONTINUED
             PyErr_Restore(corostart->s_exc_type,
                           corostart->s_exc_value,
                           corostart->s_exc_traceback);
-            /* Clear (PyErr_Restore steals references) - marks as continued */
+            // Clear (PyErr_Restore steals references) - marks as continued
             corostart->s_exc_type = NULL;
             corostart->s_exc_value = NULL;
             corostart->s_exc_traceback = NULL;
@@ -882,8 +880,8 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
         }
 
         // we are pending
-        /* Coroutine yielded a value - return it and clear state to mark as continued */
-        /* STATE MODIFICATION: Transfer value, transition to CONTINUED */
+        // Coroutine yielded a value - return it and clear state to mark as continued
+        // STATE MODIFICATION: Transfer value, transition to CONTINUED
         PyObject *result = corostart->s_value;
         corostart->s_value = NULL;
         corostart->initial_result = PYGEN_NEXT;  // Mark as continued
@@ -891,18 +889,17 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
         return result;
     }
 
-    /* No start results - coroutine was already started, delegate to wrapped coroutine
-     */
+    // No start results - coroutine was already started, delegate to wrapped coroutine
 
     PyObject *iternext_result;
 
-    /* Enter context if provided */
+    // Enter context if provided
     if(corostart->context != NULL) {
         if(PyContext_Enter(corostart->context) < 0) {
             return NULL;
         }
 
-        /* Call send() on the wrapped coroutine using PyIter_Send */
+        // Call send() on the wrapped coroutine using PyIter_Send
         iternext_result = call_iter_next(corostart->await_iter);
 
         if(PyContext_Exit(corostart->context) < 0) {
@@ -913,7 +910,7 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
         iternext_result = call_iter_next(corostart->await_iter);
     }
 
-    /* Return PyIter_Send result directly - no conversion needed */
+    // Return PyIter_Send result directly - no conversion needed
     return iternext_result;
 #endif
 }
@@ -932,7 +929,7 @@ static PyObject *corostart_wrapper_send(PyObject *_self, PyObject *arg)
         Py_DECREF(result);
         return NULL;
     } else {
-        /* PYGEN_NEXT - return the yielded value */
+        // PYGEN_NEXT - return the yielded value
         return result;
     }
 }
@@ -944,17 +941,17 @@ static PyObject *corostart_wrapper_throw(PyObject *_self, PyObject *exc)
     CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
-    /* Enter context if provided */
+    // Enter context if provided
     if(corostart->context != NULL) {
         if(PyContext_Enter(corostart->context) < 0) {
             return NULL;
         }
     }
 
-    /* Call throw() on the wrapped coroutine */
+    // Call throw() on the wrapped coroutine
     PyObject *result = PyObject_CallMethod(corostart->await_iter, "throw", "O", exc);
 
-    /* Exit context if we entered one */
+    // Exit context if we entered one
     if(corostart->context != NULL) {
         if(PyContext_Exit(corostart->context) < 0) {
             Py_XDECREF(result);
@@ -972,17 +969,17 @@ static PyObject *corostart_wrapper_close(PyObject *_self, PyObject *Py_UNUSED(ig
     CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
-    /* Enter context if provided */
+    // Enter context if provided
     if(corostart->context != NULL) {
         if(PyContext_Enter(corostart->context) < 0) {
             return NULL;
         }
     }
 
-    /* Call close() on the wrapped coroutine */
+    // Call close() on the wrapped coroutine
     PyObject *result = PyObject_CallMethod(corostart->await_iter, "close", NULL);
 
-    /* Exit context if we entered one */
+    // Exit context if we entered one
     if(corostart->context != NULL) {
         if(PyContext_Exit(corostart->context) < 0) {
             Py_XDECREF(result);
@@ -1001,10 +998,10 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
     CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
-    /* Check if we have start results (first call) */
+    // Check if we have start results (first call)
     if(!IS_CONTINUED(corostart)) {
-        /* This is the first send call - process the eager execution result */
-        /* According to PEP 342, first send() must be None */
+        // This is the first send call - process the eager execution result
+        // According to PEP 342, first send() must be None
         if(arg != Py_None) {
             PyErr_SetString(PyExc_TypeError,
                             "can't send non-None value to a just-started coroutine");
@@ -1015,7 +1012,7 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
         if(IS_DONE(corostart)) {
             if(corostart->s_value != NULL) {
                 // We have a result
-                /* STATE MODIFICATION: Transfer ownership, transition to CONTINUED */
+                // STATE MODIFICATION: Transfer ownership, transition to CONTINUED
                 *result = corostart->s_value;
                 corostart->s_value = NULL;
                 corostart->initial_result = PYGEN_NEXT;  // Mark as continued
@@ -1024,11 +1021,11 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
             }
 
             // we have an exception, restore it and return error
-            /* STATE MODIFICATION: Transfer exception, transition to CONTINUED */
+            // STATE MODIFICATION: Transfer exception, transition to CONTINUED
             PyErr_Restore(corostart->s_exc_type,
                           corostart->s_exc_value,
                           corostart->s_exc_traceback);
-            /* Clear (PyErr_Restore steals references) - marks as continued */
+            // Clear (PyErr_Restore steals references) - marks as continued
             corostart->s_exc_type = NULL;
             corostart->s_exc_value = NULL;
             corostart->s_exc_traceback = NULL;
@@ -1039,8 +1036,8 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
         }
 
         // we are pending
-        /* Coroutine yielded a value - return it and clear state to mark as continued */
-        /* STATE MODIFICATION: Transfer value, transition to CONTINUED */
+        // Coroutine yielded a value - return it and clear state to mark as continued
+        // STATE MODIFICATION: Transfer value, transition to CONTINUED
         *result = corostart->s_value;
         corostart->s_value = NULL;
         corostart->initial_result = PYGEN_NEXT;  // Mark as continued
@@ -1048,10 +1045,9 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
         return PYGEN_NEXT;
     }
 
-    /* No start results - coroutine was already started, delegate to wrapped coroutine
-     */
+    // No start results - coroutine was already started, delegate to wrapped coroutine
 
-    /* Enter context if provided */
+    // Enter context if provided
     if(corostart->context != NULL) {
         if(PyContext_Enter(corostart->context) < 0) {
             *result = NULL;
@@ -1059,10 +1055,10 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
         }
     }
 
-    /* Call send() on the wrapped coroutine using PyIter_Send */
+    // Call send() on the wrapped coroutine using PyIter_Send
     PySendResult send_result = PyIter_Send(corostart->await_iter, arg, result);
 
-    /* Exit context if we entered one */
+    // Exit context if we entered one
     if(corostart->context != NULL) {
         if(PyContext_Exit(corostart->context) < 0) {
             if(send_result != PYGEN_ERROR) {
@@ -1076,7 +1072,7 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
         }
     }
 
-    /* Return PyIter_Send result directly - no conversion needed */
+    // Return PyIter_Send result directly - no conversion needed
     return send_result;
 }
 
@@ -1103,8 +1099,8 @@ static PyType_Slot corostart_wrapper_slots[] = {
     {Py_tp_methods, corostart_wrapper_methods},
     {Py_tp_new, PyType_GenericNew},
 
-    /* Async protocol slot for PyIter_Send optimization */
-    {Py_am_send, corostart_wrapper_am_send_slot}, /* Proper am_send implementation */
+    // Async protocol slot for PyIter_Send optimization
+    {Py_am_send, corostart_wrapper_am_send_slot},  // Proper am_send implementation
 
     {0, NULL},
 };
@@ -1121,7 +1117,7 @@ static PyType_Spec corostart_wrapper_spec = {
 static PyObject *cext_get_build_info(PyObject *_self)
 {
     (void) _self;
-    /* Return build configuration information */
+    // Return build configuration information
     PyObject *info = PyDict_New();
     if(info == NULL) {
         return NULL;
@@ -1177,27 +1173,27 @@ PyMODINIT_FUNC PyInit__cext(void)
         return NULL;
     }
 
-    /* Add a simple test attribute first */
+    // Add a simple test attribute first
     if(PyModule_AddStringConstant(module, "__test__", "C extension loaded") < 0) {
         Py_DECREF(module);
         return NULL;
     }
 
-    /* Create CoroStartWrapper type from spec for am_send optimization */
+    // Create CoroStartWrapper type from spec for am_send optimization
     CoroStartWrapperType = (PyTypeObject *) PyType_FromSpec(&corostart_wrapper_spec);
     if(CoroStartWrapperType == NULL) {
         Py_DECREF(module);
         return NULL;
     }
 
-    /* Create CoroStart type from spec for am_await optimization */
+    // Create CoroStart type from spec for am_await optimization
     CoroStartType = (PyTypeObject *) PyType_FromSpec(&corostart_spec);
     if(CoroStartType == NULL) {
         Py_DECREF(module);
         return NULL;
     }
 
-    /* Add types to module (for debugging/introspection) */
+    // Add types to module (for debugging/introspection)
     Py_INCREF(CoroStartWrapperType);
     if(PyModule_AddObject(module,
                           "CoroStartWrapperType",
@@ -1207,7 +1203,7 @@ PyMODINIT_FUNC PyInit__cext(void)
         return NULL;
     }
 
-    /* Add CoroStartBase type to module */
+    // Add CoroStartBase type to module
     Py_INCREF(CoroStartType);
     if(PyModule_AddObject(module, "CoroStartBase", (PyObject *) CoroStartType) < 0) {
         Py_DECREF(CoroStartType);
