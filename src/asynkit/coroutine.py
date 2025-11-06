@@ -83,6 +83,7 @@ def get_implementation_info() -> dict[str, Any]:
             "performance_info": (
                 "Baseline performance (install with build tools for 4x boost)"
             ),
+            "build_info": {},
             "c_extension_available": False,
         }
 

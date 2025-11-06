@@ -42,8 +42,6 @@ try:
     build_info = get_build_info()
     print(f'✓ C extension loaded successfully')
     print(f'  Build type: {build_info[\"build_type\"]}')
-    print(f'  Debug enabled: {build_info[\"debug_enabled\"]}')
-    print(f'  NDEBUG enabled: {build_info[\"ndebug_enabled\"]}')
     
     # Quick functional test
     import asyncio

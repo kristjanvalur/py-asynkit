@@ -952,17 +952,10 @@ static PyObject *cext_get_build_info(PyObject *_self)
     PyObject *temp;
     int res;
 
-#ifdef DEBUG
+#ifndef NDEBUG
     const char *build_type = "debug";
-    PyObject *debug_enabled = Py_True;
 #else
     const char *build_type = "optimized";
-    PyObject *debug_enabled = Py_False;
-#endif
-#ifdef NDEBUG
-    PyObject *ndebug_enabled = Py_True;
-#else
-    PyObject *ndebug_enabled = Py_False;
 #endif
 
     temp = PyUnicode_FromString(build_type);
@@ -973,14 +966,6 @@ static PyObject *cext_get_build_info(PyObject *_self)
     res = PyDict_SetItemString(info, "build_type", temp);
     Py_DECREF(temp);
     if(res < 0) {
-        Py_DECREF(info);
-        return NULL;
-    }
-    if(PyDict_SetItemString(info, "debug_enabled", debug_enabled) < 0) {
-        Py_DECREF(info);
-        return NULL;
-    }
-    if(PyDict_SetItemString(info, "ndebug_enabled", ndebug_enabled) < 0) {
         Py_DECREF(info);
         return NULL;
     }
