@@ -10,6 +10,7 @@ from collections.abc import (
     Coroutine,
     Generator,
 )
+from enum import IntEnum
 from typing import (
     Any,
     Generic,
@@ -32,6 +33,14 @@ T = TypeVar("T")
 V = TypeVar("V")
 T_co = TypeVar("T_co", covariant=True)
 T_contra = TypeVar("T_contra", contravariant=True)
+
+
+class MonitorState(IntEnum):
+    """State of a Monitor object."""
+
+    INACTIVE = 0  # Monitor is not active
+    ACTIVE = 1  # Monitor is actively running
+    OOB = -1  # Monitor is yielding out-of-band data
 
 
 class OOBData(Exception):
@@ -58,7 +67,7 @@ class Monitor(Generic[T]):
     ]
 
     def __init__(self) -> None:
-        self.state: int = 0
+        self.state: MonitorState = MonitorState.INACTIVE
 
     @types.coroutine
     def _asend(
@@ -72,9 +81,9 @@ class Monitor(Generic[T]):
         `send()` or `throw()`, while handling the OOB data protocol.
         """
 
-        if self.state != 0:
+        if self.state != MonitorState.INACTIVE:
             raise RuntimeError("Monitor cannot be re-entered")
-        self.state = 1
+        self.state = MonitorState.ACTIVE
         try:
             try:
                 out_value = callable(*args)
@@ -84,8 +93,8 @@ class Monitor(Generic[T]):
                 raise RuntimeError("coroutine raised OOBData")
 
             while True:
-                if self.state == -1:
-                    self.state = 1
+                if self.state == MonitorState.OOB:
+                    self.state = MonitorState.ACTIVE
                     raise OOBData(out_value)
                 try:
                     in_value = yield out_value
@@ -104,7 +113,7 @@ class Monitor(Generic[T]):
                     except StopIteration as exc:
                         return cast(T, exc.value)
         finally:
-            self.state = 0
+            self.state = MonitorState.INACTIVE
 
     async def aawait(
         self,
@@ -150,10 +159,10 @@ class Monitor(Generic[T]):
         of those functions.  The return value once awaited will be whatever `data`
         is passed in by a subsequent `aawait()` call.
         """
-        if self.state != 1:
+        if self.state != MonitorState.ACTIVE:
             raise RuntimeError("Monitor not active")
         # signal OOB data being yielded
-        self.state = -1
+        self.state = MonitorState.OOB
         return (yield data)
 
     async def aclose(
