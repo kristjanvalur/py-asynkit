@@ -18,9 +18,13 @@
 #include <stdio.h>
 
 /* Debug logging macros */
-#define DEBUG_TRACE 1
+#define DEBUG_TRACE 0
 #if DEBUG_TRACE
-    #define TRACE_LOG(fmt, ...) printf("[C-TRACE] " fmt "\n", ##__VA_ARGS__)
+    #define TRACE_LOG(fmt, ...)                                                        \
+        do {                                                                           \
+            printf("[C-TRACE] " fmt "\n", ##__VA_ARGS__);                              \
+            fflush(stdout);                                                            \
+        } while(0)
 #else
     #define TRACE_LOG(fmt, ...)
 #endif
@@ -57,9 +61,12 @@ static PyObject *call_iter_next(PyObject *iter);
 static int call_iter_next_result(PyObject *iter, PyObject **result);
 static PyObject *invalid_state_error(void);
 static PyObject *extract_current_stopiteration_value(void);
-static PyObject *extract_stopiteration_value(PyObject *exc_type, PyObject *exc_value, PyObject *exc_traceback);
+static PyObject *extract_stopiteration_value(PyObject *exc_type,
+                                             PyObject *exc_value,
+                                             PyObject *exc_traceback);
 static PyObject *check_stopiteration_value(PyObject **exc_type,
-                                             PyObject **exc_value, PyObject **exc_traceback);
+                                           PyObject **exc_value,
+                                           PyObject **exc_traceback);
 
 /* Module initialization function */
 PyMODINIT_FUNC PyInit__cext(void);
@@ -193,7 +200,6 @@ static inline void assert_corostart_invariant_impl(CoroStartObject *self,
 }
 
 
-
 /* CoroStart _start method - simplified eager execution logic */
 static int corostart_start(CoroStartObject *self)
 {
@@ -211,7 +217,7 @@ static int corostart_start(CoroStartObject *self)
 
     /* Call coro.send(None) using PyIter_Send API */
     /* STATE MODIFICATION: Sets initial_result and may set s_value or exception fields
-    */
+     */
 #if 1
     TRACE_LOG("Calling call_iter_next");
     self->initial_result = call_iter_next_result(self->await_iter, &self->s_value);
@@ -312,21 +318,34 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
     CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
-    TRACE_LOG(">>> corostart_wrapper_iternext() SLOT called - PyIter_Send optimized path <<<");
+    TRACE_LOG(">>> corostart_wrapper_iternext() SLOT called - PyIter_Send optimized "
+              "path <<<");
 
     /* Check if we have start results (first call) */
     if(!IS_CONTINUED(corostart)) {
-        TRACE_LOG("First corostart_wrapper iternext call - processing eager execution result");
+        TRACE_LOG("First corostart_wrapper iternext call - processing eager execution "
+                  "result");
         /* This is the first send call - process the eager execution result */
-        
+
         if(IS_DONE(corostart)) {
             TRACE_LOG(
                 "Coroutine completed during start - we have a result or an exception");
             if(corostart->s_value != NULL) {
                 // We have a result
                 TRACE_LOG("iternext slot returning success with result value");
-                PyErr_Restore(Py_NewRef(PyExc_StopIteration), corostart->s_value, NULL);
-                corostart->s_value = NULL;
+                if(corostart->s_value == Py_None) {
+                    // Optimize StopIteration(None), case, just return NULL with no
+                    // exception set
+                    // tp_iternext protocol allows NULL and no error set for a regular
+                    // None return of the iterator
+                    Py_CLEAR(corostart->s_value);
+                } else {
+                    // set a stopiteration
+                    PyErr_Restore(Py_NewRef(PyExc_StopIteration),
+                                  corostart->s_value,
+                                  NULL);
+                    corostart->s_value = NULL;
+                }
                 /* STATE MODIFICATION: Transfer ownership, transition to CONTINUED */
                 corostart->initial_result = PYGEN_NEXT;  // Mark as continued
                 assert(IS_CONTINUED(corostart));
@@ -360,7 +379,8 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
     }
 
     TRACE_LOG("Subsequent iternext call - delegating to wrapped coroutine");
-    /* No start results - coroutine was already started, delegate to wrapped coroutine */
+    /* No start results - coroutine was already started, delegate to wrapped coroutine
+     */
 
     PyObject *iternext_result;
 
@@ -370,7 +390,7 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
         if(PyContext_Enter(corostart->context) < 0) {
             return NULL;
         }
-    
+
         /* Call send() on the wrapped coroutine using PyIter_Send */
         iternext_result = call_iter_next(corostart->await_iter);
         TRACE_LOG("call_iter_next returned: %p ", iternext_result);
@@ -379,8 +399,7 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
             Py_XDECREF(iternext_result);
             return NULL;
         }
-    }
-    else {
+    } else {
         TRACE_LOG("Direct call to call_iter_next for continued iternext");
         iternext_result = call_iter_next(corostart->await_iter);
         TRACE_LOG("call_iter_next returned: %p ", iternext_result);
@@ -480,7 +499,8 @@ static PyObject *corostart_wrapper_close(PyObject *_self, PyObject *Py_UNUSED(ig
  */
 static PyObject *corostart_wrapper_am_send(PyObject *_self, PyObject *arg)
 {
-    TRACE_LOG("corostart_wrapper_am_send() DEBUG WRAPPER called - this should NOT be used in production");
+    TRACE_LOG("corostart_wrapper_am_send() DEBUG WRAPPER called - this should NOT be "
+              "used in production");
 
     /* Delegate to the regular send method */
     return corostart_wrapper_send(_self, arg);
@@ -495,7 +515,8 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
     CoroStartWrapperObject *self = (CoroStartWrapperObject *) _self;
     CoroStartObject *corostart = (CoroStartObject *) self->corostart;
 
-    TRACE_LOG(">>> corostart_wrapper_am_send_slot() SLOT called - PyIter_Send optimized path <<<");
+    TRACE_LOG(">>> corostart_wrapper_am_send_slot() SLOT called - PyIter_Send "
+              "optimized path <<<");
 
     /* Check if we have start results (first call) */
     if(!IS_CONTINUED(corostart)) {
@@ -906,8 +927,8 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
         self->s_value = extract_current_stopiteration_value();
         if(self->s_value == NULL) {
             /* STATE MODIFICATION: extract failed, transition to DONE with exception */
-            // something wrong with extract_current_stopiteration_value, store it as regular
-            // exception
+            // something wrong with extract_current_stopiteration_value, store it as
+            // regular exception
             PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
             self->initial_result = PYGEN_ERROR;
         } else {
@@ -922,88 +943,6 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
 
     assert(IS_DONE(self));
     Py_RETURN_NONE;
-}
-
-/* check the current exception for a StopIteration.  Return the value if found, otherwise
- * set the exception tuple
- */
-static PyObject *check_stopiteration_value(PyObject **exc_type,
-                                             PyObject **exc_value, PyObject **exc_traceback)
-{
-    assert(PyErr_Occurred() != NULL);
-    PyErr_Fetch(exc_type, exc_value, exc_traceback);
-    int res = PyObject_IsSubclass(*exc_type, PyExc_StopIteration);
-    if (res < 0) {
-        // error checking type, return that exception
-        Py_CLEAR(*exc_type);
-        Py_CLEAR(*exc_value);
-        Py_CLEAR(*exc_traceback);
-        PyErr_Fetch(exc_type, exc_value, exc_traceback);
-        return NULL; /* Error during IsSubclass check */
-    }
-    if (res == 0) {
-        // it is not a stopiteration, return NULL to indicate exception is set
-        return NULL;
-    }
-    PyObject *result = extract_stopiteration_value(*exc_type, *exc_value, *exc_traceback);
-    Py_CLEAR(*exc_type);
-    Py_CLEAR(*exc_value);
-    Py_CLEAR(*exc_traceback);
-    if (result == NULL) {
-        // error during extraction, return that exception
-        PyErr_Fetch(exc_type, exc_value, exc_traceback);
-        return NULL; /* Error during extraction */
-    }
-    return result;
-}
-
-
-/* extract the value of a stopiteration.  Assumes that we have
- * a StopIteration error state
- */
-static PyObject *extract_current_stopiteration_value(void)
-{
-    PyObject *exc_type, *exc_value, *exc_traceback;
-
-    PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
-
-    PyObject *result = extract_stopiteration_value(exc_type, exc_value, exc_traceback);
-    Py_DECREF(exc_type);
-    Py_XDECREF(exc_value);
-    Py_XDECREF(exc_traceback);
-    return result;
-}
-
-static PyObject *extract_stopiteration_value(PyObject *exc_type,
-                                             PyObject *exc_value, PyObject *exc_traceback)
-{
-    assert(exc_type != NULL);
-    assert(PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration));
-
-    if(exc_value != NULL && PyObject_IsInstance(exc_value, exc_type)) {
-        // exc_value is an actual StopIteration instance - extract .value
-        PyObject *return_value = PyObject_GetAttrString(exc_value, "value");
-        if(return_value == NULL) {
-            // handle the error case.  re-set the original error
-            PyErr_Restore(Py_NewRef(exc_type), Py_NewRef(exc_value), Py_NewRef(exc_traceback));
-        } else {
-            // clear the original error
-            Py_DECREF(exc_type);
-            Py_DECREF(exc_value);
-            Py_XDECREF(exc_traceback);
-        }
-        return return_value;
-    } else {
-        // exc_value is the raw value (internal C python optimization)
-        // or NULL if StopIteration was raised with no value
-        Py_DECREF(exc_type);
-        Py_XDECREF(exc_traceback);
-        if(exc_value == NULL) {
-            // No return value - return None
-            Py_RETURN_NONE;
-        }
-        return exc_value;  // Transfer ownership from PyErr_Fetch
-    }
 }
 
 static PyObject *corostart_close(PyObject *_self)
@@ -1078,7 +1017,7 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 
     /* Store the coroutine and context */
     cs->await_iter = await_iterator;
-    
+
     /* Convert None to NULL for context - this makes context checks work properly */
     if(context == Py_None) {
         cs->context = NULL;
@@ -1104,65 +1043,175 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
     return (PyObject *) cs;
 }
 
+/* helper functions */
+
+/* check the current exception for a StopIteration.  Return the value if found,
+ * otherwise set the exception tuple
+ */
+static PyObject *check_stopiteration_value(PyObject **exc_type,
+                                           PyObject **exc_value,
+                                           PyObject **exc_traceback)
+{
+    TRACE_LOG("check_stopiteration_value called, PyErr_Occurred()=%p",
+              (void *) PyErr_Occurred());
+    assert(PyErr_Occurred() != NULL);
+    PyErr_Fetch(exc_type, exc_value, exc_traceback);
+    int res = PyObject_IsSubclass(*exc_type, PyExc_StopIteration);
+    if(res < 0) {
+        // error checking type, return that exception
+        Py_CLEAR(*exc_type);
+        Py_CLEAR(*exc_value);
+        Py_CLEAR(*exc_traceback);
+        PyErr_Fetch(exc_type, exc_value, exc_traceback);
+        return NULL; /* Error during IsSubclass check */
+    }
+    if(res == 0) {
+        // it is not a stopiteration, return NULL to indicate exception is set
+        return NULL;
+    }
+    PyObject *result = extract_stopiteration_value(*exc_type,
+                                                   *exc_value,
+                                                   *exc_traceback);
+    Py_CLEAR(*exc_type);
+    Py_CLEAR(*exc_value);
+    Py_CLEAR(*exc_traceback);
+    if(result == NULL) {
+        // error during extraction, return that exception
+        PyErr_Fetch(exc_type, exc_value, exc_traceback);
+        return NULL; /* Error during extraction */
+    }
+    return result;
+}
+
+
+/* extract the value of a stopiteration.  Assumes that we have
+ * a StopIteration error state
+ */
+static PyObject *extract_current_stopiteration_value(void)
+{
+    PyObject *exc_type, *exc_value, *exc_traceback;
+
+    PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
+
+    PyObject *result = extract_stopiteration_value(exc_type, exc_value, exc_traceback);
+    Py_DECREF(exc_type);
+    Py_XDECREF(exc_value);
+    Py_XDECREF(exc_traceback);
+    return result;
+}
+
+static PyObject *extract_stopiteration_value(PyObject *exc_type,
+                                             PyObject *exc_value,
+                                             PyObject *exc_traceback)
+{
+    assert(exc_type != NULL);
+    assert(PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration));
+
+    if(exc_value != NULL && PyObject_IsInstance(exc_value, exc_type)) {
+        // exc_value is an actual StopIteration instance - extract .value
+        PyObject *return_value = PyObject_GetAttrString(exc_value, "value");
+        if(return_value == NULL) {
+            // handle the error case.  re-set the original error
+            PyErr_Restore(Py_NewRef(exc_type),
+                          Py_NewRef(exc_value),
+                          Py_NewRef(exc_traceback));
+        } else {
+            // clear the original error
+            Py_DECREF(exc_type);
+            Py_DECREF(exc_value);
+            Py_XDECREF(exc_traceback);
+        }
+        return return_value;
+    } else {
+        // exc_value is the raw value (internal C python optimization)
+        // or NULL if StopIteration was raised with no value
+        Py_DECREF(exc_type);
+        Py_XDECREF(exc_traceback);
+        if(exc_value == NULL) {
+            // No return value - return None
+            Py_RETURN_NONE;
+        }
+        return exc_value;  // Transfer ownership from PyErr_Fetch
+    }
+}
+
 /* Get the await iterator from a coroutine object */
 static PyObject *coro_get_iterator(PyObject *coro)
 {
     PyObject *await_iterator = NULL;
     // Use the most efficient approach
     PyTypeObject *type = Py_TYPE(coro);
-    if (type->tp_as_async != NULL && type->tp_as_async->am_await != NULL) {
+    if(type->tp_as_async != NULL && type->tp_as_async->am_await != NULL) {
         await_iterator = type->tp_as_async->am_await(coro);
     } else {
         await_iterator = PyObject_CallMethod(coro, "__await__", NULL);
     }
-    
-    if (await_iterator == NULL) {
+
+    if(await_iterator == NULL) {
         TRACE_LOG("Failed to get await iterator");
-        }   
+    }
     return await_iterator;
 }
-
 
 // A method with the same signature as PyIter_Send() but uses
 // the tp_iternext slot directly for better performance.
 static int call_iter_next_result(PyObject *iter, PyObject **result)
 {
-
     *result = call_iter_next(iter);
-    if (*result) {
-        return PYGEN_NEXT; // Got a value
+    if(*result) {
+        return PYGEN_NEXT;  // Got a value
+    }
+    if(!PyErr_Occurred()) {
+        // Optimization: coroutine tp_iternext may return NULL without setting
+        // StopIteration when the return value is None (common case optimization)
+        TRACE_LOG(
+            "call_iter_next_result: NULL with no error, setting StopIteration(None)");
+        *result = Py_NewRef(Py_None);
+        return PYGEN_RETURN;
     }
     PyObject *exc_type, *exc_value, *exc_traceback;
     *result = check_stopiteration_value(&exc_type, &exc_value, &exc_traceback);
-    if (*result) {
-        return PYGEN_RETURN; // Got StopIteration value
+    if(*result) {
+        return PYGEN_RETURN;  // Got StopIteration value
     }
     PyErr_Restore(exc_type, exc_value, exc_traceback);
-    return PYGEN_ERROR; // Error occurred
+    return PYGEN_ERROR;  // Error occurred
 }
 
 // Call the __next__ method of an iterator using direct slot access if possible
 // for better performance.
-static PyObject* call_iter_next(PyObject *iter) {
+// Returns NULL with StopIteration set when iterator is exhausted (sets it if needed).
+static PyObject *call_iter_next(PyObject *iter)
+{
     PyTypeObject *type = Py_TYPE(iter);
-    
+
+    TRACE_LOG("call_iter_next: type=%s, tp_iternext=%p",
+              type->tp_name,
+              (void *) type->tp_iternext);
+
     // Fast path: direct slot call
-    if (type->tp_iternext != NULL) {
+    if(type->tp_iternext != NULL) {
         return type->tp_iternext(iter);
     }
-    
+
     // Slow path: method lookup
+    TRACE_LOG("call_iter_next: using slow path (__next__ method lookup)");
     PyObject *next_method = PyObject_GetAttrString(iter, "__next__");
-    if (next_method == NULL) {
+    if(next_method == NULL) {
+        TRACE_LOG("call_iter_next: __next__ method lookup failed");
         return NULL;
     }
-    
+
     PyObject *result = PyObject_CallNoArgs(next_method);
     Py_DECREF(next_method);
+    TRACE_LOG("call_iter_next: __next__ method returned %p, error=%p",
+              (void *) result,
+              (void *) PyErr_Occurred());
     return result;
 }
 
 /* Module methods */
+
 static PyObject *cext_get_build_info(PyObject *_self)
 {
     (void) _self;
