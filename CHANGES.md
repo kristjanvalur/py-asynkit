@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.4] - 2025-11-06
+
+### Bug Fixes
+
+- **C Extension Exception handling**: Added a missing exception test case.
+
+### Code Quality
+
+- **Build Configuration Simplification**: Streamlined DEBUG/NDEBUG macro usage to follow standard C conventions
+  - Removed custom `DEBUG` macro in favor of standard `NDEBUG` macro
+  - Removed `-DDEBUG` compiler flag from `setup.py`
+  - Debug builds now use `-UNDEBUG` to undefine NDEBUG (enables assertions)
+  - Optimized builds use `-DNDEBUG` to define NDEBUG (disables assertions)
+  - Simplified `get_build_info()` to return only `build_type` field ("debug" or "optimized")
+  - Updated `fast_build.sh` script to match simplified API
+
+### API Improvements
+
+- **Implementation Info Consistency**: Fixed `get_implementation_info()` to return consistent dictionary structure
+  - Pure Python fallback now includes empty `build_info` dict for API consistency
+  - Both C extension and pure Python branches now return same dictionary keys
+  - Enables safer code that can check `if info['build_info']:` without key errors
+
 ## [0.16.3] - 2025-11-05
 
 ### Code Quality
