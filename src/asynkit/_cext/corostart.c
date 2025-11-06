@@ -56,10 +56,10 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc);
 static PyObject *corostart_close(PyObject *_self);
 
 /* Helper function forward declarations */
+static PyObject *invalid_state_error(void);
 static PyObject *coro_get_iterator(PyObject *coro);
 static PyObject *call_iter_next(PyObject *iter);
 static int call_iter_next_result(PyObject *iter, PyObject **result);
-static PyObject *invalid_state_error(void);
 static PyObject *extract_current_stopiteration_value(void);
 static PyObject *extract_stopiteration_value(PyObject *exc_type,
                                              PyObject *exc_value,
@@ -218,17 +218,10 @@ static int corostart_start(CoroStartObject *self)
     /* Call coro.send(None) using PyIter_Send API */
     /* STATE MODIFICATION: Sets initial_result and may set s_value or exception fields
      */
-#if 1
     TRACE_LOG("Calling call_iter_next");
     self->initial_result = call_iter_next_result(self->await_iter, &self->s_value);
     TRACE_LOG("call_iter_next resulted in: %d (NEXT=1, RETURN=0, ERROR=-1)",
               self->initial_result);
-#else
-    TRACE_LOG("Calling PyIter_Next");
-    self->initial_result = PyIter_Send(self->await_iter, Py_None, &self->s_value);
-    TRACE_LOG("PyIter_Next resulted in: %d (NEXT=1, RETURN=0, ERROR=-1)",
-              self->initial_result);
-#endif
 
     switch(self->initial_result) {
         case PYGEN_NEXT:
@@ -786,23 +779,6 @@ static PyObject *corostart_pending(PyObject *_self, PyObject *Py_UNUSED(args))
     Py_RETURN_FALSE;
 }
 
-static PyObject *invalid_state_error(void)
-{
-    // Use asyncio.InvalidStateError to match Python implementation
-    PyObject *asyncio_module = PyImport_ImportModule("asyncio");
-    if(asyncio_module) {
-        PyObject *invalid_state_error = PyObject_GetAttrString(asyncio_module,
-                                                               "InvalidStateError");
-        Py_DECREF(asyncio_module);
-        if(invalid_state_error) {
-            PyErr_SetString(invalid_state_error, "CoroStart: coroutine not done()");
-            Py_DECREF(invalid_state_error);
-            return NULL;
-        }
-    }
-    PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
-    return NULL;
-}
 
 static PyObject *corostart_result(PyObject *_self)
 {
@@ -1044,6 +1020,25 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 }
 
 /* helper functions */
+
+static PyObject *invalid_state_error(void)
+{
+    // Use asyncio.InvalidStateError to match Python implementation
+    PyObject *asyncio_module = PyImport_ImportModule("asyncio");
+    if(asyncio_module) {
+        PyObject *invalid_state_error = PyObject_GetAttrString(asyncio_module,
+                                                               "InvalidStateError");
+        Py_DECREF(asyncio_module);
+        if(invalid_state_error) {
+            PyErr_SetString(invalid_state_error, "CoroStart: coroutine not done()");
+            Py_DECREF(invalid_state_error);
+            return NULL;
+        }
+    }
+    PyErr_SetString(PyExc_RuntimeError, "CoroStart: coroutine not done()");
+    return NULL;
+}
+
 
 /* check the current exception for a StopIteration.  Return the value if found,
  * otherwise set the exception tuple
