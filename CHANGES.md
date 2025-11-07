@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Performance Improvements
 
 - **C Extension Optimization**: Implemented `tp_iternext` fast path for CoroStartWrapper
-  - Uses `tp_iternext` slot directly instead of `PyIter_Send(None)` for better performance
+  - Uses `call_iter_next()` helper to access `tp_iternext` slot when available, falling back to method lookup for better performance
   - This is the path used by Python's event loop for regular `await` operations
   - Added `call_iter_next()` helper function for direct slot access
   - Optimized `StopIteration(None)` case by returning NULL without setting exception (tp_iternext protocol optimization)
