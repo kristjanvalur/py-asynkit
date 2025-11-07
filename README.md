@@ -11,7 +11,7 @@
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - [`eager_task_factory`](#eager_task_factory-and-create_eager_factory---global-eager-execution) support for global eager task execution (Python 3.12 API, backward compatible)
 - [`@eager` decorator](#eager---lower-latency-io) for selective eager execution of coroutines
-- Exprerimental support for [Priority Scheduling](#priority-scheduling) of Tasks
+- Experimental support for [Priority Scheduling](#priority-scheduling) of Tasks
 - Other experimental features such as [`task_interrupt()`](#task_interrupt)
 - Limited support for `anyio` and `trio`.
 
@@ -217,7 +217,7 @@ loop.set_task_factory(eager_factory)
 
 > ℹ️ **Note on `current_task()` behavior:** When using eager task execution, `asyncio.current_task()` returns the parent task or a temporary ghost task before the first blocking call, and the actual task afterwards. This ensures compatibility with framework detection libraries. See [Current Task Behavior](docs/eager_tasks.md#current-task-behavior-during-eager-execution) for details.
 
-#### Python 3.13+ Compatibility
+#### Python 3.14+ Compatibility
 
 asynkit also provides a `create_task()` function with the same `eager_start` parameter as Python 3.14+:
 

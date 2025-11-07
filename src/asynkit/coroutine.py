@@ -943,7 +943,7 @@ def coro_eager_task_helper(
 
     current_task = asyncio.current_task(loop)
     # if there is no current task, then we need a fake task to run it in
-    # this is so that asynkio.get_current_task() returns a valid task during
+    # this is so that asyncio.get_current_task() returns a valid task during
     # eager start.  This is not the same task as will be created later. This
     # is purely to satisfy get_current_task() calls during eager start, such
     # as for anyio that wants to detect the current async framework.
@@ -958,7 +958,7 @@ def coro_eager_task_helper(
         finally:
             swap_current_task(loop, old)
 
-    # if the corutine is not done, set it as the awaitable for the helper and
+    # if the coroutine is not done, set it as the awaitable for the helper and
     # return the task
     if not cs.done():
         return real_task_factory(cs.as_coroutine())
