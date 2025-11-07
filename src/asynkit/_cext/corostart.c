@@ -348,30 +348,17 @@ static PyObject *extract_stopiteration_value(PyObject *exc_type,
 
     if(exc_value != NULL && PyObject_IsInstance(exc_value, exc_type)) {
         // exc_value is an actual StopIteration instance - extract .value
-        PyObject *return_value = PyObject_GetAttrString(exc_value, "value");
-        if(return_value == NULL) {
-            // handle the error case.  re-set the original error
-            PyErr_Restore(Py_NewRef(exc_type),
-                          Py_NewRef(exc_value),
-                          Py_NewRef(exc_traceback));
-        } else {
-            // clear the original error
-            Py_DECREF(exc_type);
-            Py_DECREF(exc_value);
-            Py_XDECREF(exc_traceback);
-        }
-        return return_value;
-    } else {
-        // exc_value is the raw value (internal C python optimization)
-        // or NULL if StopIteration was raised with no value
-        Py_DECREF(exc_type);
-        Py_XDECREF(exc_traceback);
-        if(exc_value == NULL) {
-            // No return value - return None
-            Py_RETURN_NONE;
-        }
-        return exc_value;  // Transfer ownership from PyErr_Fetch
+        // if there is an exception here, it returns to the caller
+        return = PyObject_GetAttrString(exc_value, "value");
     }
+
+    // exc_value is the raw value (internal C python optimization)
+    // or NULL if StopIteration was raised with no value
+    if(exc_value == NULL) {
+        // No return value - return None
+        Py_RETURN_NONE;
+    }
+    return Py_NewRef(exc_value);
 }
 
 /* ========== COROSTART TYPE IMPLEMENTATION ========== */
