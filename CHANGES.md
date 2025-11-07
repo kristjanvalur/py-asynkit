@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.0] - 2025-11-07
+
 ### Performance Improvements
 
 - **Ghost Task Pattern for Eager Execution**: Replaced wrapper task approach with high-performance ghost task pattern
