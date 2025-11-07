@@ -530,6 +530,112 @@ async def check_var():
     assert var.get() == "value"  # Works correctly
 ```
 
+## Current Task Behavior During Eager Execution
+
+### Understanding `asyncio.current_task()` with Eager Execution
+
+When using asynkit's eager task execution (either via `@eager` decorator, `eager_task_factory`, or `create_task(..., eager_start=True)`), the behavior of `asyncio.current_task()` differs from standard task creation:
+
+**Before the first blocking call:**
+
+- If called from within an existing task: `current_task()` returns the **parent task**
+- If called outside a task context (e.g., from callbacks or synchronous code): `current_task()` returns a temporary **ghost task**
+
+**After the first blocking call:**
+
+- `current_task()` returns the **actual task** as expected
+
+### Why This Happens
+
+Eager execution starts the coroutine **immediately** during the `eager()` or `create_task()` call, before the new task's context is fully established. To provide task context during this initial execution phase:
+
+1. **Parent task case**: If already executing within a task, the coroutine runs in that task's context until it blocks
+2. **Ghost task case**: If there's no current task (e.g., called from a callback or synchronous code), asynkit temporarily swaps in a reusable internal "ghost task" to provide task context
+
+Once the coroutine blocks and a real Task is created, that Task becomes the current task for subsequent execution.
+
+### The Ghost Task Pattern
+
+The ghost task is a **reusable internal task** that serves as a placeholder during eager execution. Key characteristics:
+
+- **Reusable**: A single ghost task instance is reused across multiple eager executions
+- **Temporary**: Only active during the initial synchronous execution phase
+- **Transparent**: Automatically swapped in and out as needed
+- **Context provider**: Ensures `current_task()` never returns `None`, maintaining compatibility
+
+### Why This Design?
+
+This design enables:
+
+1. **Framework compatibility**: Libraries like `anyio` and `sniffio` detect async frameworks by calling `asyncio.current_task()`. The ghost task ensures they get a valid task, not `None`
+2. **Performance**: Reusing a single ghost task is much more efficient than creating wrapper tasks
+3. **Correctness**: After the first blocking call, the real task context is established and used throughout
+
+### Practical Impact
+
+In **most cases**, this behavior is completely transparent. However, code that relies on **exact task identity** before any blocking calls should be aware of this:
+
+**Potentially affected code:**
+
+```python
+@asynkit.eager
+async def check_task_identity():
+    # This may return the parent task or ghost task
+    task1 = asyncio.current_task()
+
+    await asyncio.sleep(0)  # First blocking call
+
+    # This returns the actual task
+    task2 = asyncio.current_task()
+
+    # These may be different objects!
+    assert task1 is task2  # May fail!
+```
+
+**Robust code pattern:**
+
+```python
+@asynkit.eager
+async def robust_pattern():
+    # Don't rely on task identity before blocking
+    await asyncio.sleep(0)  # Ensure actual task is established
+
+    # Now safe to use current_task() for identity checks
+    my_task = asyncio.current_task()
+    # ... use my_task ...
+```
+
+### Comparison with Python 3.12+
+
+**Python's native eager tasks** (when using `asyncio.eager_task_factory` or `eager_start=True`) create the Task object **before** starting execution, so `current_task()` always returns the actual task, even during initial execution.
+
+**asynkit's approach** defers Task creation until the coroutine blocks, which provides better performance (no Task creation for synchronous completion) but requires the ghost task pattern for framework compatibility.
+
+### Framework Compatibility
+
+Despite the difference in `current_task()` behavior, asynkit maintains full compatibility with framework detection libraries:
+
+```python
+import asynkit
+import sniffio
+import asyncio
+
+
+@asynkit.eager
+async def detect_framework():
+    # Works correctly even with ghost task
+    framework = sniffio.current_async_library()
+    assert framework == "asyncio"  # Succeeds!
+
+    await asyncio.sleep(0)
+
+    # Still works with actual task
+    framework = sniffio.current_async_library()
+    assert framework == "asyncio"  # Succeeds!
+```
+
+This works because `sniffio` only needs to know that **some** task is current, not the specific task identity.
+
 ## Conclusion
 
 Python 3.12's `eager_task_factory` and asynkit's `eager()` both provide valuable optimizations for async code, but serve different use cases:

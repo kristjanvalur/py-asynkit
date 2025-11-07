@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Performance Improvements
+
+- **Ghost Task Pattern for Eager Execution**: Replaced wrapper task approach with high-performance ghost task pattern
+  - Achieved 5x latency improvement: 1.5μs vs 7.8μs (wrapper task approach)
+  - Only 7% overhead vs baseline (1.5μs vs 1.4μs pre-wrapper baseline)
+  - Reusable ghost task provides task context during eager execution without creating wrapper tasks
+  - C extension performance: 1.03μs mean latency in optimal path
+  - **Trade-off**: Performance improvement comes at cost of strict `current_task()` compatibility
+    - Before first blocking call: returns parent task or ghost task (not the actual task)
+    - After first blocking call: returns actual task as expected
+    - Maintains compatibility with framework detection libraries (anyio, sniffio) which only need a valid task
+    - See [docs/eager_tasks.md](docs/eager_tasks.md#current-task-behavior-during-eager-execution) for details
+
+### Documentation
+
+- **Eager Task Behavior Documentation**: Added comprehensive documentation of `current_task()` behavior
+  - Created detailed section in `docs/eager_tasks.md` explaining ghost task pattern
+  - Documents when ghost task vs parent task is returned
+  - Explains framework compatibility (anyio, sniffio)
+  - Provides code examples showing affected vs robust patterns
+  - Compares with Python 3.12+ native eager task behavior
+  - README.md updated with brief references linking to detailed documentation
+  - Updated feature list to distinguish global (`eager_task_factory`) vs selective (`@eager`) eager execution
+
 ## [0.16.4] - 2025-11-06
 
 ### Bug Fixes

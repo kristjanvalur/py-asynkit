@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from weakref import ReferenceType
 
@@ -127,71 +126,17 @@ if PY_314:
     else:
         _swap_current_task = _orig_py_swap_current_task
 
-    @contextlib.contextmanager
-    def switch_current_task(
-        loop: asyncio.AbstractEventLoop, new_task: _TaskAny
-    ) -> Iterator[None]:
-        """Context manager to temporarily switch current_task().
-
-        This is useful for libraries that need to manipulate the current task
-        context temporarily, such as when implementing eager task execution.
-
-        Args:
-            loop: The event loop the tasks belong to.
-            new_task: The task to set as the current task within the context.
-        Yields:
-
-            None
-        """
-        # Only swap if loop is running (required in Python 3.14+)
-        # During shutdown, task factory may be called but loop is no longer running
-        if not loop.is_running():
-            yield
-            return
-
-        old = _swap_current_task(loop, new_task)
-        try:
-            yield
-        finally:
-            _swap_current_task(loop, old)  # type: ignore[arg-type]
-
 else:
 
     def patch_pytask() -> None:
         """No-op for Python versions < 3.14."""
         pass
 
-    @contextlib.contextmanager
-    def switch_current_task(
-        loop: asyncio.AbstractEventLoop, new_task: _TaskAny
-    ) -> Iterator[None]:
-        """Context manager to temporarily switch current_task().
-
-        This is useful for libraries that need to manipulate the current task
-        context temporarily, such as when implementing eager task execution.
-
-        Args:
-            new_task: The task to set as the current task within the context.
-        Yields:
-            None
-        """
-        old_task = asyncio.current_task()
-        if old_task is not None:
-            asyncio.tasks._leave_task(loop, old_task)
-        asyncio.tasks._enter_task(loop, new_task)
-        try:
-            yield
-        finally:
-            asyncio.tasks._leave_task(loop, new_task)
-            if old_task is not None:
-                asyncio.tasks._enter_task(loop, old_task)
-
 
 # swap_current_task compatibility
 # use the native implementation if available, otherwise
 # provide our own using leave and enter task functions
 if not hasattr(asyncio.tasks, "_swap_current_task"):
-    from asyncio.tasks import _enter_task, _leave_task
 
     def swap_current_task(
         loop: asyncio.AbstractEventLoop, task: _TaskAny | None
@@ -208,7 +153,9 @@ if not hasattr(asyncio.tasks, "_swap_current_task"):
         return old_task
 
 else:
-    from asyncio.tasks import _swap_current_task as swap_current_task  # type: ignore[attr-defined,no-redef]
+    from asyncio.tasks import (  # type: ignore[attr-defined,no-redef]  # noqa: F401
+        _swap_current_task as swap_current_task,
+    )
 
 # InterruptCondition compatibility
 # Python 3.13+ handles CancelledError subclasses properly in Condition.wait()

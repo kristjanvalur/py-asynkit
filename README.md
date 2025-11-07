@@ -9,7 +9,8 @@
 - Coroutine helpers such [`coro_iter()`](#coro_iter) and the [`awaitmethod()`](#awaitmethod) decorator
 - Helpers to run _async_ code from _non-async_ code, such as `await_sync()` and `aiter_sync()`
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
-- _eager_ execution of Tasks
+- [`eager_task_factory`](#eager_task_factory-and-create_eager_factory---global-eager-execution) support for global eager task execution (Python 3.12 API, backward compatible)
+- [`@eager` decorator](#eager---lower-latency-io) for selective eager execution of coroutines
 - Exprerimental support for [Priority Scheduling](#priority-scheduling) of Tasks
 - Other experimental features such as [`task_interrupt()`](#task_interrupt)
 - Limited support for `anyio` and `trio`.
@@ -213,6 +214,8 @@ old_factory = loop.get_task_factory()
 eager_factory = asynkit.create_eager_factory(old_factory)
 loop.set_task_factory(eager_factory)
 ```
+
+> ℹ️ **Note on `current_task()` behavior:** When using eager task execution, `asyncio.current_task()` returns the parent task or a temporary ghost task before the first blocking call, and the actual task afterwards. This ensures compatibility with framework detection libraries. See [Current Task Behavior](docs/eager_tasks.md#current-task-behavior-during-eager-execution) for details.
 
 #### Python 3.13+ Compatibility
 

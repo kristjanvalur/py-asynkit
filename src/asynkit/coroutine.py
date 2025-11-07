@@ -30,7 +30,7 @@ from typing import (
 
 from typing_extensions import ParamSpec, Protocol
 
-from .compat import switch_current_task, swap_current_task
+from .compat import swap_current_task
 from .tools import Cancellable, cancelling
 from .tools import create_task as _create_task
 
@@ -763,7 +763,7 @@ def create_eager_factory(
         # this inner factory must not be eager!
         kwargs.pop("eager_start", None)  # remove incompatible eager_start
 
-        def real_task_factory(coro: Coroutine[Any, Any, Any]) -> CAwaitable[Any]:
+        def real_task_factory(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
             if inner_factory is not None:
                 return inner_factory(loop, coro, **kwargs)
             else:
@@ -839,7 +839,7 @@ def create_task(
     """
     if eager_start:
 
-        def real_task_factory(coro_arg: Coroutine[Any, Any, T]) -> CAwaitable[T]:
+        def real_task_factory(coro_arg: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
             # Handle context parameter compatibility (added in Python 3.11)
             try:
                 return _create_task(coro_arg, name=name, context=context, **kwargs)  # type: ignore[call-arg]
@@ -876,16 +876,18 @@ class GhostTaskHelper:
     temporary task contexts if creating eager tasks in a non-task context.
     """
 
-    cleanup = set()
+    cleanup: set[asyncio.Task[Any]] = set()
 
-    def __init__(self, raw_create):
+    def __init__(
+        self, raw_create: Callable[[Coroutine[Any, Any, Any]], asyncio.Task[Any]]
+    ) -> None:
         self.raw_create = raw_create
-        self.ghost_task = None
+        self.ghost_task: asyncio.Task[Any] | None = None
 
-    def get(self):
+    def get(self) -> asyncio.Task[Any]:
         if self.ghost_task is None:
 
-            async def ghost_coro():
+            async def ghost_coro() -> None:
                 return None
 
             self.ghost_task = self.raw_create(ghost_coro())
@@ -897,36 +899,28 @@ class GhostTaskHelper:
 # default instance for the create_task helper
 default_ghost_task_getter = GhostTaskHelper(_create_task).get
 
-# Global for timing instrumentation - stores entry timestamp for latency measurement
-_helper_entry_time: int = 0
-_coro_start_time: int = 0
-_timing_data: dict[str, float] = {}
-
 
 def coro_eager_task_helper(
     loop: asyncio.AbstractEventLoop,
     coro: Coroutine[Any, Any, T],
     name: str | None,
     context: Context | None,
-    get_fake_task: Callable[[None], CAwaitable[T]],
-    real_task_factory: Callable[[Coroutine[Any, Any, T]], CAwaitable[T]],
-) -> CAwaitable[T]:
+    get_fake_task: Callable[[], asyncio.Task[Any]],
+    real_task_factory: Callable[[Coroutine[Any, Any, T]], asyncio.Task[T]],
+) -> asyncio.Task[T] | TaskLikeFuture[T]:
     """
     Create a task with eager execution.
-    We create a task early with the coroutine from a EagerTaskWrapper,
-    then start the coroutine in the task context.
-    If the coroutine blocks, we set it as the awaitable for the wrapper
-    and return the task.
-    If the coroutine completes synchronously, we return a TaskLikeFuture
-    wrapping the result.
-    This ensures that all parts of the execution runs in the correct task context.
+
+    If there is no current task, we temporarily swap in a reusable "ghost task"
+    to provide task context during eager execution. This allows libraries like
+    anyio/sniffio to detect the async framework via asyncio.current_task().
+
+    The coroutine is started immediately. If it blocks, we create a real Task
+    to continue execution. If it completes synchronously, we return a
+    TaskLikeFuture wrapping the result.
+
+    This ensures all parts of the execution run in the correct task context.
     """
-    import time
-
-    global _helper_entry_time, _timing_data
-    t_start = time.perf_counter_ns()
-    _helper_entry_time = t_start
-
     # In Python < 3.11, context parameter doesn't exist for create_task()
     # so we ignore any provided context and let CoroStart manage its own
 
@@ -934,82 +928,43 @@ def coro_eager_task_helper(
         context = None
 
     # start the coroutine in the task context
-    cs: CoroStart[T]
-    t_before_switch = time.perf_counter_ns()
-
-    current_task = asyncio.current_task(loop)
-    # if there is no current task, then we need a fake task to run it in
-    if current_task is None:
-        old = swap_current_task(loop, get_fake_task())
-        try:
-            t_after_switch = time.perf_counter_ns()
-            if context is not None:
-                # Enter the context only for the initial start, then use None for CoroStart
-                # This way the continuation won't try to re-enter the context
-                def start_in_context() -> CoroStart[T]:
-                    return CoroStart(coro, context=None)
-
-                t_before_corostart = time.perf_counter_ns()
-                cs = context.run(start_in_context)
-                t_after_corostart = time.perf_counter_ns()
-            else:
-                # No explicit context - use copy_context() as before
-                t_before_corostart = time.perf_counter_ns()
-                cs = CoroStart(coro, context=copy_context())
-                t_after_corostart = time.perf_counter_ns()
-        finally:
-            swap_current_task(loop, old)
-    else:
-        t_after_switch = time.perf_counter_ns()
+    def start() -> CoroStart[T]:
         if context is not None:
             # Enter the context only for the initial start, then use None for CoroStart
             # This way the continuation won't try to re-enter the context
             def start_in_context() -> CoroStart[T]:
                 return CoroStart(coro, context=None)
 
-            t_before_corostart = time.perf_counter_ns()
             cs = context.run(start_in_context)
-            t_after_corostart = time.perf_counter_ns()
         else:
             # No explicit context - use copy_context() as before
-            t_before_corostart = time.perf_counter_ns()
             cs = CoroStart(coro, context=copy_context())
-            t_after_corostart = time.perf_counter_ns()
+        return cs
 
-    t_after_switch_exit = time.perf_counter_ns()
+    current_task = asyncio.current_task(loop)
+    # if there is no current task, then we need a fake task to run it in
+    # this is so that asynkio.get_current_task() returns a valid task during
+    # eager start.  This is not the same task as will be created later. This
+    # is purely to satisfy get_current_task() calls during eager start, such
+    # as for anyio that wants to detect the current async framework.
+
+    cs: CoroStart[T]
+    if current_task is not None:
+        cs = start()
+    else:
+        old = swap_current_task(loop, get_fake_task())
+        try:
+            cs = start()
+        finally:
+            swap_current_task(loop, old)
 
     # if the corutine is not done, set it as the awaitable for the helper and
     # return the task
     if not cs.done():
-        t_before_real_task = time.perf_counter_ns()
-        task = real_task_factory(cs.as_coroutine())
-        t_after_real_task = time.perf_counter_ns()
-        t_end = time.perf_counter_ns()
-        _timing_data = {
-            "helper_entry": t_start,
-            "switch_enter": (t_after_switch - t_before_switch) / 1000,
-            "corostart": (t_after_corostart - t_before_corostart) / 1000,
-            "switch_exit": (t_after_switch_exit - t_after_corostart) / 1000,
-            "create_real_task": (t_after_real_task - t_before_real_task) / 1000,
-            "helper_total": (t_end - t_start) / 1000,
-        }
-        return task
+        return real_task_factory(cs.as_coroutine())
     else:
         # Return a TaskLikeFuture wrapping the result
-        t_before_future = time.perf_counter_ns()
-        result = TaskLikeFuture(cs, name=name, context=context)
-        t_end = time.perf_counter_ns()
-
-        _timing_data = {
-            "helper_entry": t_start,
-            "switch_enter": (t_after_switch - t_before_switch) / 1000,
-            "corostart": (t_after_corostart - t_before_corostart) / 1000,
-            "switch_exit": (t_after_switch_exit - t_after_corostart) / 1000,
-            "create_future": (t_end - t_before_future) / 1000,
-            "helper_total": (t_end - t_start) / 1000,
-        }
-
-        return result
+        return TaskLikeFuture(cs, name=name, context=context)
 
 
 def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
