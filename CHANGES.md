@@ -17,6 +17,14 @@ All notable changes to this project will be documented in this file.
     - Maintains compatibility with framework detection libraries (anyio, sniffio) which only need a valid task
     - See [docs/eager_tasks.md](docs/eager_tasks.md#current-task-behavior-during-eager-execution) for details
 
+- **C Extension Optimization**: Implemented `tp_iternext` fast path for CoroStartWrapper
+  - Uses `call_iter_next()` helper to access `tp_iternext` slot when available, falling back to method lookup for better performance
+  - This is the path used by Python's event loop for regular `await` operations
+  - Added `call_iter_next()` helper function for direct slot access
+  - Optimized `StopIteration(None)` case by returning NULL without setting exception (tp_iternext protocol optimization)
+  - Restructured and cleaned up C extension code for better maintainability
+  - Reduces overhead in the critical path of coroutine execution
+
 ### Documentation
 
 - **Eager Task Behavior Documentation**: Added comprehensive documentation of `current_task()` behavior
