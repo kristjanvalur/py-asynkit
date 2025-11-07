@@ -194,7 +194,7 @@ if not hasattr(asyncio.tasks, "_swap_current_task"):
     from asyncio.tasks import _enter_task, _leave_task
 
     def swap_current_task(
-        loop: asyncio.AbstractEventLoop, task: _TaskAny
+        loop: asyncio.AbstractEventLoop, task: _TaskAny | None
     ) -> _TaskAny | None:
         """Swap the current task in the event loop.
 
@@ -208,7 +208,7 @@ if not hasattr(asyncio.tasks, "_swap_current_task"):
         return old_task
 
 else:
-    from asyncio.tasks import _swap_current_task as swap_current_task
+    from asyncio.tasks import _swap_current_task as swap_current_task  # type: ignore[attr-defined,no-redef]
 
 # InterruptCondition compatibility
 # Python 3.13+ handles CancelledError subclasses properly in Condition.wait()
