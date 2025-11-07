@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Performance Improvements
 
 - **Ghost Task Pattern for Eager Execution**: Replaced wrapper task approach with high-performance ghost task pattern
+
   - Achieved 5x latency improvement: 1.5μs vs 7.8μs (wrapper task approach)
   - Only 7% overhead vs baseline (1.5μs vs 1.4μs pre-wrapper baseline)
   - Reusable ghost task provides task context during eager execution without creating wrapper tasks
@@ -18,6 +19,7 @@ All notable changes to this project will be documented in this file.
     - See [docs/eager_tasks.md](docs/eager_tasks.md#current-task-behavior-during-eager-execution) for details
 
 - **C Extension Optimization**: Implemented `tp_iternext` fast path for CoroStartWrapper
+
   - Uses `call_iter_next()` helper to access `tp_iternext` slot when available, falling back to method lookup for better performance
   - This is the path used by Python's event loop for regular `await` operations
   - Added `call_iter_next()` helper function for direct slot access
