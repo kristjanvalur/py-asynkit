@@ -6,6 +6,7 @@ import functools
 import inspect
 import sys
 import types
+import weakref
 from asyncio import Future, Task
 from collections.abc import (
     AsyncGenerator,
@@ -769,11 +770,23 @@ def create_eager_factory(
             else:
                 return asyncio.Task(coro, loop=loop, **kwargs)
 
-        ghost_task_getter = GhostTaskHelper(real_task_factory).get
+        ghost_task_getter = get_ghost_task_getter(loop)
 
         return coro_eager_task_helper(
             loop, coro, name, context, ghost_task_getter, real_task_factory
         )
+
+    # cache GhostTaskHelper instances per event loop
+    helpers: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, GhostTaskHelper] = (
+        weakref.WeakKeyDictionary()
+    )
+
+    def get_ghost_task_getter(
+        loop: asyncio.AbstractEventLoop,
+    ) -> Callable[[], asyncio.Task[Any]]:
+        if loop not in helpers:
+            helpers[loop] = GhostTaskHelper(lambda coro: asyncio.Task(coro, loop=loop))
+        return helpers[loop].get
 
     return factory
 
