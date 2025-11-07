@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Performance Improvements
+
+- **C Extension Optimization**: Implemented `tp_iternext` fast path for CoroStartWrapper
+  - Uses `tp_iternext` slot directly instead of `PyIter_Send(None)` for better performance
+  - This is the path used by Python's event loop for regular `await` operations
+  - Added `call_iter_next()` helper function for direct slot access
+  - Optimized `StopIteration(None)` case by returning NULL without setting exception (tp_iternext protocol optimization)
+  - Restructured and cleaned up C extension code for better maintainability
+  - Reduces overhead in the critical path of coroutine execution
+
 ## [0.16.4] - 2025-11-06
 
 ### Bug Fixes
