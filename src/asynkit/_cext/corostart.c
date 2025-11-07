@@ -349,7 +349,7 @@ static PyObject *extract_stopiteration_value(PyObject *exc_type,
     if(exc_value != NULL && PyObject_IsInstance(exc_value, exc_type)) {
         // exc_value is an actual StopIteration instance - extract .value
         // if there is an exception here, it returns to the caller
-        return = PyObject_GetAttrString(exc_value, "value");
+        return PyObject_GetAttrString(exc_value, "value");
     }
 
     // exc_value is the raw value (internal C python optimization)
