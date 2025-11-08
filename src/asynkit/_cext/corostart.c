@@ -76,12 +76,8 @@ static PyObject *coro_get_iterator(PyObject *coro);
 static PyObject *call_iter_next(PyObject *iter);
 static int call_iter_next_result(PyObject *iter, PyObject **result);
 static PyObject *extract_current_stopiteration_value(void);
-static PyObject *extract_stopiteration_value(PyObject *exc_type,
-                                             PyObject *exc_value,
-                                             PyObject *exc_traceback);
-static PyObject *check_stopiteration_value(PyObject **exc_type,
-                                           PyObject **exc_value,
-                                           PyObject **exc_traceback);
+static PyObject *extract_stopiteration_value(PyObject *exc_type, PyObject *exc_value);
+static PyObject *check_stopiteration_value(void);
 
 /* Module initialization function */
 PyMODINIT_FUNC PyInit__cext(void);
@@ -278,78 +274,69 @@ static int call_iter_next_result(PyObject *iter, PyObject **result)
         *result = Py_NewRef(Py_None);
         return PYGEN_RETURN;
     }
-    PyObject *exc_type, *exc_value, *exc_traceback;
-    *result = check_stopiteration_value(&exc_type, &exc_value, &exc_traceback);
+    *result = check_stopiteration_value();
     if(*result) {
         return PYGEN_RETURN;  // Got StopIteration value
     }
-    PyErr_Restore(exc_type, exc_value, exc_traceback);
     return PYGEN_ERROR;  // Error occurred
 }
 
-/* check the current exception for a StopIteration.  Return the value if found,
- * otherwise set the exception tuple
+/* check the current exception for a StopIteration.  Return the value if found
+ * and clears the exception state, otherwise returns NULL with exception set.
  */
-static PyObject *check_stopiteration_value(PyObject **exc_type,
-                                           PyObject **exc_value,
-                                           PyObject **exc_traceback)
-{
-    assert(PyErr_Occurred() != NULL);
-    PyErr_Fetch(exc_type, exc_value, exc_traceback);
-    int res = PyObject_IsSubclass(*exc_type, PyExc_StopIteration);
-    if(res < 0) {
-        // error checking type, return that exception
-        Py_CLEAR(*exc_type);
-        Py_CLEAR(*exc_value);
-        Py_CLEAR(*exc_traceback);
-        PyErr_Fetch(exc_type, exc_value, exc_traceback);
-        return NULL;  // Error during IsSubclass check
-    }
-    if(res == 0) {
-        // it is not a stopiteration, return NULL to indicate exception is set
-        return NULL;
-    }
-    PyObject *result = extract_stopiteration_value(*exc_type,
-                                                   *exc_value,
-                                                   *exc_traceback);
-    Py_CLEAR(*exc_type);
-    Py_CLEAR(*exc_value);
-    Py_CLEAR(*exc_traceback);
-    if(result == NULL) {
-        // error during extraction, return that exception
-        PyErr_Fetch(exc_type, exc_value, exc_traceback);
-        return NULL;  // Error during extraction
-    }
-    return result;
-}
-
-/* extract the value of a stopiteration.  Assumes that we have
- * a StopIteration error state
- */
-static PyObject *extract_current_stopiteration_value(void)
+static PyObject *check_stopiteration_value(void)
 {
     PyObject *exc_type, *exc_value, *exc_traceback;
+    assert(PyErr_Occurred() != NULL);
 
+    if(!PyErr_ExceptionMatches(PyExc_StopIteration)) {
+        // This is some other exception
+        return NULL;
+    }
+
+    // Fetch the exception
     PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
-
-    PyObject *result = extract_stopiteration_value(exc_type, exc_value, exc_traceback);
+    PyObject *result = extract_stopiteration_value(exc_type, exc_value);
     Py_DECREF(exc_type);
     Py_XDECREF(exc_value);
     Py_XDECREF(exc_traceback);
     return result;
 }
 
-static PyObject *extract_stopiteration_value(PyObject *exc_type,
-                                             PyObject *exc_value,
-                                             PyObject *exc_traceback)
+/* extract the value of a stopiteration.  Assumes that we have
+ * a StopIteration error state.  clears the error state on
+ * success.  Returns NULL with exception set on error.
+ */
+static PyObject *extract_current_stopiteration_value(void)
+{
+    PyObject *exc_type, *exc_value, *exc_traceback;
+
+    // get the current exception, not clearing it yet
+    PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
+    assert(PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration));
+
+    PyObject *result = extract_stopiteration_value(exc_type, exc_value);
+    Py_DECREF(exc_type);
+    Py_XDECREF(exc_value);
+    Py_XDECREF(exc_traceback);
+    return result;
+}
+
+static PyObject *extract_stopiteration_value(PyObject *exc_type, PyObject *exc_value)
 {
     assert(exc_type != NULL);
     assert(PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration));
 
-    if(exc_value != NULL && PyObject_IsInstance(exc_value, exc_type)) {
-        // exc_value is an actual StopIteration instance - extract .value
-        // if there is an exception here, it returns to the caller
-        return PyObject_GetAttrString(exc_value, "value");
+    if(exc_value != NULL) {
+        int is_instance = PyObject_IsInstance(exc_value, exc_type);
+        if(is_instance < 0) {
+            // PyObject_IsInstance failed - return NULL with exception set
+            return NULL;
+        }
+        if(is_instance == 1) {
+            // exc_value is an actual StopIteration instance - extract .value
+            return Py_NewRef(((PyStopIterationObject *) exc_value)->value);
+        }
     }
 
     // exc_value is the raw value (internal C python optimization)
@@ -432,7 +419,7 @@ static int corostart_start(CoroStartObject *self)
         }
     }
 
-    // Call coro.send(None) using PyIter_Send API
+    // Call next(await_iter)
     // STATE MODIFICATION: Sets initial_result and may set s_value or exception fields
     self->initial_result = call_iter_next_result(self->await_iter, &self->s_value);
 
@@ -666,25 +653,24 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
         assert(IS_PENDING(self));
         Py_RETURN_NONE;
     }
+    assert(PyErr_Occurred());
 
     // Check if we got StopIteration (normal completion)
+    // self->s_value is null here
+    assert(self->s_value == NULL);
     if(PyErr_ExceptionMatches(PyExc_StopIteration)) {
-        // STATE MODIFICATION: Transition to DONE with return value
         self->s_value = extract_current_stopiteration_value();
-        if(self->s_value == NULL) {
-            // STATE MODIFICATION: extract failed, transition to DONE with exception
-            // something wrong with extract_current_stopiteration_value, store it as
-            // regular exception
-            PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
-            self->initial_result = PYGEN_ERROR;
-        } else {
-            self->initial_result = PYGEN_RETURN;
-        }
-    } else {
+    }
+
+    if(self->s_value == NULL) {
         // STATE MODIFICATION: Transition to DONE with exception
-        // any other exception
+        // Either we had a stopiteration and we could not extract the value, or
+        // a regular exception. clearing the current exception state
         PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
         self->initial_result = PYGEN_ERROR;
+    } else {
+        // STATE MODIFICATION: Transition to DONE with return value
+        self->initial_result = PYGEN_RETURN;
     }
 
     assert(IS_DONE(self));
