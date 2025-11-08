@@ -56,6 +56,20 @@ static module_state *get_module_state(PyObject *module)
     return (module_state *) PyModule_GetState(module);
 }
 
+#if PY_VERSION_HEX < 0x030B0000
+/* Global module reference for compatibility with Python < 3.11 */
+static PyObject *_cext_module_ref = NULL;
+
+/* Helper function to get module state from global reference */
+static module_state *get_global_module_state(void)
+{
+    if(_cext_module_ref == NULL) {
+        return NULL;
+    }
+    return get_module_state(_cext_module_ref);
+}
+#endif
+
 /* ========== FORWARD DECLARATIONS ========== */
 
 /* CoroStart method forward declarations */
@@ -584,8 +598,9 @@ static int corostart_clear(CoroStartObject *self)
 /* __await__ method - return our CoroStartWrapper */
 static PyObject *corostart_await(CoroStartObject *self)
 {
-    // Use PyType_GetModuleByDef for slot methods (handles subclasses correctly)
-    // We need to reference the module definition, let's declare it here
+    // Get module state using compatibility approach
+#if PY_VERSION_HEX >= 0x030B0000
+    // Python 3.11+ has PyType_GetModuleByDef
     PyObject *module = PyType_GetModuleByDef(Py_TYPE(self), &cext_module);
     if(module == NULL) {
         return NULL;
@@ -594,6 +609,14 @@ static PyObject *corostart_await(CoroStartObject *self)
     if(state == NULL) {
         return NULL;
     }
+#else
+    // Python < 3.11: use global module reference
+    module_state *state = get_global_module_state();
+    if(state == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "Module state not available");
+        return NULL;
+    }
+#endif
 
     // Create our CoroStartWrapper that holds a reference to this CoroStart
     CoroStartWrapperObject *wrapper =
@@ -1283,6 +1306,12 @@ static int cext_exec(PyObject *module)
         return -1;
     }
 
+#if PY_VERSION_HEX < 0x030B0000
+    // Store global module reference for compatibility with Python < 3.11
+    Py_XINCREF(module);
+    _cext_module_ref = module;
+#endif
+
     // Initialize module state
     state->CoroStartType = NULL;
     state->CoroStartWrapperType = NULL;
@@ -1349,6 +1378,13 @@ static int cext_clear(PyObject *module)
     if(state == NULL) {
         return 0;
     }
+
+#if PY_VERSION_HEX < 0x030B0000
+    // Clear global module reference
+    if(_cext_module_ref == module) {
+        Py_CLEAR(_cext_module_ref);
+    }
+#endif
 
     // Clear all PyObject references in module state
     Py_CLEAR(state->CoroStartType);
