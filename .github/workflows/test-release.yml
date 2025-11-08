@@ -41,7 +41,7 @@ jobs:
       uses: pypa/cibuildwheel@v3.2.1
       env:
         # Configure which Python versions to build for
-        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp313t-* cp314-* cp314t-*"
         
         # Skip musllinux (most users don't need it)
         # Skip 32-bit Windows (legacy platform)
@@ -50,12 +50,21 @@ jobs:
         # Test our wheels by importing and checking the C extension
         CIBW_TEST_COMMAND: |
           python -c "
+          import sys
           import asynkit
           info = asynkit.get_implementation_info()
           print('Implementation:', info['implementation'])
-          print('Performance:', info['performance_info'])
+          print('Python version:', sys.version)
+          if hasattr(sys, '_is_gil_enabled'):
+              print('GIL enabled:', sys._is_gil_enabled())
           assert info['c_extension_available'], 'C extension should be available in wheels'
-          print('✓ C extension wheel test passed')
+          # Test that CoroStart works
+          import asyncio
+          async def test_coro(): return 42
+          start = asynkit.CoroStart(test_coro())
+          assert start.done(), 'CoroStart should complete synchronously'
+          assert start.result() == 42, 'CoroStart should return correct result'
+          print('CoroStart test: PASS')
           "
         
         # Install test dependencies
