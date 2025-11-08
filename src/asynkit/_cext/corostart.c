@@ -41,6 +41,9 @@
     #pragma warning(disable : 4152)
 #endif
 
+// use new exception semantics in python 12 and higher
+#define NEW_EXC (PY_VERSION_HEX >= 0x030C0000)
+
 /* ========== TYPE FORWARD DECLARATIONS ========== */
 static PyTypeObject *CoroStartType = NULL;        /* Will be created from spec */
 static PyTypeObject *CoroStartWrapperType = NULL; /* Will be created from spec */
@@ -76,8 +79,12 @@ static PyObject *coro_get_iterator(PyObject *coro);
 static PyObject *call_iter_next(PyObject *iter);
 static int call_iter_next_result(PyObject *iter, PyObject **result);
 static PyObject *extract_current_stopiteration_value(void);
-static PyObject *extract_stopiteration_value(PyObject *exc_type, PyObject *exc_value);
 static PyObject *check_stopiteration_value(void);
+#if NEW_EXC
+static PyObject *extract_stopiteration_value(PyObject *exc_value);
+#else
+static PyObject *extract_stopiteration_value(PyObject *exc_type, PyObject *exc_value);
+#endif
 
 /* Module initialization function */
 PyMODINIT_FUNC PyInit__cext(void);
@@ -92,9 +99,11 @@ typedef struct CoroStartObject {
     PyObject *context;
     PySendResult initial_result;  // Result from initial PyIter_Send call
     PyObject *s_value;            // completed value (if not exception)
-    PyObject *s_exc_type;         // exception type (if completed with exception)
     PyObject *s_exc_value;        // exception value
-    PyObject *s_exc_traceback;    // exception traceback
+#if !NEW_EXC
+    PyObject *s_exc_type;       // exception type (if completed with exception)
+    PyObject *s_exc_traceback;  // exception traceback
+#endif
 } CoroStartObject;
 
 /* CoroStartWrapper - implements both iterator and coroutine protocols */
@@ -112,16 +121,21 @@ static PyObject *corostart_await(CoroStartObject *self);
 static int corostart_start(CoroStartObject *self);
 
 /* State checking macros for CoroStart objects
- * DONE guarantees that s_value or s_exc_type is set
+ * DONE guarantees that s_value or _IS_EXC is set
  * CONTINUED means all fields are NULL (exception or value has
  *   been consumed by the PyIter_Send)
  * PENDING is derived.  it is not Done, and not yet consumed.
  * these are the three valid states, further validation is done
  * in the invariant checker.
  */
+#if NEW_EXC
+    #define _IS_EXC(self) ((self)->s_exc_value != NULL)
+#else
+    #define _IS_EXC(self) ((self)->s_exc_type != NULL)
+#endif
 
 #define _IS_DONE(self) ((self)->initial_result != PYGEN_NEXT)
-#define _IS_CONTINUED(self) ((self)->s_value == NULL && (self)->s_exc_type == NULL)
+#define _IS_CONTINUED(self) ((self)->s_value == NULL && !_IS_EXC(self))
 #define _IS_PENDING(self) (!_IS_DONE(self) && !_IS_CONTINUED(self))
 
 #define IS_DONE(self)                                                                  \
@@ -146,8 +160,8 @@ static inline void assert_corostart_invariant_impl(CoroStartObject *self,
 #else
     // Validate state model invariants:
     // 1. Exactly one of three states: done, pending, or continued
-    // 2. done: s_exc_type != NULL (and s_value == NULL)
-    // 3. pending: s_value != NULL (and s_exc_type == NULL)
+    // 2. done: _IS_EXC() (and s_value == NULL)
+    // 3. pending: s_value != NULL (and !_IS_EXC())
     // 4. continued: all fields are NULL
     int is_done = _IS_DONE(self);
     int is_pending = _IS_PENDING(self);
@@ -170,31 +184,31 @@ static inline void assert_corostart_invariant_impl(CoroStartObject *self,
         }
         assert(self->initial_result == PYGEN_RETURN ||
                self->initial_result == PYGEN_ERROR);
-        // either s_value is non-NULL or s_exc_type is non-NULL (exclusive or)
-        if(!((self->s_value != NULL) ^ (self->s_exc_type != NULL))) {
+        // either s_value is non-NULL or _IS_EXC() (exclusive or)
+        if(!((self->s_value != NULL) ^ _IS_EXC(self))) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
-        assert((self->s_value != NULL) ^ (self->s_exc_type != NULL));
+        assert((self->s_value != NULL) ^ _IS_EXC(self));
     } else if(is_pending) {
         // pending() state - should only have s_value set
         if(!(self->initial_result == PYGEN_NEXT)) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
         assert(self->initial_result == PYGEN_NEXT);
-        if(!(self->s_value != NULL && self->s_exc_type == NULL)) {
+        if(!(self->s_value != NULL && !(_IS_EXC(self)))) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
-        assert(self->s_value != NULL && self->s_exc_type == NULL);
+        assert(self->s_value != NULL && !(_IS_EXC(self)));
     } else {
         // continued() state - all fields should be NULL
         if(!(self->initial_result == PYGEN_NEXT)) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
         assert(self->initial_result == PYGEN_NEXT);
-        if(!(self->s_value == NULL && self->s_exc_type == NULL)) {
+        if(!(self->s_value == NULL && !_IS_EXC(self))) {
             fprintf(stderr, __FILE__ ":%d: ", line_number);
         }
-        assert(self->s_value == NULL && self->s_exc_type == NULL);
+        assert(self->s_value == NULL && !_IS_EXC(self));
     }
 #endif
 }
@@ -281,6 +295,53 @@ static int call_iter_next_result(PyObject *iter, PyObject **result)
     return PYGEN_ERROR;  // Error occurred
 }
 
+#if NEW_EXC
+
+/* check the current exception for a StopIteration.  Return the value if found
+ * and clears the exception state, otherwise returns NULL with exception set.
+ */
+static PyObject *check_stopiteration_value(void)
+{
+    PyObject *exc_value;
+    assert(PyErr_Occurred() != NULL);
+
+    if(!PyErr_ExceptionMatches(PyExc_StopIteration)) {
+        // This is some other exception
+        return NULL;
+    }
+
+    // Fetch the exception
+    exc_value = PyErr_GetRaisedException();
+    PyObject *result = extract_stopiteration_value(exc_value);
+    Py_DECREF(exc_value);
+    return result;
+}
+
+
+/* extract the value of a stopiteration.  Assumes that we have
+ * a StopIteration error state.  clears the error state on
+ * success.  Returns NULL with exception set on error.
+ */
+static PyObject *extract_current_stopiteration_value(void)
+{
+    PyObject *exc_value = PyErr_GetRaisedException();
+    assert(PyErr_GivenExceptionMatches(exc_value, PyExc_StopIteration));
+
+    PyObject *result = extract_stopiteration_value(exc_value);
+    Py_DECREF(exc_value);
+    return result;
+}
+
+static PyObject *extract_stopiteration_value(PyObject *exc_value)
+{
+    // in 3.12+, exc_type is not needed, exc_value is always an instance
+    assert(exc_value != NULL);
+    assert(PyErr_GivenExceptionMatches(exc_value, PyExc_StopIteration));
+    return Py_NewRef(((PyStopIterationObject *) exc_value)->value);
+}
+
+#else
+
 /* check the current exception for a StopIteration.  Return the value if found
  * and clears the exception state, otherwise returns NULL with exception set.
  */
@@ -303,6 +364,7 @@ static PyObject *check_stopiteration_value(void)
     return result;
 }
 
+
 /* extract the value of a stopiteration.  Assumes that we have
  * a StopIteration error state.  clears the error state on
  * success.  Returns NULL with exception set on error.
@@ -321,6 +383,7 @@ static PyObject *extract_current_stopiteration_value(void)
     Py_XDECREF(exc_traceback);
     return result;
 }
+
 
 static PyObject *extract_stopiteration_value(PyObject *exc_type, PyObject *exc_value)
 {
@@ -347,6 +410,7 @@ static PyObject *extract_stopiteration_value(PyObject *exc_type, PyObject *exc_v
     }
     return Py_NewRef(exc_value);
 }
+#endif
 
 /* ========== COROSTART TYPE IMPLEMENTATION ========== */
 
@@ -392,9 +456,11 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 
     // STATE INITIALIZATION: All state fields start as NULL
     cs->s_value = NULL;
-    cs->s_exc_type = NULL;
     cs->s_exc_value = NULL;
+#if !NEW_EXC
+    cs->s_exc_type = NULL;
     cs->s_exc_traceback = NULL;
+#endif
 
     // Perform eager execution
     if(corostart_start(cs) < 0) {
@@ -437,7 +503,11 @@ static int corostart_start(CoroStartObject *self)
         case PYGEN_ERROR:
             // Exception occurred - PyIter_Send already set the exception
             // STATE MODIFICATION: Transition to DONE with exception
+#if NEW_EXC
+            self->s_exc_value = PyErr_GetRaisedException();
+#else
             PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
+#endif
             assert(IS_DONE(self));
             break;
     }
@@ -461,9 +531,11 @@ static void corostart_dealloc(CoroStartObject *self)
     Py_XDECREF(self->await_iter);
     Py_XDECREF(self->context);
     Py_XDECREF(self->s_value);
-    Py_XDECREF(self->s_exc_type);
     Py_XDECREF(self->s_exc_value);
+#if !NEW_EXC
+    Py_XDECREF(self->s_exc_type);
     Py_XDECREF(self->s_exc_traceback);
+#endif
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
@@ -473,9 +545,11 @@ static int corostart_traverse(CoroStartObject *self, visitproc visit, void *arg)
     Py_VISIT(self->await_iter);
     Py_VISIT(self->context);
     Py_VISIT(self->s_value);
-    Py_VISIT(self->s_exc_type);
     Py_VISIT(self->s_exc_value);
+#if !NEW_EXC
+    Py_VISIT(self->s_exc_type);
     Py_VISIT(self->s_exc_traceback);
+#endif
     return 0;
 }
 
@@ -485,9 +559,11 @@ static int corostart_clear(CoroStartObject *self)
     Py_CLEAR(self->await_iter);
     Py_CLEAR(self->context);
     Py_CLEAR(self->s_value);
-    Py_CLEAR(self->s_exc_type);
     Py_CLEAR(self->s_exc_value);
+#if !NEW_EXC
+    Py_CLEAR(self->s_exc_type);
     Py_CLEAR(self->s_exc_traceback);
+#endif
     return 0;
 }
 
@@ -557,9 +633,13 @@ static PyObject *corostart_result(PyObject *_self)
     } else {
         // Re-raise other exceptions using Restore (steals references)
         // Use Py_XNewRef to handle potential NULL values safely
+#if NEW_EXC
+        PyErr_SetRaisedException(Py_NewRef(self->s_exc_value));
+#else
         PyErr_Restore(Py_XNewRef(self->s_exc_type),
                       Py_XNewRef(self->s_exc_value),
                       Py_XNewRef(self->s_exc_traceback));
+#endif
         return NULL;
     }
 }
@@ -577,6 +657,9 @@ static PyObject *corostart_exception(PyObject *_self)
     }
 
     // Return the exception (not re-raise it like result() does)
+#if NEW_EXC
+    return Py_NewRef(self->s_exc_value);
+#else
     if(self->s_exc_value) {
         int res = PyObject_IsInstance(self->s_exc_value, self->s_exc_type);
         if(res < 0) {
@@ -591,6 +674,7 @@ static PyObject *corostart_exception(PyObject *_self)
     // if it is null, it is omitted by the following call
     // any failure is propagated to the caller.
     return PyObject_CallFunctionObjArgs(self->s_exc_type, self->s_exc_value, NULL);
+#endif
 }
 
 // Throw an exception into the coroutine
@@ -641,9 +725,11 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
 
     // STATE MODIFICATION: Clear all state fields before setting new state
     Py_CLEAR(self->s_value);
-    Py_CLEAR(self->s_exc_type);
     Py_CLEAR(self->s_exc_value);
+#if !NEW_EXC
+    Py_CLEAR(self->s_exc_type);
     Py_CLEAR(self->s_exc_traceback);
+#endif
 
     if(result != NULL) {
         // STATE MODIFICATION: Transition to PENDING with new yielded value
@@ -666,7 +752,11 @@ static PyObject *corostart__throw(PyObject *_self, PyObject *exc)
         // STATE MODIFICATION: Transition to DONE with exception
         // Either we had a stopiteration and we could not extract the value, or
         // a regular exception. clearing the current exception state
+#if NEW_EXC
+        self->s_exc_value = PyErr_GetRaisedException();
+#else
         PyErr_Fetch(&self->s_exc_type, &self->s_exc_value, &self->s_exc_traceback);
+#endif
         self->initial_result = PYGEN_ERROR;
     } else {
         // STATE MODIFICATION: Transition to DONE with return value
@@ -708,9 +798,11 @@ static PyObject *corostart_close(PyObject *_self)
     // Transition to continued() state so that subsequent await attempts
     // trigger the "cannot reuse already awaited coroutine" error in __await__
     Py_CLEAR(self->s_value);
-    Py_CLEAR(self->s_exc_type);
     Py_CLEAR(self->s_exc_value);
+#if !NEW_EXC
+    Py_CLEAR(self->s_exc_type);
     Py_CLEAR(self->s_exc_traceback);
+#endif
     self->initial_result = PYGEN_NEXT;  // Mark as not-done to enter CONTINUED state
 
     assert(IS_CONTINUED(self));
@@ -840,13 +932,18 @@ static PyObject *corostart_wrapper_iternext(PyObject *_self)
 
             // we have an exception, restore it and return error
             // STATE MODIFICATION: Transfer exception, transition to CONTINUED
+    #if NEW_EXC
+            PyErr_SetRaisedException(corostart->s_exc_value);
+            corostart->s_exc_value = NULL;
+    #else
             PyErr_Restore(corostart->s_exc_type,
                           corostart->s_exc_value,
                           corostart->s_exc_traceback);
-            // Clear (PyErr_Restore steals references) - marks as continued
             corostart->s_exc_type = NULL;
             corostart->s_exc_value = NULL;
             corostart->s_exc_traceback = NULL;
+    #endif
+
             corostart->initial_result = PYGEN_NEXT;  // Mark as continued
             assert(IS_CONTINUED(corostart));
             return NULL;
@@ -995,6 +1092,10 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
 
             // we have an exception, restore it and return error
             // STATE MODIFICATION: Transfer exception, transition to CONTINUED
+#if NEW_EXC
+            PyErr_SetRaisedException(corostart->s_exc_value);
+            corostart->s_exc_value = NULL;
+#else
             PyErr_Restore(corostart->s_exc_type,
                           corostart->s_exc_value,
                           corostart->s_exc_traceback);
@@ -1002,6 +1103,7 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
             corostart->s_exc_type = NULL;
             corostart->s_exc_value = NULL;
             corostart->s_exc_traceback = NULL;
+#endif
             corostart->initial_result = PYGEN_NEXT;  // Mark as continued
             *result = NULL;
             assert(IS_CONTINUED(corostart));
