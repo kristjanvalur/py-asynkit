@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.1] - 2025-11-08
+
+### Performance Improvements
+
+- **GhostTaskHelper Optimization**: Refactored ghost task management for better performance and maintainability
+  - Simplified from instance-based to static class design with per-loop task storage
+  - Eliminated complex WeakKeyDictionary-based instance management
+  - Reduced object creation overhead and lookup complexity
+  - Streamlined eager task factory implementation with fewer parameter passing layers
+  - More efficient memory usage with single ghost task per event loop
+
+### Code Modernization
+
+- **Python 3.12+ Exception Semantics**: Added support for modern exception handling APIs
+  - Implemented `NEW_EXC` macro for conditional compilation based on Python version
+  - Uses `PyErr_GetRaisedException()`/`PyErr_SetRaisedException()` on Python 3.12+
+  - Maintains backward compatibility with `PyErr_Fetch()`/`PyErr_Restore()` on older versions
+  - All 568 tests pass with new exception semantics
+
+### Testing and Quality Assurance
+
+- **Enhanced Performance Benchmarking**: Improved accuracy and reliability of performance measurements
+
+  - Fixed `eager_start` parameter detection using runtime testing instead of version assumptions
+  - Added 2σ outlier filtering for more accurate statistical analysis
+  - Corrected min/max statistical aggregation to use actual minimum/maximum values across runs
+  - Enhanced reporting with comprehensive performance analysis and proper error handling
+  - Added robust Python 3.14+ compatibility detection for native eager execution features
+
+- **Compiler Warning Resolution**: Achieved clean compilation with strict warning flags
+
+  - Enabled comprehensive warning detection: `-Wall -Wextra -Wstrict-prototypes`
+  - Clean compilation under both debug and optimized build configurations
+
+### Documentation
+
+- **Updated API Documentation**: Corrected misleading claims about `eager_start` parameter availability
+  - Removed incorrect references to `eager_start=True` parameter in older Python versions
+  - Clarified actual functionality vs Python 3.12+ native eager execution features
+  - Updated docstrings to reflect simplified implementation approach
+
 ## [0.17.0] - 2025-11-07
 
 ### Performance Improvements
