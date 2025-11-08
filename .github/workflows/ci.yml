@@ -23,7 +23,6 @@ jobs:
     name: Run linting on Python ${{ matrix.python-version }} on ${{ matrix.os }}
     env:
       ASYNKIT_FORCE_CEXT: 1
-      ASYNKIT_DEBUG: 1
     steps:
       - uses: actions/checkout@v3
       - name: Install uv
@@ -58,7 +57,6 @@ jobs:
     name: Run unittests on Python ${{ matrix.python-version }} on ${{ matrix.os }}
     env:
       ASYNKIT_FORCE_CEXT: 1
-      ASYNKIT_DEBUG: 1
     steps:
     - uses: actions/checkout@v3
     - name: Install uv

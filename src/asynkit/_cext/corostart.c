@@ -1254,7 +1254,7 @@ static PyMethodDef module_methods[] = {{"get_build_info",
                                        {NULL, NULL, 0, NULL}};
 
 /* Module slots for GIL configuration */
-#if PY_VERSION_HEX >= 0x030C0000 /* Python 3.12+ */
+#if PY_VERSION_HEX >= 0x030D0000 /* Python 3.13+ */
 static PyModuleDef_Slot module_slots[] = {{Py_mod_exec, (void *) cext_exec},
                                           {Py_mod_gil, Py_MOD_GIL_NOT_USED},
                                           {0, NULL}};
