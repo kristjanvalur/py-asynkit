@@ -44,9 +44,17 @@
 // use new exception semantics in python 12 and higher
 #define NEW_EXC (PY_VERSION_HEX >= 0x030C0000)
 
-/* ========== TYPE FORWARD DECLARATIONS ========== */
-static PyTypeObject *CoroStartType = NULL;        /* Will be created from spec */
-static PyTypeObject *CoroStartWrapperType = NULL; /* Will be created from spec */
+/* ========== MODULE STATE STRUCTURE ========== */
+typedef struct {
+    PyTypeObject *CoroStartType;
+    PyTypeObject *CoroStartWrapperType;
+} module_state;
+
+/* Helper function to get module state */
+static module_state *get_module_state(PyObject *module)
+{
+    return (module_state *) PyModule_GetState(module);
+}
 
 /* ========== FORWARD DECLARATIONS ========== */
 
@@ -86,6 +94,11 @@ static PyObject *extract_stopiteration_value(PyObject *exc_value);
 #else
 static PyObject *extract_stopiteration_value(PyObject *exc_type, PyObject *exc_value);
 #endif
+static int cext_traverse(PyObject *module, visitproc visit, void *arg);
+static int cext_clear(PyObject *module);
+
+/* Forward declaration of module definition */
+static struct PyModuleDef cext_module;
 
 /* Module initialization function */
 PyMODINIT_FUNC PyInit__cext(void);
@@ -571,9 +584,21 @@ static int corostart_clear(CoroStartObject *self)
 /* __await__ method - return our CoroStartWrapper */
 static PyObject *corostart_await(CoroStartObject *self)
 {
+    // Use PyType_GetModuleByDef for slot methods (handles subclasses correctly)
+    // We need to reference the module definition, let's declare it here
+    PyObject *module = PyType_GetModuleByDef(Py_TYPE(self), &cext_module);
+    if(module == NULL) {
+        return NULL;
+    }
+    module_state *state = get_module_state(module);
+    if(state == NULL) {
+        return NULL;
+    }
+
     // Create our CoroStartWrapper that holds a reference to this CoroStart
-    CoroStartWrapperObject *wrapper = (CoroStartWrapperObject *) CoroStartWrapperType
-                                          ->tp_alloc(CoroStartWrapperType, 0);
+    CoroStartWrapperObject *wrapper =
+        (CoroStartWrapperObject *)
+            state->CoroStartWrapperType->tp_alloc(state->CoroStartWrapperType, 0);
     if(wrapper == NULL) {
         return NULL;
     }
@@ -1229,17 +1254,12 @@ static PyMethodDef module_methods[] = {{"get_build_info",
                                        {NULL, NULL, 0, NULL}};
 
 /* Module slots for GIL configuration */
-#if PY_VERSION_HEX >= 0x030C0000  /* Python 3.12+ */
-static PyModuleDef_Slot module_slots[] = {
-    {Py_mod_exec, (void*)cext_exec},
-    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
-    {0, NULL}
-};
+#if PY_VERSION_HEX >= 0x030C0000 /* Python 3.12+ */
+static PyModuleDef_Slot module_slots[] = {{Py_mod_exec, (void *) cext_exec},
+                                          {Py_mod_gil, Py_MOD_GIL_NOT_USED},
+                                          {0, NULL}};
 #else
-static PyModuleDef_Slot module_slots[] = {
-    {Py_mod_exec, (void*)cext_exec},
-    {0, NULL}
-};
+static PyModuleDef_Slot module_slots[] = {{Py_mod_exec, (void *) cext_exec}, {0, NULL}};
 #endif
 
 /* Module definition */
@@ -1247,50 +1267,92 @@ static struct PyModuleDef cext_module = {
     PyModuleDef_HEAD_INIT,
     "asynkit._cext",
     "Simple C extension for CoroStart",
-    0,  /* m_size must be >= 0 for multi-phase initialization */
+    sizeof(module_state), /* m_size for per-module state */
     module_methods,
-    module_slots, /* m_slots */
-    NULL, /* m_traverse */
-    NULL, /* m_clear */
-    NULL  /* m_free */
+    module_slots,  /* m_slots */
+    cext_traverse, /* m_traverse */
+    cext_clear,    /* m_clear */
+    NULL           /* m_free */
 };
 
 /* Module exec function for multi-phase initialization */
-static int
-cext_exec(PyObject *module)
+static int cext_exec(PyObject *module)
 {
+    module_state *state = get_module_state(module);
+    if(state == NULL) {
+        return -1;
+    }
+
+    // Initialize module state
+    state->CoroStartType = NULL;
+    state->CoroStartWrapperType = NULL;
+
     // Add a simple test attribute first
     if(PyModule_AddStringConstant(module, "__test__", "C extension loaded") < 0) {
         return -1;
     }
 
-    // Create CoroStartWrapper type from spec for am_send optimization
-    CoroStartWrapperType = (PyTypeObject *) PyType_FromSpec(&corostart_wrapper_spec);
-    if(CoroStartWrapperType == NULL) {
+    // Create CoroStartWrapper type with module association
+    state->CoroStartWrapperType = (PyTypeObject *)
+        PyType_FromModuleAndSpec(module, &corostart_wrapper_spec, NULL);
+    if(state->CoroStartWrapperType == NULL) {
         return -1;
     }
 
-    // Create CoroStart type from spec for am_await optimization
-    CoroStartType = (PyTypeObject *) PyType_FromSpec(&corostart_spec);
-    if(CoroStartType == NULL) {
+    // Create CoroStart type with module association
+    state->CoroStartType = (PyTypeObject *) PyType_FromModuleAndSpec(module,
+                                                                     &corostart_spec,
+                                                                     NULL);
+    if(state->CoroStartType == NULL) {
         return -1;
     }
 
     // Add types to module (for debugging/introspection)
-    Py_INCREF(CoroStartWrapperType);
+    Py_INCREF(state->CoroStartWrapperType);
     if(PyModule_AddObject(module,
                           "CoroStartWrapperType",
-                          (PyObject *) CoroStartWrapperType) < 0) {
-        Py_DECREF(CoroStartWrapperType);
+                          (PyObject *) state->CoroStartWrapperType) < 0) {
+        Py_DECREF(state->CoroStartWrapperType);
         return -1;
     }
 
     // Add CoroStartBase type to module
-    Py_INCREF(CoroStartType);
-    if(PyModule_AddObject(module, "CoroStartBase", (PyObject *) CoroStartType) < 0) {
-        Py_DECREF(CoroStartType);
+    Py_INCREF(state->CoroStartType);
+    if(PyModule_AddObject(module, "CoroStartBase", (PyObject *) state->CoroStartType) <
+       0) {
+        Py_DECREF(state->CoroStartType);
         return -1;
     }
+
+    return 0;
+}
+
+/* Module traverse function for garbage collection */
+static int cext_traverse(PyObject *module, visitproc visit, void *arg)
+{
+    module_state *state = get_module_state(module);
+    if(state == NULL) {
+        return 0;
+    }
+
+    // Visit all PyObject references in module state
+    Py_VISIT(state->CoroStartType);
+    Py_VISIT(state->CoroStartWrapperType);
+
+    return 0;
+}
+
+/* Module clear function for garbage collection */
+static int cext_clear(PyObject *module)
+{
+    module_state *state = get_module_state(module);
+    if(state == NULL) {
+        return 0;
+    }
+
+    // Clear all PyObject references in module state
+    Py_CLEAR(state->CoroStartType);
+    Py_CLEAR(state->CoroStartWrapperType);
 
     return 0;
 }
