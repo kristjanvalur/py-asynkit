@@ -80,6 +80,7 @@ static PyObject *call_iter_next(PyObject *iter);
 static int call_iter_next_result(PyObject *iter, PyObject **result);
 static PyObject *extract_current_stopiteration_value(void);
 static PyObject *check_stopiteration_value(void);
+static int cext_exec(PyObject *module);
 #if NEW_EXC
 static PyObject *extract_stopiteration_value(PyObject *exc_value);
 #else
@@ -1227,45 +1228,52 @@ static PyMethodDef module_methods[] = {{"get_build_info",
                                         "Get build configuration information"},
                                        {NULL, NULL, 0, NULL}};
 
+/* Module slots for GIL configuration */
+#if PY_VERSION_HEX >= 0x030C0000  /* Python 3.12+ */
+static PyModuleDef_Slot module_slots[] = {
+    {Py_mod_exec, (void*)cext_exec},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
+    {0, NULL}
+};
+#else
+static PyModuleDef_Slot module_slots[] = {
+    {Py_mod_exec, (void*)cext_exec},
+    {0, NULL}
+};
+#endif
+
 /* Module definition */
 static struct PyModuleDef cext_module = {
     PyModuleDef_HEAD_INIT,
     "asynkit._cext",
     "Simple C extension for CoroStart",
-    -1,
+    0,  /* m_size must be >= 0 for multi-phase initialization */
     module_methods,
-    NULL, /* m_slots */
+    module_slots, /* m_slots */
     NULL, /* m_traverse */
     NULL, /* m_clear */
     NULL  /* m_free */
 };
 
-/* Module initialization */
-PyMODINIT_FUNC PyInit__cext(void)
+/* Module exec function for multi-phase initialization */
+static int
+cext_exec(PyObject *module)
 {
-    PyObject *module = PyModule_Create(&cext_module);
-    if(module == NULL) {
-        return NULL;
-    }
-
     // Add a simple test attribute first
     if(PyModule_AddStringConstant(module, "__test__", "C extension loaded") < 0) {
-        Py_DECREF(module);
-        return NULL;
+        return -1;
     }
 
     // Create CoroStartWrapper type from spec for am_send optimization
     CoroStartWrapperType = (PyTypeObject *) PyType_FromSpec(&corostart_wrapper_spec);
     if(CoroStartWrapperType == NULL) {
-        Py_DECREF(module);
-        return NULL;
+        return -1;
     }
 
     // Create CoroStart type from spec for am_await optimization
     CoroStartType = (PyTypeObject *) PyType_FromSpec(&corostart_spec);
     if(CoroStartType == NULL) {
-        Py_DECREF(module);
-        return NULL;
+        return -1;
     }
 
     // Add types to module (for debugging/introspection)
@@ -1274,19 +1282,23 @@ PyMODINIT_FUNC PyInit__cext(void)
                           "CoroStartWrapperType",
                           (PyObject *) CoroStartWrapperType) < 0) {
         Py_DECREF(CoroStartWrapperType);
-        Py_DECREF(module);
-        return NULL;
+        return -1;
     }
 
     // Add CoroStartBase type to module
     Py_INCREF(CoroStartType);
     if(PyModule_AddObject(module, "CoroStartBase", (PyObject *) CoroStartType) < 0) {
         Py_DECREF(CoroStartType);
-        Py_DECREF(module);
-        return NULL;
+        return -1;
     }
 
-    return module;
+    return 0;
+}
+
+/* Module initialization */
+PyMODINIT_FUNC PyInit__cext(void)
+{
+    return PyModuleDef_Init(&cext_module);
 }
 
 // Restore warnings
