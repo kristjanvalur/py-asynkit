@@ -6,7 +6,6 @@ import functools
 import inspect
 import sys
 import types
-import weakref
 from asyncio import Future, Task
 from collections.abc import (
     AsyncGenerator,
@@ -731,14 +730,11 @@ def create_eager_factory(
 
     Notes:
         - This is a different mechanism from Python 3.12's native eager execution
-          feature. Python 3.12 provides `eager_start=True` parameter for
-          `asyncio.create_task()` and `asyncio.eager_task_factory()`. Our
+          feature. Python 3.12 provides `asyncio.eager_task_factory`. Our
           implementation works on all Python versions but may not always create
           a real Task - synchronous coroutines get a TaskLikeFuture instead.
         - All kwargs from asyncio.create_task() are properly forwarded to the
           inner factory when delegation occurs.
-        - This is experimental functionality that modifies global task creation
-          behavior for the entire event loop.
         - If you want to preserve an existing task factory, explicitly pass it
           as inner_factory rather than relying on automatic detection.
 
@@ -770,23 +766,7 @@ def create_eager_factory(
             else:
                 return asyncio.Task(coro, loop=loop, **kwargs)
 
-        ghost_task_getter = get_ghost_task_getter(loop)
-
-        return coro_eager_task_helper(
-            loop, coro, name, context, ghost_task_getter, real_task_factory
-        )
-
-    # cache GhostTaskHelper instances per event loop
-    helpers: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, GhostTaskHelper] = (
-        weakref.WeakKeyDictionary()
-    )
-
-    def get_ghost_task_getter(
-        loop: asyncio.AbstractEventLoop,
-    ) -> Callable[[], asyncio.Task[Any]]:
-        if loop not in helpers:
-            helpers[loop] = GhostTaskHelper(lambda coro: asyncio.Task(coro, loop=loop))
-        return helpers[loop].get
+        return coro_eager_task_helper(loop, coro, name, context, real_task_factory)
 
     return factory
 
@@ -865,7 +845,6 @@ def create_task(
             coro,
             name,
             context,
-            default_ghost_task_getter,
             real_task_factory,
         )
 
@@ -889,28 +868,31 @@ class GhostTaskHelper:
     temporary task contexts if creating eager tasks in a non-task context.
     """
 
-    cleanup: set[asyncio.Task[Any]] = set()
+    # this could be a WeakKeyDictionary but we want maximum performance here
+    # and there are unlikely to be many event loops in practice.
+    tasks: dict[asyncio.AbstractEventLoop, asyncio.Task[Any]] = {}
 
-    def __init__(
-        self, raw_create: Callable[[Coroutine[Any, Any, Any]], asyncio.Task[Any]]
-    ) -> None:
-        self.raw_create = raw_create
-        self.ghost_task: asyncio.Task[Any] | None = None
+    @classmethod
+    def get(
+        cls,
+        loop: asyncio.AbstractEventLoop,
+        raw_create: Callable[[Coroutine[Any, Any, Any]], asyncio.Task[Any]],
+    ) -> asyncio.Task[Any]:
+        """
+        Get the GhostTaskHelper instance for the given event loop.
+        """
+        try:
+            return cls.tasks[loop]
+        except KeyError:
+            cls.tasks[loop] = raw_create(cls.task_coro())
+        return cls.tasks[loop]
 
-    def get(self) -> asyncio.Task[Any]:
-        if self.ghost_task is None:
-
-            async def ghost_coro() -> None:
-                return None
-
-            self.ghost_task = self.raw_create(ghost_coro())
-            GhostTaskHelper.cleanup.add(self.ghost_task)
-            self.ghost_task.add_done_callback(GhostTaskHelper.cleanup.discard)
-        return self.ghost_task
+    @classmethod
+    async def task_coro(cls) -> None:
+        pass
 
 
-# default instance for the create_task helper
-default_ghost_task_getter = GhostTaskHelper(_create_task).get
+_get_ghost_task = GhostTaskHelper.get  # for easier access
 
 
 def coro_eager_task_helper(
@@ -918,7 +900,6 @@ def coro_eager_task_helper(
     coro: Coroutine[Any, Any, T],
     name: str | None,
     context: Context | None,
-    get_fake_task: Callable[[], asyncio.Task[Any]],
     real_task_factory: Callable[[Coroutine[Any, Any, T]], asyncio.Task[T]],
 ) -> asyncio.Task[T] | TaskLikeFuture[T]:
     """
@@ -936,38 +917,32 @@ def coro_eager_task_helper(
     """
     # In Python < 3.11, context parameter doesn't exist for create_task()
     # so we ignore any provided context and let CoroStart manage its own
-
     if sys.version_info < (3, 11):
         context = None
 
-    # start the coroutine in the task context
-    def start() -> CoroStart[T]:
-        if context is not None:
+    cs: CoroStart[T]
+    current_task = asyncio.current_task(loop)
+    if current_task is not None:
+        if context is None:
+            cs = CoroStart(coro, context=copy_context())
+        else:
             # Enter the context only for the initial start, then use None for CoroStart
             # This way the continuation won't try to re-enter the context
-            def start_in_context() -> CoroStart[T]:
-                return CoroStart(coro, context=None)
-
-            cs = context.run(start_in_context)
-        else:
-            # No explicit context - use copy_context() as before
-            cs = CoroStart(coro, context=copy_context())
-        return cs
-
-    current_task = asyncio.current_task(loop)
-    # if there is no current task, then we need a fake task to run it in
-    # this is so that asyncio.get_current_task() returns a valid task during
-    # eager start.  This is not the same task as will be created later. This
-    # is purely to satisfy get_current_task() calls during eager start, such
-    # as for anyio that wants to detect the current async framework.
-
-    cs: CoroStart[T]
-    if current_task is not None:
-        cs = start()
+            cs = context.run(lambda: CoroStart(coro, context=None))
     else:
-        old = swap_current_task(loop, get_fake_task())
+        # if there is no current task, then we need a fake task to run it in
+        # this is so that asyncio.get_current_task() returns a valid task during
+        # eager start.  This is not the same task as will be created later. This
+        # is purely to satisfy get_current_task() calls during eager start, such
+        # as for anyio that wants to detect the current async framework.
+        old = swap_current_task(loop, _get_ghost_task(loop, real_task_factory))
         try:
-            cs = start()
+            if context is None:
+                cs = CoroStart(coro, context=copy_context())
+            else:
+                # Enter the context only for the initial start, then use None for CoroStart
+                # This way the continuation won't try to re-enter the context
+                cs = context.run(lambda: CoroStart(coro, context=None))
         finally:
             swap_current_task(loop, old)
 
@@ -976,7 +951,6 @@ def coro_eager_task_helper(
     if not cs.done():
         return real_task_factory(cs.as_coroutine())
     else:
-        # Return a TaskLikeFuture wrapping the result
         return TaskLikeFuture(cs, name=name, context=context)
 
 

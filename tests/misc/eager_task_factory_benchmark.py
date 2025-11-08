@@ -10,7 +10,6 @@ This test measures:
 
 import asyncio
 import contextlib
-import inspect
 import statistics
 import sys
 import time
@@ -18,6 +17,31 @@ from collections.abc import Callable
 from typing import Any
 
 import asynkit
+
+
+def filter_outliers(
+    data: list[float], sigma_threshold: float = 4.0
+) -> tuple[list[float], int]:
+    """
+    Filter outliers from data using standard deviation method.
+
+    Returns:
+        tuple: (filtered_data, num_outliers_removed)
+    """
+    if len(data) <= 2:
+        return data, 0
+
+    mean = statistics.mean(data)
+    std_dev = statistics.stdev(data)
+
+    if std_dev == 0:
+        return data, 0
+
+    filtered = [x for x in data if abs(x - mean) <= sigma_threshold * std_dev]
+    num_removed = len(data) - len(filtered)
+
+    return filtered, num_removed
+
 
 # Test parameters
 NUM_TASKS = 100
@@ -161,13 +185,20 @@ class PerformanceTest:
                 adjustment_factor = 1000 if self.is_non_eager else 1
                 adjusted_latencies = [lat / adjustment_factor for lat in latencies]
 
-                # Calculate statistics for this run
+                # Filter outliers before calculating statistics
+                filtered_latencies, num_outliers = filter_outliers(
+                    adjusted_latencies, sigma_threshold=2.0
+                )
+
+                # Calculate statistics for this run (using filtered data)
                 run_latency_stats = {
-                    "mean": statistics.mean(adjusted_latencies) * 1_000_000,
-                    "median": statistics.median(adjusted_latencies) * 1_000_000,
-                    "min": min(adjusted_latencies) * 1_000_000,
-                    "max": max(adjusted_latencies) * 1_000_000,
-                    "std_dev": statistics.stdev(adjusted_latencies) * 1_000_000,
+                    "mean": statistics.mean(filtered_latencies) * 1_000_000,
+                    "median": statistics.median(filtered_latencies) * 1_000_000,
+                    "min": min(filtered_latencies) * 1_000_000,
+                    "max": max(filtered_latencies) * 1_000_000,
+                    "std_dev": statistics.stdev(filtered_latencies) * 1_000_000,
+                    "outliers_removed": num_outliers,
+                    "total_samples": len(adjusted_latencies),
                 }
 
                 # Measure throughput for this run
@@ -176,9 +207,12 @@ class PerformanceTest:
                 if is_warmup:
                     print("  Warmup run completed (discarded)")
                 else:
+                    outlier_info = ""
+                    if run_latency_stats["outliers_removed"] > 0:
+                        outlier_info = f" ({run_latency_stats['outliers_removed']} outliers filtered)"
                     print(
                         f"latency {run_latency_stats['mean']:.2f}μs, "
-                        f"throughput {throughput:.0f} ops/s"
+                        f"throughput {throughput:.0f} ops/s{outlier_info}"
                     )
                     all_latency_results.append(run_latency_stats)
                     all_throughput_results.append(throughput)
@@ -200,8 +234,8 @@ class PerformanceTest:
                 "median_std": statistics.stdev(median_latencies)
                 if len(median_latencies) > 1
                 else 0,
-                "min": statistics.mean(min_latencies),
-                "max": statistics.mean(max_latencies),
+                "min": min(min_latencies),
+                "max": max(max_latencies),
                 "std_dev": statistics.mean(std_dev_latencies),
                 "runs": len(all_latency_results),
             }
@@ -212,6 +246,17 @@ class PerformanceTest:
                 statistics.stdev(all_throughput_results)
                 if len(all_throughput_results) > 1
                 else 0
+            )
+
+            # Calculate total outliers filtered
+            total_outliers = sum(
+                result.get("outliers_removed", 0) for result in all_latency_results
+            )
+            total_samples = sum(
+                result.get("total_samples", 0) for result in all_latency_results
+            )
+            outlier_percentage = (
+                (total_outliers / total_samples * 100) if total_samples > 0 else 0
             )
 
             # Display final results
@@ -233,6 +278,10 @@ class PerformanceTest:
             print(
                 f"  Throughput: {final_throughput:.0f} ± {throughput_std:.0f} operations/second"
             )
+            if total_outliers > 0:
+                print(
+                    f"  Outliers filtered: {total_outliers}/{total_samples} ({outlier_percentage:.1f}%) using 2σ threshold"
+                )
 
             return {
                 "factory_name": self.factory_name,
@@ -309,15 +358,28 @@ class AsynkitImplementationTest(PerformanceTest):
 
 
 async def compare_eager_start_parameter():
-    """Test Python 3.12's per-task eager_start parameter if available."""
+    """Test Python 3.14's per-task eager_start parameter if available."""
 
-    # Check if eager_start parameter is available
-    sig = inspect.signature(asyncio.create_task)
-    if "eager_start" not in sig.parameters:
-        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    # Check if eager_start parameter is available by testing it
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+
+    # Test if eager_start actually works (it may be handled via **kwargs)
+    try:
+
+        async def test_coro():
+            return "test"
+
+        # Try creating a task with eager_start parameter
+        task = asyncio.create_task(test_coro(), eager_start=True)
+        await task
+        eager_start_available = True
+    except TypeError:
+        eager_start_available = False
+
+    if not eager_start_available:
         print(f"\n=== Python {python_version} eager_start Parameter ===")
         print("  eager_start parameter not available in this Python version")
-        print("  (eager_start was added in Python 3.12.0a7+)")
+        print("  (eager_start was added to asyncio.create_task() in Python 3.14)")
         return
 
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}"

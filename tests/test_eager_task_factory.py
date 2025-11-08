@@ -757,3 +757,97 @@ class TestCreateTask:
 
         with pytest.raises(ValueError, match="async error"):
             await task2
+
+    async def test_ghost_task_context_when_no_current_task(self):
+        """Test that ghost task provides context when creating eager task without current task."""
+        from asynkit.compat import swap_current_task
+
+        # Track the current_task context during different phases
+        context_states = []
+
+        async def context_checking_coro():
+            """Coroutine that records current_task at different execution points."""
+            # Record initial current_task (should be ghost task during eager execution)
+            initial_task = asyncio.current_task()
+            context_states.append(("initial", initial_task))
+
+            # Suspend to force creation of real task
+            await asyncio.sleep(0)
+
+            # Record current_task after suspension (should be real task)
+            resumed_task = asyncio.current_task()
+            context_states.append(("resumed", resumed_task))
+
+            return "completed"
+
+        # Get current context - should have a running task
+        loop = asyncio.get_running_loop()
+        original_task = asyncio.current_task()
+        assert original_task is not None, "Test should run within a task context"
+
+        # Set up eager task factory
+        factory = asynkit.create_eager_factory()
+        old_factory = loop.get_task_factory()
+        loop.set_task_factory(factory)
+
+        try:
+            # Clear current task context using swap_current_task to simulate no-task context
+            old_current_task = swap_current_task(loop, None)
+
+            try:
+                # Verify we have no current task
+                no_task = asyncio.current_task()
+                assert no_task is None, "Should have no current task after swap"
+
+                # Create eager task in no-task context - should use ghost task
+                task = asyncio.create_task(context_checking_coro())
+
+                # Restore original task context
+                swap_current_task(loop, old_current_task)
+
+                # Wait for task completion
+                result = await task
+                assert result == "completed"
+
+                # Verify we recorded the expected context states
+                assert len(context_states) == 2, (
+                    f"Expected 2 context states, got {len(context_states)}"
+                )
+
+                initial_label, initial_task = context_states[0]
+                resumed_label, resumed_task = context_states[1]
+
+                assert initial_label == "initial"
+                assert resumed_label == "resumed"
+
+                # Initial execution should have had a ghost task (not None)
+                assert initial_task is not None, (
+                    "Initial execution should have ghost task context"
+                )
+
+                # Resumed execution should have the real task
+                assert resumed_task is not None, (
+                    "Resumed execution should have real task context"
+                )
+                assert resumed_task is task, (
+                    "Resumed context should be the actual task we created"
+                )
+
+                # Ghost task should be different from the real task
+                assert initial_task is not resumed_task, (
+                    "Ghost task should be different from real task. "
+                    f"Ghost: {initial_task}, Real: {resumed_task}"
+                )
+
+                # Ghost task should be different from original task
+                assert initial_task is not original_task, (
+                    "Ghost task should be different from original task. "
+                    f"Ghost: {initial_task}, Original: {original_task}"
+                )
+
+            finally:
+                # Ensure we restore task context even if test fails
+                swap_current_task(loop, old_current_task)
+
+        finally:
+            loop.set_task_factory(old_factory)
