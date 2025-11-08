@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.2] - 2025-11-08
+
+### Build System
+
+- **Free-threaded Python Support**: Added support for Python 3.13+ free-threaded builds
+  - C extension declares `Py_MOD_GIL_NOT_USED` for GIL-free operation
+  - Enhanced CI workflows with free-threaded Python targets (`cp313t-*`, `cp314t-*`)
+  - Proper GIL status detection and testing in CI environments
+
+### Internal Improvements
+
+- **Per-module State Architecture**: Modernized C extension for multi-interpreter isolation
+
+  - Replaced global variables with per-module state storage
+  - Uses `PyType_FromModuleAndSpec()` and `PyType_GetModuleByDef()` for Python 3.11+
+  - Version compatibility layer for Python 3.10 support
+  - Multi-phase initialization with proper garbage collection support
+
+- **CI Enhancements**: Improved wheel testing and validation
+
+  - Added functional assertions to replace print-based testing
+  - Enhanced error detection and reporting in build validation
+
 ## [0.17.1] - 2025-11-08
 
 ### Performance Improvements
