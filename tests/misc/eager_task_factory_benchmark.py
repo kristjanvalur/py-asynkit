@@ -451,10 +451,21 @@ async def main():
     # Test configurations
     test_configs = [
         PerformanceTest("Standard asyncio (no eager)", None),
-        PerformanceTest(
-            f"Python {python_version} eager_task_factory", asyncio.eager_task_factory
-        ),
     ]
+
+    # Only test Python's eager_task_factory if it exists (Python 3.12+)
+    if hasattr(asyncio, "eager_task_factory"):
+        test_configs.append(
+            PerformanceTest(
+                f"Python {python_version} eager_task_factory",
+                asyncio.eager_task_factory,
+            )
+        )
+    else:
+        print(
+            f"Note: asyncio.eager_task_factory not available in Python {python_version}"
+        )
+        print("      (asyncio.eager_task_factory was added in Python 3.12)")
 
     # Add C extension vs Python implementation comparison for asynkit
     if hasattr(asynkit.coroutine, "_PyCoroStart"):
@@ -522,16 +533,25 @@ async def main():
         print(f"{result['factory_name']:<30} {throughput_str:<20} {relative:<10.2f}x")
 
     # Calculate improvements
-    if len(results) >= 2:
-        python_eager = results[1]
+    print("Performance Analysis:")
+    baseline_latency = results[0]["latency"]["mean"]
 
-        print("Key Insights:")
-        baseline_latency = results[0]["latency"]["mean"]
+    # Find Python eager_task_factory result if it exists
+    python_eager = None
+    for result in results:
+        if "eager_task_factory" in result["factory_name"]:
+            python_eager = result
+            break
+
+    if python_eager:
         python_latency = python_eager["latency"]["mean"]
-
         print(
             f"  Python {python_version} eager latency improvement: "
             f"{baseline_latency / python_latency:.1f}x"
+        )
+    else:
+        print(
+            f"  Python {python_version} eager_task_factory not available for comparison"
         )
 
         # Show C extension vs Python implementation comparison if available

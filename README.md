@@ -57,7 +57,7 @@ info = asynkit.get_implementation_info()
 print(f"Using: {info['implementation']}")  # "C extension" or "Pure Python"
 ```
 
-## Key Features
+## Features
 
 - 🚀 **[Eager Execution](#eager)**: Start coroutines immediately, not when awaited
 - 🏭 **[Eager Task Factory](#eager_task_factory-and-create_eager_factory---global-eager-execution)**: Global eager execution for all tasks (Python 3.12 API, backward compatible)
@@ -236,7 +236,7 @@ Eager task factories provide **significant performance improvements** for task s
 - **Improvement**: **1.8x faster** minimum latency, much larger improvements in real applications
 - **asynkit C extension**: **8% better throughput** than pure Python, achieving **93% of native Python 3.14 performance** with cross-platform compatibility
 
-**Key advantage**: Eager execution provides **predictable performance** - latency remains constant regardless of work done between task creation and await, while non-eager latency scales with application complexity.
+**Important**: Eager execution provides **predictable performance** - latency remains constant regardless of work done between task creation and await, while non-eager latency scales with application complexity.
 
 See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance.md) for detailed performance analysis comparing asynkit's implementation with Python 3.14's native `eager_task_factory`.
 
