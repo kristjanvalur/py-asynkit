@@ -102,6 +102,8 @@ jobs:
     - name: Build wheels
       uses: pypa/cibuildwheel@v3.2.1
       env:
+        # Enable free-threaded Python builds
+        CIBW_ENABLE: "cpython-freethreading"
         CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp313t-* cp314-* cp314t-*"
         # Skip musllinux (most users don't need it)
         # Skip 32-bit Windows (legacy platform)
