@@ -744,6 +744,15 @@ def create_eager_factory(
         - `TaskLikeFuture`: Future subclass with Task-like methods
     """
 
+    if inner_factory is None:
+
+        def inner_factory(
+            loop: asyncio.AbstractEventLoop,
+            coro: Coroutine[Any, Any, Any],
+            **kwargs: Any,
+        ) -> Any:
+            return asyncio.Task(coro, loop=loop, **kwargs)
+
     def factory(
         loop: asyncio.AbstractEventLoop, coro: Coroutine[Any, Any, Any], **kwargs: Any
     ) -> Any:
@@ -757,14 +766,10 @@ def create_eager_factory(
         context = kwargs.get("context")
         name = kwargs.get("name")
 
-        # this inner factory must not be eager!
-        kwargs.pop("eager_start", None)  # remove incompatible eager_start
-
         def real_task_factory(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
-            if inner_factory is not None:
-                return inner_factory(loop, coro, **kwargs)
-            else:
-                return asyncio.Task(coro, loop=loop, **kwargs)
+            # this inner factory must not be eager!
+            kwargs.pop("eager_start", None)  # remove incompatible eager_start
+            return inner_factory(loop, coro, **kwargs)
 
         return coro_eager_task_helper(loop, coro, name, context, real_task_factory)
 
