@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.3] - 2025-11-09
+
+### Performance Improvements
+
+- **Eager Task Factory Micro-optimization**: Improved hot path performance in task creation
+  - Moved `kwargs.pop("eager_start", None)` from factory entry to inner delegation path
+  - Eliminates unnecessary dictionary operations for synchronous eager completions
+  - Only processes `eager_start` parameter when actually creating Task objects
+  - Reduces overhead in the common case where coroutines complete immediately
+
+### Testing
+
+- **Cross-version Compatibility**: Enhanced benchmark compatibility for older Python versions
+  - Added `hasattr(asyncio, 'eager_task_factory')` version checking in performance tests
+  - Graceful degradation when Python 3.12+ eager features are unavailable
+  - Maintained full testing coverage across Python 3.10-3.14
+
 ## [0.17.2] - 2025-11-08
 
 ### Build System
