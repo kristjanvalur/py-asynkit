@@ -30,7 +30,7 @@ from typing import (
 
 from typing_extensions import ParamSpec, Protocol
 
-from .compat import swap_current_task
+from .compat import PY_311, swap_current_task
 from .tools import Cancellable, cancelling
 from .tools import create_task as _create_task
 
@@ -835,16 +835,14 @@ def create_task(
         - Provides compatibility with Python 3.12+ asyncio.create_task() API
         - Works on all Python versions, not just 3.12+
     """
+
+    def real_task_factory(coro_arg: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
+        if PY_311:
+            return _create_task(coro_arg, name=name, context=context, **kwargs)  # type: ignore[call-arg]
+        else:
+            return _create_task(coro_arg, name=name, **kwargs)
+
     if eager_start:
-
-        def real_task_factory(coro_arg: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
-            # Handle context parameter compatibility (added in Python 3.11)
-            try:
-                return _create_task(coro_arg, name=name, context=context, **kwargs)  # type: ignore[call-arg]
-            except TypeError:
-                # Fallback for Python < 3.11 which doesn't support context parameter
-                return _create_task(coro_arg, name=name, **kwargs)
-
         return coro_eager_task_helper(
             asyncio.get_running_loop(),
             coro,
@@ -854,17 +852,7 @@ def create_task(
         )
 
     else:
-        # Delegate to standard asyncio.create_task()
-        # Handle context parameter compatibility (added in Python 3.11)
-        try:
-            return _create_task(coro, name=name, context=context, **kwargs)  # type: ignore[call-arg]
-        except TypeError:
-            # Fallback for Python < 3.11 which doesn't support context parameter
-            if context is not None:
-                # For older Python versions, we can't pass context to create_task
-                # This is a limitation of the older asyncio API
-                pass
-            return _create_task(coro, name=name, **kwargs)
+        return real_task_factory(coro)
 
 
 class GhostTaskHelper:
