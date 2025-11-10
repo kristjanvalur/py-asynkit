@@ -19,34 +19,85 @@ from typing import Any
 import asynkit
 
 
-def filter_outliers(
-    data: list[float], sigma_threshold: float = 4.0
+def find_outlier_indices_iqr(
+    data: list[float], iqr_multiplier: float = 1.5
+) -> set[int]:
+    """
+    Find outlier indices using Interquartile Range (IQR) method.
+
+    More robust than sigma-based filtering for non-normal distributions
+    common in performance data (right-skewed, heavy tails).
+
+    Args:
+        data: List of measurements to analyze
+        iqr_multiplier: Multiplier for IQR to define outlier bounds (1.5 is standard)
+
+    Returns:
+        set: Indices of outlier values
+    """
+    if len(data) <= 4:  # Need at least 4 points for meaningful IQR
+        return set()
+
+    # Calculate quartiles
+    sorted_data = sorted(data)
+    n = len(sorted_data)
+
+    # Use standard quartile calculation (method matches numpy/pandas)
+    q1_idx = (n - 1) * 0.25
+    q3_idx = (n - 1) * 0.75
+
+    # Linear interpolation for non-integer indices
+    def interpolate_quartile(idx: float) -> float:
+        lower = int(idx)
+        upper = min(lower + 1, n - 1)
+        weight = idx - lower
+        return sorted_data[lower] * (1 - weight) + sorted_data[upper] * weight
+
+    q1 = interpolate_quartile(q1_idx)
+    q3 = interpolate_quartile(q3_idx)
+    iqr = q3 - q1
+
+    if iqr == 0:  # All values identical
+        return set()
+
+    # Define outlier bounds
+    lower_bound = q1 - iqr_multiplier * iqr
+    upper_bound = q3 + iqr_multiplier * iqr
+
+    # Find outlier indices
+    outlier_indices = set()
+    for i, value in enumerate(data):
+        if value < lower_bound or value > upper_bound:
+            outlier_indices.add(i)
+
+    return outlier_indices
+
+
+def filter_outliers_iqr(
+    data: list[float], iqr_multiplier: float = 1.5
 ) -> tuple[list[float], int]:
     """
-    Filter outliers from data using standard deviation method.
+    Filter outliers using Interquartile Range (IQR) method.
+
+    DEPRECATED: Use find_outlier_indices_iqr() for index-based filtering
+    to ensure consistent run-level filtering across multiple metrics.
+
+    Args:
+        data: List of measurements to filter
+        iqr_multiplier: Multiplier for IQR to define outlier bounds (1.5 is standard)
 
     Returns:
         tuple: (filtered_data, num_outliers_removed)
     """
-    if len(data) <= 2:
-        return data, 0
-
-    mean = statistics.mean(data)
-    std_dev = statistics.stdev(data)
-
-    if std_dev == 0:
-        return data, 0
-
-    filtered = [x for x in data if abs(x - mean) <= sigma_threshold * std_dev]
-    num_removed = len(data) - len(filtered)
-
-    return filtered, num_removed
+    outlier_indices = find_outlier_indices_iqr(data, iqr_multiplier)
+    filtered = [data[i] for i in range(len(data)) if i not in outlier_indices]
+    return filtered, len(outlier_indices)
 
 
 # Test parameters
 NUM_TASKS = 100
 NUM_SLEEPS_PER_TASK = 100
-NUM_BENCHMARK_RUNS = 10  # Number of consecutive runs (first run discarded as warmup)
+NUM_BENCHMARK_RUNS = 15  # Number of consecutive runs (first run discarded as warmup)
 WARMUP_RUNS = 1  # Number of initial runs to discard
 
 # Global list to collect latency measurements
@@ -185,9 +236,9 @@ class PerformanceTest:
                 adjustment_factor = 1000 if self.is_non_eager else 1
                 adjusted_latencies = [lat / adjustment_factor for lat in latencies]
 
-                # Filter outliers before calculating statistics
-                filtered_latencies, num_outliers = filter_outliers(
-                    adjusted_latencies, sigma_threshold=2.0
+                # Filter outliers before calculating statistics using IQR method
+                filtered_latencies, num_outliers = filter_outliers_iqr(
+                    adjusted_latencies, iqr_multiplier=1.5
                 )
 
                 # Calculate statistics for this run (using filtered data)
@@ -217,34 +268,87 @@ class PerformanceTest:
                     all_latency_results.append(run_latency_stats)
                     all_throughput_results.append(throughput)
 
-            # Calculate cross-run statistics
+            # Extract cross-run data
             mean_latencies = [result["mean"] for result in all_latency_results]
             median_latencies = [result["median"] for result in all_latency_results]
             min_latencies = [result["min"] for result in all_latency_results]
             max_latencies = [result["max"] for result in all_latency_results]
             std_dev_latencies = [result["std_dev"] for result in all_latency_results]
 
-            # Aggregate latency statistics across runs
+            # Apply IQR filtering to identify outlier runs across both latency and throughput
+            latency_outlier_indices = find_outlier_indices_iqr(mean_latencies)
+            throughput_outlier_indices = find_outlier_indices_iqr(
+                all_throughput_results
+            )
+
+            # Union of outlier indices - a run is excluded if it's an outlier in ANY metric
+            all_outlier_indices = latency_outlier_indices | throughput_outlier_indices
+
+            # Create filtered datasets using the same set of "good runs"
+            good_run_indices = [
+                i
+                for i in range(len(all_latency_results))
+                if i not in all_outlier_indices
+            ]
+
+            filtered_mean_latencies = [mean_latencies[i] for i in good_run_indices]
+            filtered_median_latencies = [median_latencies[i] for i in good_run_indices]
+            filtered_min_latencies = [min_latencies[i] for i in good_run_indices]
+            filtered_max_latencies = [max_latencies[i] for i in good_run_indices]
+            filtered_std_dev_latencies = [
+                std_dev_latencies[i] for i in good_run_indices
+            ]
+            filtered_throughput = [all_throughput_results[i] for i in good_run_indices]
+
+            # Warn about cross-run outliers (shouldn't happen with good methodology)
+            num_outlier_runs = len(all_outlier_indices)
+            if num_outlier_runs > 0:
+                print(
+                    f"\n  WARNING: {num_outlier_runs} outlier runs detected and excluded!"
+                )
+                print(f"    Latency outliers: {len(latency_outlier_indices)} runs")
+                print(
+                    f"    Throughput outliers: {len(throughput_outlier_indices)} runs"
+                )
+                print(
+                    f"    Total excluded runs: {num_outlier_runs}/{len(all_latency_results)}"
+                )
+                print(
+                    "    This may indicate system interference or measurement issues."
+                )
+                if latency_outlier_indices:
+                    print(
+                        f"    Latency outlier run indices: {sorted(latency_outlier_indices)}"
+                    )
+                if throughput_outlier_indices:
+                    print(
+                        f"    Throughput outlier run indices: {sorted(throughput_outlier_indices)}"
+                    )
+
+            # Aggregate latency statistics across runs (using same filtered runs for all metrics)
             final_latency_stats = {
-                "mean": statistics.mean(mean_latencies),
-                "mean_std": statistics.stdev(mean_latencies)
-                if len(mean_latencies) > 1
+                "mean": statistics.mean(filtered_mean_latencies),
+                "mean_std": statistics.stdev(filtered_mean_latencies)
+                if len(filtered_mean_latencies) > 1
                 else 0,
-                "median": statistics.mean(median_latencies),
-                "median_std": statistics.stdev(median_latencies)
-                if len(median_latencies) > 1
+                "median": statistics.mean(filtered_median_latencies),
+                "median_std": statistics.stdev(filtered_median_latencies)
+                if len(filtered_median_latencies) > 1
                 else 0,
-                "min": min(min_latencies),
-                "max": max(max_latencies),
-                "std_dev": statistics.mean(std_dev_latencies),
+                "min": min(filtered_min_latencies) if filtered_min_latencies else 0,
+                "max": max(filtered_max_latencies) if filtered_max_latencies else 0,
+                "std_dev": statistics.mean(filtered_std_dev_latencies)
+                if filtered_std_dev_latencies
+                else 0,
                 "runs": len(all_latency_results),
+                "runs_used": len(good_run_indices),  # Track how many runs used
             }
 
-            # Aggregate throughput statistics
-            final_throughput = statistics.mean(all_throughput_results)
+            # Aggregate throughput statistics (using same filtered runs)
+            final_throughput = statistics.mean(filtered_throughput)
             throughput_std = (
-                statistics.stdev(all_throughput_results)
-                if len(all_throughput_results) > 1
+                statistics.stdev(filtered_throughput)
+                if len(filtered_throughput) > 1
                 else 0
             )
 
@@ -260,9 +364,13 @@ class PerformanceTest:
             )
 
             # Display final results
-            print(
-                f"\nFinal Results (averaged over {final_latency_stats['runs']} runs):"
+            runs_info = (
+                f"{final_latency_stats['runs_used']}/{final_latency_stats['runs']} runs"
             )
+            if final_latency_stats["runs_used"] < final_latency_stats["runs"]:
+                runs_info += " (cross-run outliers filtered)"
+
+            print(f"\nFinal Results (averaged over {runs_info}):")
             print(
                 f"  Mean latency: {final_latency_stats['mean']:.2f} ± {final_latency_stats['mean_std']:.2f} μs"
             )
@@ -280,7 +388,7 @@ class PerformanceTest:
             )
             if total_outliers > 0:
                 print(
-                    f"  Outliers filtered: {total_outliers}/{total_samples} ({outlier_percentage:.1f}%) using 2σ threshold"
+                    f"  Per-run outliers filtered: {total_outliers}/{total_samples} ({outlier_percentage:.1f}%) using IQR method (1.5×IQR)"
                 )
 
             return {
@@ -503,7 +611,9 @@ async def main():
     print("      Non-eager latency shows minimum possible delay (tight creation loop)")
     print("      Real-world non-eager latency increases with work done before await")
     print("      Eager latency remains consistent regardless of intervening work")
-    print(f"      All values averaged over {NUM_BENCHMARK_RUNS} runs (±std dev)")
+    print(
+        f"      All values averaged over {NUM_BENCHMARK_RUNS} runs with two-level IQR filtering (±std dev)"
+    )
 
     print("\nLatency to First Yield (microseconds):")
     print(
