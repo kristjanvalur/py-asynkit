@@ -928,7 +928,11 @@ def coro_eager_task_helper(
         # eager start.  This is not the same task as will be created later. This
         # is purely to satisfy get_current_task() calls during eager start, such
         # as for anyio that wants to detect the current async framework.
-        old = swap_current_task(loop, _get_ghost_task(loop, real_task_factory))
+        try:
+            old = swap_current_task(loop, _get_ghost_task(loop, real_task_factory))
+        except RuntimeError:
+            # event loop is closed, cannot create ghost task
+            old = None
         try:
             if context is None:
                 cs = CoroStart(coro, context=copy_context())
@@ -937,7 +941,11 @@ def coro_eager_task_helper(
                 # This way the continuation won't try to re-enter the context
                 cs = context.run(lambda: CoroStart(coro, context=None))
         finally:
-            swap_current_task(loop, old)
+            try:
+                swap_current_task(loop, old)
+            except RuntimeError:
+                # event loop is closed, cannot swap back
+                pass
 
     # if the coroutine is not done, set it as the awaitable for the helper and
     # return the task

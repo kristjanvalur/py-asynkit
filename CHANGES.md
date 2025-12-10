@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- **Eager Task Factory Shutdown**: Fixed crash during event loop shutdown with async generators
+  - The eager task factory now handles the case where `get_running_loop()` fails during shutdown
+  - Previously, `asyncio.run()` would crash when cleaning up non-exhausted async generators
+  - During shutdown, `shutdown_asyncgens()` creates tasks via the task factory, but the event loop is already shutting down
+  - Added comprehensive regression tests covering non-exhausted generators, exhausted generators, and multiple generators
+
 ## [0.17.3] - 2025-11-09
 
 ### Performance Improvements

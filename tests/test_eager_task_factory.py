@@ -851,3 +851,112 @@ class TestCreateTask:
 
         finally:
             loop.set_task_factory(old_factory)
+
+
+class TestEagerFactoryShutdown:
+    """Test eager task factory behavior during event loop shutdown.
+    
+    These tests verify that the eager task factory correctly handles async generator
+    cleanup during event loop shutdown. This is a regression test for an issue where
+    shutdown_asyncgens() would crash when calling get_running_loop() from the task
+    factory while the loop was shutting down.
+    """
+
+    def test_shutdown_with_non_exhausted_async_generator(self):
+        """Test that eager task factory handles shutdown with non-exhausted async generators.
+        
+        This is a regression test for an issue where asyncio.run() shutdown would crash
+        when using eager task factory. During shutdown, asyncio calls shutdown_asyncgens()
+        which creates tasks via the task factory, but get_running_loop() fails because
+        the loop is shutting down.
+        """
+        async def simple_async_generator():
+            yield 1
+            yield 2
+            yield 3
+
+        async def test_without_exhausting():
+            # Create and use async generator without exhausting it
+            gen = simple_async_generator()
+            first_value = await gen.__anext__()
+            assert first_value == 1
+            # Don't exhaust the generator - leave it open
+            # This will trigger asyncio shutdown_asyncgens() during asyncio.run() cleanup
+
+        # This should not raise RuntimeError about no running event loop
+        factory = asynkit.create_eager_factory()
+        loop = asyncio.new_event_loop()
+        loop.set_task_factory(factory)
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(test_without_exhausting())
+        finally:
+            # Cleanup - this is where shutdown_asyncgens() is called
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                asyncio.set_event_loop(None)
+                loop.close()
+
+    def test_shutdown_with_exhausted_async_generator(self):
+        """Test that eager task factory handles shutdown with exhausted async generators."""
+        async def simple_async_generator():
+            yield 1
+            yield 2
+
+        async def test_with_exhausting():
+            # Create and fully exhaust async generator
+            gen = simple_async_generator()
+            values = []
+            async for value in gen:
+                values.append(value)
+            assert values == [1, 2]
+
+        # This should also not raise during shutdown
+        factory = asynkit.create_eager_factory()
+        loop = asyncio.new_event_loop()
+        loop.set_task_factory(factory)
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(test_with_exhausting())
+        finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                asyncio.set_event_loop(None)
+                loop.close()
+
+    def test_shutdown_with_multiple_async_generators(self):
+        """Test shutdown with multiple non-exhausted async generators."""
+        async def generator_a():
+            yield "a1"
+            yield "a2"
+
+        async def generator_b():
+            yield "b1"
+            yield "b2"
+
+        async def test_multiple():
+            gen_a = generator_a()
+            gen_b = generator_b()
+            
+            # Use both generators without exhausting them
+            val_a = await gen_a.__anext__()
+            val_b = await gen_b.__anext__()
+            
+            assert val_a == "a1"
+            assert val_b == "b1"
+            # Leave both generators open
+
+        factory = asynkit.create_eager_factory()
+        loop = asyncio.new_event_loop()
+        loop.set_task_factory(factory)
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(test_multiple())
+        finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                asyncio.set_event_loop(None)
+                loop.close()
