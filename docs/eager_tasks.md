@@ -125,6 +125,7 @@ Use this for fine-grained control, selectively making specific tasks eager while
 1. **Both approaches always create a Task object**: Even if the coroutine completes synchronously, a Task is created
 2. **Compatibility**: May break code that relies on deferred task execution semantics
 3. **Python 3.12+ Only**: Not available in earlier Python versions
+4. **`asyncio.timeout()` incompatibility**: Python's native eager execution (3.12+) may also experience issues with `asyncio.timeout()` in concurrent scenarios, though this is less documented. Use `asyncio.wait_for()` as a safer alternative.
 
 ## asynkit's Eager Execution
 
@@ -635,6 +636,77 @@ async def detect_framework():
 ```
 
 This works because `sniffio` only needs to know that **some** task is current, not the specific task identity.
+
+## Known Issues and Limitations
+
+### `asyncio.timeout()` Incompatibility (Python 3.11+)
+
+**Both** Python's native eager execution and asynkit's eager execution have a known incompatibility with `asyncio.timeout()` context managers in Python 3.11+.
+
+#### The Problem
+
+When multiple coroutines execute eagerly in concurrent scenarios (e.g., with `asyncio.gather()`), they all run in the parent task's context before suspending. If these coroutines enter `asyncio.timeout()` contexts during the eager phase:
+
+1. All timeouts capture the **same parent task** reference
+2. When any timeout fires, it cancels the parent task
+3. `CancelledError` propagates to whichever coroutine is currently executing
+4. This is **not** the coroutine that owns the timeout
+
+#### Example Failure
+
+```python
+import asyncio
+import asynkit
+
+async def check_socket(name):
+    """Similar pattern to Redis's can_read_destructive()"""
+    try:
+        async with asyncio.timeout(0):  # Non-blocking timeout check
+            await asyncio.sleep(0)
+    except TimeoutError:
+        pass  # Expected
+    return f"checked-{name}"
+
+# With eager execution enabled:
+loop.set_task_factory(asynkit.eager_task_factory)
+results = await asyncio.gather(
+    check_socket("A"),
+    check_socket("B"),
+    check_socket("C")
+)
+# May raise CancelledError instead of completing successfully
+```
+
+#### Workarounds
+
+1. **Add `await asyncio.sleep(0)` before timeout** (simplest):
+   ```python
+   async def check_socket(name):
+       await asyncio.sleep(0)  # Force task creation
+       async with asyncio.timeout(0):  # Now safe
+           await asyncio.sleep(0)
+   ```
+   This forces task creation before entering the timeout context, ensuring each timeout has its own task reference.
+
+2. **Use `asyncio.wait_for()` instead**:
+   ```python
+   try:
+       await asyncio.wait_for(asyncio.sleep(0), timeout=0)
+   except asyncio.TimeoutError:
+       pass
+   ```
+
+3. **Disable eager execution for timeout-sensitive code**:
+   ```python
+   # Don't use @asynkit.eager on functions that use timeout(0)
+   async def check_socket(name):
+       async with asyncio.timeout(0):
+           ...
+   ```
+
+4. **For Python 3.12+, use native eager execution**: Python's native `asyncio.eager_task_factory` creates Tasks before eager execution, which may handle timeouts differently (though the same fundamental issue can occur).
+
+See [docs/asyncio_timeout_incompatibility.md](asyncio_timeout_incompatibility.md) for detailed analysis, reproduction cases, and experimental patches.
 
 ## Conclusion
 

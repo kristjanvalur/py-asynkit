@@ -240,6 +240,23 @@ Eager task factories provide **significant performance improvements** for task s
 
 See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance.md) for detailed performance analysis comparing asynkit's implementation with Python 3.14's native `eager_task_factory`.
 
+#### ⚠️ Known Limitations
+
+**Python 3.11+ `asyncio.timeout()` Incompatibility**: When using eager execution with Python 3.11+, there is a known incompatibility with `asyncio.timeout()` context managers in concurrent scenarios. During eager execution, multiple coroutines may enter `asyncio.timeout()` contexts before suspending, causing all timeouts to capture the same parent task reference. When timeouts fire, this can cause `CancelledError` to propagate to the wrong coroutines.
+
+**Workarounds**:
+- **Add `await asyncio.sleep(0)` before timeout** (simplest): Forces task creation before entering timeout context
+  ```python
+  await asyncio.sleep(0)  # Force task creation
+  async with asyncio.timeout(5):
+      await operation()
+  ```
+- Use `asyncio.wait_for()` instead of `asyncio.timeout()`
+- Disable eager execution for timeout-sensitive coroutines
+- For Python 3.12+, consider using Python's native `asyncio.eager_task_factory` instead
+
+See [docs/asyncio_timeout_incompatibility.md](docs/asyncio_timeout_incompatibility.md) for detailed analysis and additional workarounds.
+
 #### When to Use Task Factories vs. Decorators
 
 | Use Case | Recommendation |
