@@ -5,6 +5,7 @@ import contextlib
 import functools
 import inspect
 import sys
+import threading
 import types
 from asyncio import Future, Task
 from collections.abc import (
@@ -16,7 +17,7 @@ from collections.abc import (
     Generator,
     Iterator,
 )
-from contextvars import Context, copy_context
+from contextvars import Context, ContextVar, copy_context
 from types import FrameType
 from typing import (
     TYPE_CHECKING,
@@ -35,17 +36,31 @@ from .tools import Cancellable, cancelling
 from .tools import create_task as _create_task
 
 # Try to import C extension for performance-critical components
-try:
-    from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[attr-defined]
-    from ._cext import get_build_info as _get_c_build_info  # type: ignore[attr-defined]
+# Can be disabled by setting ASYNKIT_DISABLE_C_EXT environment variable
+import os
 
-    _HAVE_C_EXTENSION = (
-        True  # Re-enabled - C extension now has continued/pending methods
-    )
-except ImportError:
+_FORCE_PURE_PYTHON = os.environ.get("ASYNKIT_DISABLE_C_EXT", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
+if _FORCE_PURE_PYTHON:
     _CCoroStartBase = None
     _get_c_build_info = None
     _HAVE_C_EXTENSION = False
+else:
+    try:
+        from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[attr-defined]
+        from ._cext import get_build_info as _get_c_build_info  # type: ignore[attr-defined]
+
+        _HAVE_C_EXTENSION = (
+            True  # Re-enabled - C extension now has continued/pending methods
+        )
+    except ImportError:
+        _CCoroStartBase = None
+        _get_c_build_info = None
+        _HAVE_C_EXTENSION = False
 
 
 def get_implementation_info() -> dict[str, Any]:
@@ -123,6 +138,106 @@ T_co = TypeVar("T_co", covariant=True)
 Suspendable = (
     Coroutine[Any, Any, Any] | Generator[Any, Any, Any] | AsyncGenerator[Any, Any]
 )
+
+# Thread-local to track eager execution depth
+# When CoroStart is running eagerly (before suspending), it increments this counter.
+# This allows us to detect when asyncio.timeout() is entered during eager execution
+# and force a task switch before the timeout context is fully entered.
+# We use thread-local instead of ContextVar because CoroStart may run in a copied context,
+# and we need the depth to be visible across context boundaries within the same thread.
+_eager_corostart_state = threading.local()
+
+
+def _get_eager_depth() -> int:
+    """Get current eager execution depth for this thread."""
+    return getattr(_eager_corostart_state, "depth", 0)
+
+
+def _set_eager_depth(depth: int) -> None:
+    """Set eager execution depth for this thread."""
+    _eager_corostart_state.depth = depth
+
+# Patch asyncio.Timeout to be compatible with eager execution
+# During eager execution, multiple coroutines run in the parent task's context.
+# If they enter asyncio.timeout() contexts, all timeouts capture the same parent task.
+# When timeouts fire, they cancel the parent task, causing CancelledError to propagate
+# to the wrong coroutines. To fix this, we force a task switch before entering the
+# timeout context during eager execution, ensuring each timeout has its own task.
+if PY_311:  # asyncio.timeout() was introduced in Python 3.11
+    import logging as _logging
+
+    _timeout_patch_logger = _logging.getLogger(__name__ + ".timeout_patch")
+
+    # Store original __aenter__ method
+    _original_timeout_aenter = asyncio.Timeout.__aenter__
+
+    async def _patched_timeout_aenter(self: asyncio.Timeout) -> asyncio.Timeout:
+        # Check if we're in eager execution
+        depth = _get_eager_depth()
+        if depth > 0:
+            _timeout_patch_logger.debug(
+                f"Timeout.__aenter__ called during eager execution (depth={depth}), "
+                "forcing task switch with sleep(0)"
+            )
+            # Force task creation by yielding control
+            # This ensures the timeout context has a proper task reference
+            await asyncio.sleep(0)
+            _timeout_patch_logger.debug("Task switch completed, timeout will now enter")
+
+        # Call original __aenter__
+        return await _original_timeout_aenter(self)
+
+    # Apply the __aenter__ patch
+    asyncio.Timeout.__aenter__ = _patched_timeout_aenter  # type: ignore[method-assign]
+
+    # Also need to patch asyncio.timeout() function itself
+    # The timeout() function calls get_running_loop() immediately, which fails during
+    # eager execution since there's no running loop. We wrap it to force task creation
+    # before calling the original timeout() function.
+    _original_timeout_func = asyncio.timeout
+
+    def _patched_timeout_func(delay: float | None) -> asyncio.Timeout:
+        """Patched timeout function that handles eager execution."""
+        depth = _get_eager_depth()
+        if depth > 0:
+            _timeout_patch_logger.debug(
+                f"asyncio.timeout() called during eager execution (depth={depth}), "
+                "creating wrapper that will force task switch"
+            )
+            # We can't call get_running_loop() here, so we return a special wrapper
+            # that will force the task switch when entered
+            class EagerTimeoutWrapper:
+                """Wrapper for Timeout that handles eager execution."""
+                
+                def __init__(self, delay: float | None):
+                    self.delay = delay
+                    self._real_timeout: asyncio.Timeout | None = None
+                
+                async def __aenter__(self) -> asyncio.Timeout:
+                    # Force task creation by yielding control
+                    _timeout_patch_logger.debug(
+                        "EagerTimeoutWrapper forcing task switch with sleep(0)"
+                    )
+                    await asyncio.sleep(0)
+                    _timeout_patch_logger.debug(
+                        "Task switch completed, creating real Timeout"
+                    )
+                    # Now we have a running loop and can create the real timeout
+                    self._real_timeout = _original_timeout_func(self.delay)
+                    return await self._real_timeout.__aenter__()
+                
+                async def __aexit__(self, *args: Any) -> bool | None:
+                    if self._real_timeout is None:
+                        raise RuntimeError("__aexit__ called before __aenter__")
+                    return await self._real_timeout.__aexit__(*args)
+            
+            return EagerTimeoutWrapper(delay)  # type: ignore[return-value]
+        else:
+            # Normal execution, use original function
+            return _original_timeout_func(delay)
+
+    # Apply the timeout() function patch
+    asyncio.timeout = _patched_timeout_func  # type: ignore[assignment]
 
 
 class CAwaitable(Awaitable[T_co], Cancellable, Protocol):
@@ -246,6 +361,8 @@ class CoroStartBase(Awaitable[T_co]):
     ):
         self.coro = coro
         self.context = context
+        if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+            print(f"[COROSTART] __init__ {id(self)}: coro={coro}", file=sys.stderr)
         self._start_result: tuple[Any, BaseException | None] | None = self._start()
 
     def _start(self) -> tuple[Any, BaseException | None]:
@@ -254,21 +371,32 @@ class CoroStartBase(Awaitable[T_co]):
         point or until it raises an exception or returns a value, whichever comes
         first. Returns a tuple of (result, exception) for the initial execution.
         """
+        # Track eager execution depth using thread-local storage
+        current_depth = _get_eager_depth()
+        new_depth = current_depth + 1
+        _set_eager_depth(new_depth)
+        
         try:
-            return (
+            result = (
                 self.context.run(self.coro.send, None)
                 if self.context is not None
                 else self.coro.send(None)
             ), None
+            return result
         except BaseException as exception:
             # Coroutine returned without blocking
             return (None, exception)
+        finally:
+            # Restore eager execution depth
+            _set_eager_depth(current_depth)
 
     def __await__(self) -> Generator[Any, Any, T_co]:
         """
         Resume the execution of the started coroutine.  CoroStartBase is an
         _awaitable_.
         """
+        if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+            print(f"[COROSTART] __await__ {id(self)}: entering", file=sys.stderr)
         if self._start_result is None:
             # continued coroutine, trigger the "cannot reuse" error
             self.coro.send(None)
@@ -279,7 +407,11 @@ class CoroStartBase(Awaitable[T_co]):
         # process any exception generated by the initial start
         if exc:
             if isinstance(exc, StopIteration):
+                if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+                    print(f"[COROSTART] __await__ {id(self)}: returning StopIteration value", file=sys.stderr)
                 return cast(T_co, exc.value)
+            if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+                print(f"[COROSTART] __await__ {id(self)}: raising exception {type(exc).__name__}", file=sys.stderr)
             raise exc
 
         # yield up the initial future from `coro_start`.
@@ -287,8 +419,14 @@ class CoroStartBase(Awaitable[T_co]):
         # except that it uses a coroutine's send() and throw() methods.
         while True:
             try:
+                if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+                    print(f"[COROSTART] __await__ {id(self)}: yielding {type(out_value).__name__}", file=sys.stderr)
                 in_value = yield out_value
+                if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+                    print(f"[COROSTART] __await__ {id(self)}: resumed with {type(in_value).__name__}", file=sys.stderr)
             except GeneratorExit:
+                if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+                    print(f"[COROSTART] __await__ {id(self)}: received GeneratorExit, closing coro", file=sys.stderr)
                 self.coro.close()
                 raise
             except BaseException as exc:
@@ -316,6 +454,8 @@ class CoroStartBase(Awaitable[T_co]):
         and makes the CoroStart either pending() or done() as appropriate,
         to be awaited later.
         """
+        if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+            print(f"[COROSTART] _throw() {id(self)}: throwing {exc}", file=sys.stderr)
         value = exc if isinstance(exc, BaseException) else exc()
         try:
             self._start_result = (
@@ -327,6 +467,8 @@ class CoroStartBase(Awaitable[T_co]):
                 None,
             )
         except BaseException as exception:
+            if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+                print(f"[COROSTART] _throw() {id(self)}: threw exception raised {type(exception).__name__}", file=sys.stderr)
             self._start_result = (None, exception)
 
     def close(self) -> None:
@@ -334,6 +476,10 @@ class CoroStartBase(Awaitable[T_co]):
         Close the coroutine.  It must immediately exit.
         Respects context if provided.
         """
+        if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+            print(f"[COROSTART] close() {id(self)}: closing coro", file=sys.stderr)
+            import traceback
+            traceback.print_stack(file=sys.stderr)
         # Always close the underlying coroutine
         if self.context is not None:
             self.context.run(self.coro.close)
@@ -462,6 +608,8 @@ class CoroStartMixin(Generic[T_co]):
         Continue execution of the coroutine that was started by start().
         Returns a coroutine which can be awaited
         """
+        if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+            print(f"[COROSTART] as_coroutine() {id(self)}: called", file=sys.stderr)
         return await self
 
     def as_future(self) -> Future_Type[T_co]:
@@ -950,8 +1098,15 @@ def coro_eager_task_helper(
     # if the coroutine is not done, set it as the awaitable for the helper and
     # return the task
     if not cs.done():
-        return real_task_factory(cs.as_coroutine())
+        if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+            print(f"[EAGER] CoroStart {id(cs)} not done, creating task", file=sys.stderr)
+        task = real_task_factory(cs.as_coroutine())
+        if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+            print(f"[EAGER] Created task {task.get_name()} for CoroStart {id(cs)}", file=sys.stderr)
+        return task
     else:
+        if os.environ.get("ASYNKIT_DEBUG_COROSTART"):
+            print(f"[EAGER] CoroStart {id(cs)} done, returning TaskLikeFuture", file=sys.stderr)
         return TaskLikeFuture(cs, name=name, context=context)
 
 
