@@ -1,6 +1,6 @@
 [project]
 name = "asynkit"
-version = "0.17.3"
+version = "0.17.4"
 description = "A toolkit for Python coroutines"
 authors = [
     {name = "Kristján Valur Jónsson", email = "sweskman@gmail.com"}

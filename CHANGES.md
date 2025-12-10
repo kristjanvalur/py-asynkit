@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.4] - 2025-12-10
+
 ### Bug Fixes
 
 - **Eager Task Factory Shutdown**: Fixed crash during event loop shutdown with async generators
@@ -11,6 +13,20 @@ All notable changes to this project will be documented in this file.
   - Previously, `asyncio.run()` would crash when cleaning up non-exhausted async generators
   - During shutdown, `shutdown_asyncgens()` creates tasks via the task factory, but the event loop is already shutting down
   - Added comprehensive regression tests covering non-exhausted generators, exhausted generators, and multiple generators
+
+### Documentation
+
+- **asyncio.timeout() Incompatibility Warning**: Added prominent documentation about known limitation with Python 3.11+ `asyncio.timeout()`
+  - During eager execution, multiple coroutines may share parent task context
+  - Timeout contexts can capture same task reference, causing `CancelledError` to propagate incorrectly
+  - Added "Known Limitations" section in README.md under eager_task_factory
+  - Added comprehensive "Known Issues and Limitations" section in docs/eager_tasks.md
+  - Documented workarounds:
+    - Add `await asyncio.sleep(0)` before timeout (simplest - forces task creation)
+    - Use `asyncio.wait_for()` instead of `asyncio.timeout()`
+    - Disable eager execution for timeout-sensitive code
+    - For Python 3.12+, consider native `asyncio.eager_task_factory`
+  - Detailed analysis available in docs/asyncio_timeout_incompatibility.md (on fix/asyncio-timeout-eager-compat branch)
 
 ## [0.17.3] - 2025-11-09
 
