@@ -209,9 +209,11 @@ task = asyncio.create_task(my_coroutine())
 import asyncio
 import asynkit
 
+
 # Create a custom eager factory with a custom Task class
 class MyTask(asyncio.Task):
     pass
+
 
 loop = asyncio.get_running_loop()
 eager_factory = asynkit.create_eager_task_factory(MyTask)
@@ -245,10 +247,11 @@ See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance
 
 #### ⚠️ Known Limitations
 
-**`asyncio.timeout()` Incompatibility**: When using eager execution, there is a known incompatibility with `asyncio.timeout()`.  The context manager captures the currently
-executing task to cancel.  But during eager start, the *current* is the parent task.  This will cause the timeout to manifest as a `CancelledError` in the parent task.
+**`asyncio.timeout()` Incompatibility**: When using eager execution, there is a known incompatibility with `asyncio.timeout()`. The context manager captures the currently
+executing task to cancel. But during eager start, the *current* is the parent task. This will cause the timeout to manifest as a `CancelledError` in the parent task.
 
 **Workarounds**:
+
 - **Add `await asyncio.sleep(0)` before timeout** (simplest): Forces task creation before entering timeout context
   ```python
   await asyncio.sleep(0)  # Force task creation

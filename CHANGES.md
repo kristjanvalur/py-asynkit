@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **API Rename**: `create_eager_factory()` renamed to `create_eager_task_factory()` to match Python 3.12 API
+  - Signature updated: `custom_task_constructor` parameter (required) instead of `inner_factory` (optional)
+  - Now matches `asyncio.create_eager_task_factory()` signature from Python 3.12+
+  - Pre-created `eager_task_factory` instance unchanged
+  - Added to compatibility layer: `asyncio.create_eager_task_factory` available on Python < 3.12 via `asynkit.compat.enable_eager_tasks()`
+
+### Bug Fixes
+
+- **Eager Execution Loop Mismatch**: Fixed eager execution when running event loop doesn't match task's loop
+  - When the running event loop does not match the one for which the task is created, eager execution should not be attempted
+  - This includes during creation of the initial task for the loop (before the loop is marked as "running")
+  - Previously, eager execution during task factory time would fail with "RuntimeError: no running event loop"
+  - Now correctly detects loop mismatch and falls back to standard task creation
+  - Added regression tests demonstrating the fix with both `run_until_complete()` and `asyncio.run()` patterns
+  - Note: Python 3.12+ native `asyncio.create_eager_task_factory()` already handles this correctly
+
 ## [0.17.4] - 2025-12-10
 
 ### Bug Fixes
@@ -364,7 +382,7 @@ All notable changes to this project will be documented in this file.
 ### New Features
 
 - **Eager Task Factory**: Added comprehensive eager task factory implementation with Python 3.12 API compatibility
-  - `create_eager_task_factory()` function for creating custom eager task factories
+  - `create_eager_factory()` function for creating custom eager task factories
   - `eager_task_factory` module-level instance ready for immediate use
   - Provides the same API as Python 3.12's native `asyncio.eager_task_factory` while supporting Python 3.10+
   - Version-aware context parameter support (Python 3.11+ only)

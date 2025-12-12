@@ -659,6 +659,7 @@ This affects **both single tasks and concurrent scenarios**. With multiple eager
 import asyncio
 import asynkit
 
+
 async def check_socket(name):
     """Similar pattern to Redis's can_read_destructive()"""
     try:
@@ -668,28 +669,28 @@ async def check_socket(name):
         pass  # Expected
     return f"checked-{name}"
 
+
 # With eager execution enabled:
 loop.set_task_factory(asynkit.eager_task_factory)
-results = await asyncio.gather(
-    check_socket("A"),
-    check_socket("B"),
-    check_socket("C")
-)
+results = await asyncio.gather(check_socket("A"), check_socket("B"), check_socket("C"))
 # May raise CancelledError instead of completing successfully
 ```
 
 #### Workarounds
 
 1. **Add `await asyncio.sleep(0)` before timeout** (simplest):
+
    ```python
    async def check_socket(name):
        await asyncio.sleep(0)  # Force task creation
        async with asyncio.timeout(0):  # Now safe
            await asyncio.sleep(0)
    ```
+
    This forces task creation before entering the timeout context, ensuring each timeout has its own task reference.
 
 2. **Disable eager execution for timeout-sensitive code**:
+
    ```python
    # Don't use @asynkit.eager on functions that use timeout(0)
    async def check_socket(name):

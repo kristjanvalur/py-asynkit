@@ -693,13 +693,6 @@ def create_eager_task_factory(
 
     The signature matches Python 3.12+'s asyncio.create_eager_task_factory().
 
-    TODO: Python 3.12+ has native asyncio.create_eager_task_factory() that solves
-    the "no running event loop" issue during initial task creation. We should:
-    1. Fix our implementation to be compatible (handle loop not running yet)
-    2. Add it to the compat layer to use native on 3.12+ when available
-    See: tests/test_eager_task_factory.py::TestEagerFactoryInitialTaskRegression
-    for demonstration of the bug and comparison with native implementation.
-
     Args:
         custom_task_constructor: A callable used to create tasks when coroutines
             don't complete synchronously. Typically asyncio.Task or a Task subclass.
