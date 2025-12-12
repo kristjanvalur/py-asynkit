@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.5] - 2025-12-12
+
 ### Breaking Changes
 
 - **API Rename**: `create_eager_factory()` renamed to `create_eager_task_factory()` to match Python 3.12 API
