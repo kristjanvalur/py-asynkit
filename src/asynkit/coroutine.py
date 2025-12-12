@@ -99,7 +99,7 @@ __all__ = [
     "eager",
     "eager_ctx",
     "get_implementation_info",
-    "create_eager_factory",
+    "create_eager_task_factory",
     "eager_task_factory",
     "create_task",
     "TaskLikeFuture",
@@ -680,8 +680,8 @@ class TaskLikeFuture(Future[T]):
         self._context = context
 
 
-def create_eager_factory(
-    inner_factory: Callable[..., Task[Any]] | None = None,
+def create_eager_task_factory(
+    custom_task_constructor: Callable[..., Task[Any]],
 ) -> Callable[..., Any]:
     """
     Create a task factory that applies eager execution to all coroutines.
@@ -691,18 +691,19 @@ def create_eager_factory(
     execution means the coroutine starts immediately and runs until it blocks,
     potentially completing synchronously without creating a Task.
 
+    The signature matches Python 3.12+'s asyncio.create_eager_task_factory().
+
     TODO: Python 3.12+ has native asyncio.create_eager_task_factory() that solves
     the "no running event loop" issue during initial task creation. We should:
     1. Fix our implementation to be compatible (handle loop not running yet)
-    2. Rename this to avoid conflict with the native name
-    3. Add it to the compat layer to use native on 3.12+ when available
+    2. Add it to the compat layer to use native on 3.12+ when available
     See: tests/test_eager_task_factory.py::TestEagerFactoryInitialTaskRegression
     for demonstration of the bug and comparison with native implementation.
 
     Args:
-        inner_factory: Optional task factory to delegate to when coroutines
-            actually need to be scheduled. If None, falls back to creating
-            asyncio.Task instances directly.
+        custom_task_constructor: A callable used to create tasks when coroutines
+            don't complete synchronously. Typically asyncio.Task or a Task subclass.
+            This matches the signature of Python 3.12's implementation.
 
     Returns:
         A task factory function with signature (loop, coro, **kwargs) ->
@@ -717,14 +718,9 @@ def create_eager_factory(
         import asyncio
         import asynkit
 
-        # Option 1: Simple usage (replaces any existing factory)
-        factory = asynkit.create_eager_factory()
+        # Create eager task factory (standard signature)
+        factory = asynkit.create_eager_task_factory(asyncio.Task)
         loop = asyncio.get_running_loop()
-        loop.set_task_factory(factory)
-
-        # Option 2: Preserve existing factory by chaining
-        old_factory = loop.get_task_factory()
-        factory = asynkit.create_eager_factory(old_factory)
         loop.set_task_factory(factory)
 
         # Now all tasks created will execute eagerly
@@ -737,29 +733,16 @@ def create_eager_factory(
         ```
 
     Notes:
-        - This is a different mechanism from Python 3.12's native eager execution
-          feature. Python 3.12 provides `asyncio.eager_task_factory`. Our
-          implementation works on all Python versions but may not always create
+        - This implementation works on all Python versions but may not always create
           a real Task - synchronous coroutines get a TaskLikeFuture instead.
         - All kwargs from asyncio.create_task() are properly forwarded to the
-          inner factory when delegation occurs.
-        - If you want to preserve an existing task factory, explicitly pass it
-          as inner_factory rather than relying on automatic detection.
+          custom_task_constructor when delegation occurs.
 
     See Also:
         - `eager()`: Apply eager execution to individual coroutines
         - `coro_eager()`: Lower-level eager execution function
         - `TaskLikeFuture`: Future subclass with Task-like methods
     """
-
-    if inner_factory is None:
-
-        def inner_factory(
-            loop: asyncio.AbstractEventLoop,
-            coro: Coroutine[Any, Any, Any],
-            **kwargs: Any,
-        ) -> Any:
-            return asyncio.Task(coro, loop=loop, **kwargs)
 
     def factory(
         loop: asyncio.AbstractEventLoop, coro: Coroutine[Any, Any, Any], **kwargs: Any
@@ -777,7 +760,7 @@ def create_eager_factory(
         def real_task_factory(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
             # this inner factory must not be eager!
             kwargs.pop("eager_start", None)  # remove incompatible eager_start
-            return inner_factory(loop, coro, **kwargs)
+            return custom_task_constructor(coro, loop=loop, **kwargs)
 
         return coro_eager_task_helper(loop, coro, name, context, real_task_factory)
 
@@ -786,8 +769,8 @@ def create_eager_factory(
 
 #: Pre-created eager task factory instance for easy use.
 #:
-#: This is equivalent to ``create_eager_factory()`` and can be used directly
-#: with ``loop.set_task_factory()`` for the same behavior as Python 3.12's
+#: This is equivalent to ``create_eager_task_factory(asyncio.Task)`` and can be used
+#: directly with ``loop.set_task_factory()`` for the same behavior as Python 3.12's
 #: ``asyncio.eager_task_factory``.
 #:
 #: Example:
@@ -795,7 +778,7 @@ def create_eager_factory(
 #:     >>> import asynkit
 #:     >>> loop = asyncio.get_running_loop()
 #:     >>> loop.set_task_factory(asynkit.eager_task_factory)
-eager_task_factory = create_eager_factory()
+eager_task_factory = create_eager_task_factory(asyncio.Task)
 
 
 def create_task(
@@ -839,7 +822,7 @@ def create_task(
 
     Notes:
         - When eager_start=True, may return TaskLikeFuture instead of Task for
-          synchronous completion, similar to create_eager_factory behavior
+          synchronous completion, similar to create_eager_task_factory behavior
         - Provides compatibility with Python 3.12+ asyncio.create_task() API
         - Works on all Python versions, not just 3.12+
     """

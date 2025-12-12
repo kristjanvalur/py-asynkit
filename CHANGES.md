@@ -364,7 +364,7 @@ All notable changes to this project will be documented in this file.
 ### New Features
 
 - **Eager Task Factory**: Added comprehensive eager task factory implementation with Python 3.12 API compatibility
-  - `create_eager_factory()` function for creating custom eager task factories
+  - `create_eager_task_factory()` function for creating custom eager task factories
   - `eager_task_factory` module-level instance ready for immediate use
   - Provides the same API as Python 3.12's native `asyncio.eager_task_factory` while supporting Python 3.10+
   - Version-aware context parameter support (Python 3.11+ only)

@@ -110,7 +110,7 @@ class TestEagerTaskFactoryContext:
             return "task_completed"
 
         # Set up eager factory
-        factory = asynkit.create_eager_factory()
+        factory = asynkit.create_eager_task_factory(asyncio.Task)
         loop = asyncio.get_running_loop()
         old_factory = loop.get_task_factory()
         loop.set_task_factory(factory)
@@ -235,7 +235,7 @@ class TestEagerTaskFactoryContext:
             return "custom_context_task"
 
         # Set up eager factory
-        factory = asynkit.create_eager_factory()
+        factory = asynkit.create_eager_task_factory(asyncio.Task)
         loop = asyncio.get_running_loop()
         old_factory = loop.get_task_factory()
         loop.set_task_factory(factory)
@@ -324,7 +324,7 @@ class TestEagerTaskFactoryContext:
             return "debug_complete"
 
         # Set up eager factory
-        factory = asynkit.create_eager_factory()
+        factory = asynkit.create_eager_task_factory(asyncio.Task)
         loop = asyncio.get_running_loop()
         old_factory = loop.get_task_factory()
         loop.set_task_factory(factory)

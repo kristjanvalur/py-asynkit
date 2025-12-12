@@ -9,7 +9,7 @@
 - Coroutine helpers such [`coro_iter()`](#coro_iter) and the [`awaitmethod()`](#awaitmethod) decorator
 - Helpers to run _async_ code from _non-async_ code, such as `await_sync()` and `aiter_sync()`
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
-- [`eager_task_factory`](#eager_task_factory-and-create_eager_factory---global-eager-execution) support for global eager task execution (Python 3.12 API, backward compatible)
+- [`eager_task_factory`](#eager_task_factory-and-create_eager_task_factory---global-eager-execution) support for global eager task execution (Python 3.12 API, backward compatible)
 - [`@eager` decorator](#eager---lower-latency-io) for selective eager execution of coroutines
 - Experimental support for [Priority Scheduling](#priority-scheduling) of Tasks
 - Other experimental features such as [`task_interrupt()`](#task_interrupt)
@@ -60,7 +60,7 @@ print(f"Using: {info['implementation']}")  # "C extension" or "Pure Python"
 ## Features
 
 - 🚀 **[Eager Execution](#eager)**: Start coroutines immediately, not when awaited
-- 🏭 **[Eager Task Factory](#eager_task_factory-and-create_eager_factory---global-eager-execution)**: Global eager execution for all tasks (Python 3.12 API, backward compatible)
+- 🏭 **[Eager Task Factory](#eager_task_factory-and-create_eager_task_factory---global-eager-execution)**: Global eager execution for all tasks (Python 3.12 API, backward compatible)
 - 🔧 **[Cross-Version Compatibility](#cross-version-compatibility)**: Seamless eager execution across all Python versions with automatic monkeypatching
 - ⚡ **[Advanced Scheduling](#scheduling-tools)**: Priority tasks, queue control, task switching
 - 🔧 **[Coroutine Control](#coroutine-tools)**: Low-level inspection and manipulation
@@ -179,7 +179,7 @@ just as would happen if it were directly turned into a `Task`.
 
 `func_eager()` is a decorator which automatically applies `coro_eager()` to the coroutine returned by an async function.
 
-### `eager_task_factory` and `create_eager_factory()` - Global Eager Execution
+### `eager_task_factory` and `create_eager_task_factory()` - Global Eager Execution
 
 For applications that want to apply eager execution globally (similar to Python 3.12's `asyncio.eager_task_factory`), asynkit provides task factory functions that make **all** tasks created with `asyncio.create_task()` execute eagerly. This implementation provides the same API as Python 3.12's native factory while being backward compatible with older Python versions.
 
@@ -206,12 +206,15 @@ task = asyncio.create_task(my_coroutine())
 #### Creating Custom Factories
 
 ```python
+import asyncio
 import asynkit
 
-# Create a custom eager factory (preserving existing factory)
+# Create a custom eager factory with a custom Task class
+class MyTask(asyncio.Task):
+    pass
+
 loop = asyncio.get_running_loop()
-old_factory = loop.get_task_factory()
-eager_factory = asynkit.create_eager_factory(old_factory)
+eager_factory = asynkit.create_eager_task_factory(MyTask)
 loop.set_task_factory(eager_factory)
 ```
 
