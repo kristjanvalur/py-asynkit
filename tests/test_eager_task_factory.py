@@ -7,6 +7,50 @@ import pytest
 import asynkit
 
 
+@pytest.fixture
+def eager_loop():
+    """Fixture providing an event loop with eager task factory.
+
+    Note: We still need manual loop management here (not asyncio.run()) because
+    these tests specifically use loop.run_until_complete() to test the initial
+    task behavior - the very thing we're regression testing.
+    """
+    loop = asyncio.new_event_loop()
+    loop.set_task_factory(asynkit.eager_task_factory)
+    asyncio.set_event_loop(loop)
+    try:
+        yield loop
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
+@pytest.fixture
+def asyncio_run_eager():
+    """Fixture that provides asyncio.run with eager task factory.
+
+    Yields asyncio.run with a custom event loop policy that installs
+    eager task factory on new loops. This tests the modern asyncio.run()
+    pattern with eager execution.
+    """
+    original_policy = asyncio.get_event_loop_policy()
+
+    # Create a custom policy that installs eager task factory
+    class EagerPolicy(type(original_policy)):
+        def new_event_loop(self):
+            loop = super().new_event_loop()
+            loop.set_task_factory(asynkit.eager_task_factory)
+            return loop
+
+    policy = EagerPolicy()
+    asyncio.set_event_loop_policy(policy)
+    try:
+        yield asyncio.run
+    finally:
+        asyncio.set_event_loop_policy(original_policy)
+
+
 class TestEagerFactory:
     """Test the create_eager_factory function."""
 
@@ -855,21 +899,22 @@ class TestCreateTask:
 
 class TestEagerFactoryShutdown:
     """Test eager task factory behavior during event loop shutdown.
-    
+
     These tests verify that the eager task factory correctly handles async generator
     cleanup during event loop shutdown. This is a regression test for an issue where
     shutdown_asyncgens() would crash when calling get_running_loop() from the task
     factory while the loop was shutting down.
     """
 
-    def test_shutdown_with_non_exhausted_async_generator(self):
+    def test_shutdown_with_non_exhausted_async_generator(self, eager_loop):
         """Test that eager task factory handles shutdown with non-exhausted async generators.
-        
+
         This is a regression test for an issue where asyncio.run() shutdown would crash
         when using eager task factory. During shutdown, asyncio calls shutdown_asyncgens()
         which creates tasks via the task factory, but get_running_loop() fails because
         the loop is shutting down.
         """
+
         async def simple_async_generator():
             yield 1
             yield 2
@@ -884,22 +929,13 @@ class TestEagerFactoryShutdown:
             # This will trigger asyncio shutdown_asyncgens() during asyncio.run() cleanup
 
         # This should not raise RuntimeError about no running event loop
-        factory = asynkit.create_eager_factory()
-        loop = asyncio.new_event_loop()
-        loop.set_task_factory(factory)
-        try:
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(test_without_exhausting())
-        finally:
-            # Cleanup - this is where shutdown_asyncgens() is called
-            try:
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            finally:
-                asyncio.set_event_loop(None)
-                loop.close()
+        eager_loop.run_until_complete(test_without_exhausting())
+        # Cleanup - this is where shutdown_asyncgens() is called
+        eager_loop.run_until_complete(eager_loop.shutdown_asyncgens())
 
-    def test_shutdown_with_exhausted_async_generator(self):
+    def test_shutdown_with_exhausted_async_generator(self, eager_loop):
         """Test that eager task factory handles shutdown with exhausted async generators."""
+
         async def simple_async_generator():
             yield 1
             yield 2
@@ -913,21 +949,12 @@ class TestEagerFactoryShutdown:
             assert values == [1, 2]
 
         # This should also not raise during shutdown
-        factory = asynkit.create_eager_factory()
-        loop = asyncio.new_event_loop()
-        loop.set_task_factory(factory)
-        try:
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(test_with_exhausting())
-        finally:
-            try:
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            finally:
-                asyncio.set_event_loop(None)
-                loop.close()
+        eager_loop.run_until_complete(test_with_exhausting())
+        eager_loop.run_until_complete(eager_loop.shutdown_asyncgens())
 
-    def test_shutdown_with_multiple_async_generators(self):
+    def test_shutdown_with_multiple_async_generators(self, eager_loop):
         """Test shutdown with multiple non-exhausted async generators."""
+
         async def generator_a():
             yield "a1"
             yield "a2"
@@ -939,24 +966,100 @@ class TestEagerFactoryShutdown:
         async def test_multiple():
             gen_a = generator_a()
             gen_b = generator_b()
-            
+
             # Use both generators without exhausting them
             val_a = await gen_a.__anext__()
             val_b = await gen_b.__anext__()
-            
+
             assert val_a == "a1"
             assert val_b == "b1"
             # Leave both generators open
 
-        factory = asynkit.create_eager_factory()
-        loop = asyncio.new_event_loop()
-        loop.set_task_factory(factory)
-        try:
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(test_multiple())
-        finally:
-            try:
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            finally:
-                asyncio.set_event_loop(None)
-                loop.close()
+        eager_loop.run_until_complete(test_multiple())
+        eager_loop.run_until_complete(eager_loop.shutdown_asyncgens())
+
+
+class TestEagerFactoryInitialTaskRegression:
+    """Regression tests for eager task factory behavior with initial tasks.
+
+    These tests verify that code requiring a running event loop (like
+    asyncio.current_task() or get_running_loop()) works correctly even
+    during eager execution of the initial task passed to run_until_complete()
+    or asyncio.run().
+    """
+
+    @pytest.mark.parametrize("runner_fixture", ["eager_loop", "asyncio_run_eager"])
+    def test_get_running_loop_in_initial_task(self, runner_fixture, request):
+        """Test that get_running_loop() works in eagerly executed initial task.
+
+        Regression test: When run_until_complete() or asyncio.run() creates
+        the initial task, if eager execution starts the coroutine during task
+        factory time, get_running_loop() may fail because the loop hasn't set
+        itself as running in TLS yet.
+        """
+
+        async def coro_needing_loop():
+            loop = asyncio.get_running_loop()
+            assert loop is not None
+            return "completed"
+
+        runner = request.getfixturevalue(runner_fixture)
+        if runner_fixture == "eager_loop":
+            result = runner.run_until_complete(coro_needing_loop())
+        else:  # asyncio_run_eager
+            result = runner(coro_needing_loop())
+        assert result == "completed"
+
+    @pytest.mark.parametrize("runner_fixture", ["eager_loop", "asyncio_run_eager"])
+    def test_current_task_in_initial_task(self, runner_fixture, request):
+        """Test that asyncio.current_task() works in eagerly executed initial task.
+
+        Regression test: asyncio.current_task() should return a valid task
+        even during eager execution of the initial task.
+        """
+
+        async def coro_needing_current_task():
+            task = asyncio.current_task()
+            assert task is not None
+            return "completed"
+
+        runner = request.getfixturevalue(runner_fixture)
+        if runner_fixture == "eager_loop":
+            result = runner.run_until_complete(coro_needing_current_task())
+        else:  # asyncio_run_eager
+            result = runner(coro_needing_current_task())
+        assert result == "completed"
+
+    def test_different_loop(self):
+        """Test that eager task factory does not run eagerly for different loop."""
+        outer_loop = None
+        inner_loop = None
+        inner_task = None
+        inner_runs = 0
+
+        inner_loop = asyncio.new_event_loop()
+        inner_loop.set_task_factory(asynkit.eager_task_factory)
+
+        async def inner():
+            nonlocal inner_runs
+            inner_runs += 1
+
+        async def main():
+            nonlocal outer_loop, inner_task
+            outer_loop = asyncio.get_running_loop()
+
+            coro = inner()
+            n = inner_runs
+            inner_task = inner_loop.create_task(
+                coro
+            )  # does not run yet (different loop)
+            assert inner_runs == n  # did not run eagerly
+
+        asyncio.run(main())
+
+        # clean up the inner loop
+        async def cleanup():
+            await inner_task
+
+        inner_loop.run_until_complete(cleanup())
+        inner_loop.close()

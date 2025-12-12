@@ -691,6 +691,14 @@ def create_eager_factory(
     execution means the coroutine starts immediately and runs until it blocks,
     potentially completing synchronously without creating a Task.
 
+    TODO: Python 3.12+ has native asyncio.create_eager_task_factory() that solves
+    the "no running event loop" issue during initial task creation. We should:
+    1. Fix our implementation to be compatible (handle loop not running yet)
+    2. Rename this to avoid conflict with the native name
+    3. Add it to the compat layer to use native on 3.12+ when available
+    See: tests/test_eager_task_factory.py::TestEagerFactoryInitialTaskRegression
+    for demonstration of the bug and comparison with native implementation.
+
     Args:
         inner_factory: Optional task factory to delegate to when coroutines
             actually need to be scheduled. If None, falls back to creating
@@ -908,6 +916,16 @@ def coro_eager_task_helper(
 
     This ensures all parts of the execution run in the correct task context.
     """
+
+    # if the loop is different from the current loop, we cannot run eager.
+    try:
+        # is task meant for a different loop?
+        no_eager = loop is not asyncio.get_running_loop()
+    except RuntimeError:
+        no_eager = True  # no running loop yet
+    if no_eager:
+        return real_task_factory(coro)
+
     # In Python < 3.11, context parameter doesn't exist for create_task()
     # so we ignore any provided context and let CoroStart manage its own
     if sys.version_info < (3, 11):
