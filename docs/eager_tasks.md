@@ -125,7 +125,7 @@ Use this for fine-grained control, selectively making specific tasks eager while
 1. **Both approaches always create a Task object**: Even if the coroutine completes synchronously, a Task is created
 2. **Compatibility**: May break code that relies on deferred task execution semantics
 3. **Python 3.12+ Only**: Not available in earlier Python versions
-4. **`asyncio.timeout()` incompatibility**: Python's native eager execution (3.12+) may also experience issues with `asyncio.timeout()` in concurrent scenarios, though this is less documented. Use `asyncio.wait_for()` as a safer alternative.
+4. **`asyncio.timeout()` incompatibility**: Python's native eager execution (3.12+) may also experience issues with `asyncio.timeout()` when the timeout fires during eager execution, as the context manager captures the parent task reference instead of the actual task.
 
 ## asynkit's Eager Execution
 
@@ -639,18 +639,19 @@ This works because `sniffio` only needs to know that **some** task is current, n
 
 ## Known Issues and Limitations
 
-### `asyncio.timeout()` Incompatibility (Python 3.11+)
+### `asyncio.timeout()` Incompatibility
 
-**Both** Python's native eager execution and asynkit's eager execution have a known incompatibility with `asyncio.timeout()` context managers in Python 3.11+.
+**Both** Python's native eager execution and asynkit's eager execution have a known incompatibility with `asyncio.timeout()` context managers (Python 3.11+) and `asyncio.wait_for()` (all Python versions).
 
 #### The Problem
 
-When multiple coroutines execute eagerly in concurrent scenarios (e.g., with `asyncio.gather()`), they all run in the parent task's context before suspending. If these coroutines enter `asyncio.timeout()` contexts during the eager phase:
+When a coroutine executes eagerly, it runs in the parent task's context before its own Task is created and becomes the current task. If the coroutine enters an `asyncio.timeout()` context during the eager phase:
 
-1. All timeouts capture the **same parent task** reference
-2. When any timeout fires, it cancels the parent task
-3. `CancelledError` propagates to whichever coroutine is currently executing
-4. This is **not** the coroutine that owns the timeout
+1. The timeout captures the **parent task** reference (not the coroutine's task)
+2. When the timeout fires, it cancels the parent task
+3. `CancelledError` propagates to the parent, not the coroutine that owns the timeout
+
+This affects **both single tasks and concurrent scenarios**. With multiple eager coroutines (e.g., `asyncio.gather()`), all timeouts capture the same parent task reference, making the problem worse.
 
 #### Example Failure
 
@@ -688,15 +689,7 @@ results = await asyncio.gather(
    ```
    This forces task creation before entering the timeout context, ensuring each timeout has its own task reference.
 
-2. **Use `asyncio.wait_for()` instead**:
-   ```python
-   try:
-       await asyncio.wait_for(asyncio.sleep(0), timeout=0)
-   except asyncio.TimeoutError:
-       pass
-   ```
-
-3. **Disable eager execution for timeout-sensitive code**:
+2. **Disable eager execution for timeout-sensitive code**:
    ```python
    # Don't use @asynkit.eager on functions that use timeout(0)
    async def check_socket(name):
@@ -704,7 +697,7 @@ results = await asyncio.gather(
            ...
    ```
 
-4. **For Python 3.12+, use native eager execution**: Python's native `asyncio.eager_task_factory` creates Tasks before eager execution, which may handle timeouts differently (though the same fundamental issue can occur).
+3. **For Python 3.12+, use native eager execution**: Python's native `asyncio.eager_task_factory` creates Tasks before eager execution, which may handle timeouts differently (though the same fundamental issue can occur).
 
 See [docs/asyncio_timeout_incompatibility.md](asyncio_timeout_incompatibility.md) for detailed analysis, reproduction cases, and experimental patches.
 

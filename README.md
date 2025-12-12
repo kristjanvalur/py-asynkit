@@ -245,7 +245,8 @@ See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance
 
 #### ⚠️ Known Limitations
 
-**Python 3.11+ `asyncio.timeout()` Incompatibility**: When using eager execution with Python 3.11+, there is a known incompatibility with `asyncio.timeout()` context managers in concurrent scenarios. During eager execution, multiple coroutines may enter `asyncio.timeout()` contexts before suspending, causing all timeouts to capture the same parent task reference. When timeouts fire, this can cause `CancelledError` to propagate to the wrong coroutines.
+**`asyncio.timeout()` Incompatibility**: When using eager execution, there is a known incompatibility with `asyncio.timeout()`.  The context manager captures the currently
+executing task to cancel.  But during eager start, the *current* is the parent task.  This will cause the timeout to manifest as a `CancelledError` in the parent task.
 
 **Workarounds**:
 - **Add `await asyncio.sleep(0)` before timeout** (simplest): Forces task creation before entering timeout context
@@ -254,7 +255,6 @@ See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance
   async with asyncio.timeout(5):
       await operation()
   ```
-- Use `asyncio.wait_for()` instead of `asyncio.timeout()`
 - Disable eager execution for timeout-sensitive coroutines
 - For Python 3.12+, consider using Python's native `asyncio.eager_task_factory` instead
 
