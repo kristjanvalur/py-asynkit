@@ -125,6 +125,7 @@ typedef struct CoroStartObject {
         // Type-specific fields go here
         PyObject *await_iter;
     PyObject *context;
+    int started;                  // Flag indicating if start() has been called
     PySendResult initial_result;  // Result from initial PyIter_Send call
     PyObject *s_value;            // completed value (if not exception)
     PyObject *s_exc_value;        // exception value
@@ -146,14 +147,18 @@ static void corostart_dealloc(CoroStartObject *self);
 static int corostart_traverse(CoroStartObject *self, visitproc visit, void *arg);
 static int corostart_clear(CoroStartObject *self);
 static PyObject *corostart_await(CoroStartObject *self);
-static int corostart_start(CoroStartObject *self);
+static int corostart_start(CoroStartObject *self, PyObject *context);
+static PyObject *corostart_start_method(PyObject *_self,
+                                        PyObject *args,
+                                        PyObject *kwargs);
 
 /* State checking macros for CoroStart objects
+ * UNSTARTED means started flag is 0 (start() not yet called)
  * DONE guarantees that s_value or _IS_EXC is set
  * CONTINUED means all fields are NULL (exception or value has
  *   been consumed by the PyIter_Send)
  * PENDING is derived.  it is not Done, and not yet consumed.
- * these are the three valid states, further validation is done
+ * these are the four valid states, further validation is done
  * in the invariant checker.
  */
 #if NEW_EXC
@@ -162,10 +167,14 @@ static int corostart_start(CoroStartObject *self);
     #define _IS_EXC(self) ((self)->s_exc_type != NULL)
 #endif
 
-#define _IS_DONE(self) ((self)->initial_result != PYGEN_NEXT)
-#define _IS_CONTINUED(self) ((self)->s_value == NULL && !_IS_EXC(self))
-#define _IS_PENDING(self) (!_IS_DONE(self) && !_IS_CONTINUED(self))
+#define _IS_UNSTARTED(self) (!(self)->started)
+#define _IS_DONE(self) ((self)->started && (self)->initial_result != PYGEN_NEXT)
+#define _IS_CONTINUED(self)                                                            \
+    ((self)->started && (self)->s_value == NULL && !_IS_EXC(self))
+#define _IS_PENDING(self) ((self)->started && !_IS_DONE(self) && !_IS_CONTINUED(self))
 
+#define IS_UNSTARTED(self)                                                             \
+    (assert_corostart_invariant_impl((self), __LINE__), _IS_UNSTARTED(self))
 #define IS_DONE(self)                                                                  \
     (assert_corostart_invariant_impl((self), __LINE__), _IS_DONE(self))
 #define IS_CONTINUED(self)                                                             \
@@ -187,23 +196,31 @@ static inline void assert_corostart_invariant_impl(CoroStartObject *self,
     (void) line_number;
 #else
     // Validate state model invariants:
-    // 1. Exactly one of three states: done, pending, or continued
-    // 2. done: _IS_EXC() (and s_value == NULL)
-    // 3. pending: s_value != NULL (and !_IS_EXC())
-    // 4. continued: all fields are NULL
+    // 1. Exactly one of four states: unstarted, done, pending, or continued
+    // 2. unstarted: started == 0
+    // 3. done: _IS_EXC() (and s_value == NULL) or s_value set
+    // 4. pending: s_value != NULL (and !_IS_EXC())
+    // 5. continued: all fields are NULL
+    int is_unstarted = _IS_UNSTARTED(self);
     int is_done = _IS_DONE(self);
     int is_pending = _IS_PENDING(self);
     int is_continued = _IS_CONTINUED(self);
 
     // Exactly one state should be true
-    int state_count = is_done + is_pending + is_continued;
+    int state_count = is_unstarted + is_done + is_pending + is_continued;
     if(state_count != 1) {
         fprintf(stderr, __FILE__ ":%d: ", line_number);
     }
     assert(state_count == 1 && "CoroStart must be in exactly one state");
 
     // Additional consistency checks
-    if(is_done) {
+    if(is_unstarted) {
+        // unstarted state - should have no result fields set
+        if(!(self->s_value == NULL && !(_IS_EXC(self)))) {
+            fprintf(stderr, __FILE__ ":%d: ", line_number);
+        }
+        assert(self->s_value == NULL && !(_IS_EXC(self)));
+    } else if(is_done) {
         // done() state can have either s_value (PYGEN_RETURN) or exception
         // (PYGEN_ERROR)
         if(!(self->initial_result == PYGEN_RETURN ||
@@ -447,12 +464,14 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 {
     PyObject *coro;
     PyObject *context = NULL;  // Optional context parameter
+    int autostart = 1;         // Default to True
 
-    static char *kwlist[] = {"coro", "context", NULL};
+    static char *kwlist[] = {"coro", "context", "autostart", NULL};
 
     TRACE_LOG("CoroStart.__new__ called");
 
-    if(!PyArg_ParseTupleAndKeywords(args, kwargs, "O|O", kwlist, &coro, &context)) {
+    if(!PyArg_ParseTupleAndKeywords(
+           args, kwargs, "O|Op", kwlist, &coro, &context, &autostart)) {
         return NULL;
     }
 
@@ -483,6 +502,7 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
     }
 
     // STATE INITIALIZATION: All state fields start as NULL
+    cs->started = 0;  // Not started yet
     cs->s_value = NULL;
     cs->s_exc_value = NULL;
 #if !NEW_EXC
@@ -490,11 +510,13 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
     cs->s_exc_traceback = NULL;
 #endif
 
-    // Perform eager execution
-    if(corostart_start(cs) < 0) {
-        // _start failed
-        Py_DECREF(cs);
-        return NULL;
+    // Perform eager execution if autostart is True
+    if(autostart) {
+        if(corostart_start(cs, cs->context) < 0) {
+            // _start failed
+            Py_DECREF(cs);
+            return NULL;
+        }
     }
 
     ASSERT_COROSTART_INVARIANT(cs);
@@ -502,13 +524,16 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 }
 
 /* CoroStart _start method - simplified eager execution logic */
-static int corostart_start(CoroStartObject *self)
+static int corostart_start(CoroStartObject *self, PyObject *context)
 {
     TRACE_LOG("corostart_start called");
 
+    // Mark as started
+    self->started = 1;
+
     // Enter context if provided
-    if(self->context != NULL) {
-        if(PyContext_Enter(self->context) < 0) {
+    if(context != NULL) {
+        if(PyContext_Enter(context) < 0) {
             return -1;
         }
     }
@@ -541,8 +566,8 @@ static int corostart_start(CoroStartObject *self)
     }
 
     // Exit context if we entered one
-    if(self->context != NULL) {
-        if(PyContext_Exit(self->context) < 0) {
+    if(context != NULL) {
+        if(PyContext_Exit(context) < 0) {
             Py_CLEAR(self->s_value);
             return -1;
         }
@@ -633,6 +658,44 @@ static PyObject *corostart_await(CoroStartObject *self)
 }
 
 /* CoroStart public methods */
+
+/* Public start() method */
+static PyObject *corostart_start_method(PyObject *_self,
+                                        PyObject *args,
+                                        PyObject *kwargs)
+{
+    CoroStartObject *self = (CoroStartObject *) _self;
+    PyObject *context = NULL;
+
+    static char *kwlist[] = {"context", NULL};
+
+    if(!PyArg_ParseTupleAndKeywords(args, kwargs, "|O", kwlist, &context)) {
+        return NULL;
+    }
+
+    // Convert None to NULL for context - this makes context checks work properly
+    if(context == Py_None) {
+        context = NULL;
+    }
+
+    // Check if already started
+    if(self->started) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "CoroStart.start() can only be called once");
+        return NULL;
+    }
+
+    // Call internal start with provided context (or NULL)
+    if(corostart_start(self, context) < 0) {
+        return NULL;
+    }
+
+    // Return True if done, False if pending
+    if(IS_DONE(self)) {
+        Py_RETURN_TRUE;
+    }
+    Py_RETURN_FALSE;
+}
 
 static PyObject *corostart_done(PyObject *_self)
 {
@@ -861,7 +924,11 @@ static PyObject *corostart_close(PyObject *_self)
 /* CoroStart method definitions - defined before slots to avoid MSVC forward declaration
  * issues */
 static PyMethodDef corostart_methods[] =
-    {{"done",
+    {{"start",
+      (PyCFunction) corostart_start_method,
+      METH_VARARGS | METH_KEYWORDS,
+      "Start the coroutine execution (only needed when autostart=False)"},
+     {"done",
       (PyCFunction) corostart_done,
       METH_NOARGS,
       "Return True if coroutine finished synchronously during initial start"},
