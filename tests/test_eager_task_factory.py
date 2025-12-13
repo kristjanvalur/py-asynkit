@@ -69,65 +69,52 @@ class TestEagerFactory:
         assert hasattr(loop, "get_task_factory"), "get_task_factory not available"
         loop.close()
 
-    async def test_eager_factory_returns_future_when_sync(self):
+    @pytest.fixture
+    async def eager_factory(self):
+        """fixture setting up eager task factory"""
+        loop = asyncio.get_running_loop()
+        old_factory = loop.get_task_factory()
+        loop.set_task_factory(asynkit.eager_task_factory)
+        try:
+            yield asynkit.eager_task_factory
+        finally:
+            loop.set_task_factory(old_factory)
+
+    async def test_eager_factory_returns_future_when_sync(self, eager_factory):
         """Test that factory returns Future when coroutine completes synchronously."""
 
         async def sync_coro():
             return "completed_sync"
 
-        # Create our eager task factory
-        factory = asynkit.eager_task_factory
+        # Create a task - should return a Future, not a Task
+        result = asyncio.create_task(sync_coro())
 
-        # Set it on the loop
-        loop = asyncio.get_running_loop()
-        old_factory = loop.get_task_factory()
-        loop.set_task_factory(factory)
+        # Check if it's completed immediately (Future behavior)
+        assert result.done(), "Expected Future to be completed immediately"
+        assert await result == "completed_sync"
 
-        try:
-            # Create a task - should return a Future, not a Task
-            result = asyncio.create_task(sync_coro())
+        # This should be a Future, not a Task
+        # Note: We can't easily distinguish Future from Task in isinstance checks
+        # since Task inherits from Future, but we can check if it started eagerly
 
-            # Check if it's completed immediately (Future behavior)
-            assert result.done(), "Expected Future to be completed immediately"
-            assert await result == "completed_sync"
-
-            # This should be a Future, not a Task
-            # Note: We can't easily distinguish Future from Task in isinstance checks
-            # since Task inherits from Future, but we can check if it started eagerly
-
-        finally:
-            loop.set_task_factory(old_factory)
-
-    async def test_eager_factory_returns_task_when_async(self):
+    async def test_eager_factory_returns_task_when_async(self, eager_factory):
         """Test that factory returns Task when coroutine blocks."""
 
         async def async_coro():
             await asyncio.sleep(0.01)  # Small delay to ensure it blocks
             return "completed_async"
 
-        # Create our eager task factory
-        factory = asynkit.eager_task_factory
+        # Create a task - should return a Task since it blocks
+        result = asyncio.create_task(async_coro())
 
-        # Set it on the loop
-        loop = asyncio.get_running_loop()
-        old_factory = loop.get_task_factory()
-        loop.set_task_factory(factory)
+        # Should not be completed immediately (Task behavior)
+        assert not result.done(), "Expected Task to not be completed immediately"
 
-        try:
-            # Create a task - should return a Task since it blocks
-            result = asyncio.create_task(async_coro())
+        # Should be a proper Task
+        assert isinstance(result, asyncio.Task), "Expected result to be a Task"
 
-            # Should not be completed immediately (Task behavior)
-            assert not result.done(), "Expected Task to not be completed immediately"
-
-            # Should be a proper Task
-            assert isinstance(result, asyncio.Task), "Expected result to be a Task"
-
-            # Should complete when awaited
-            assert await result == "completed_async"
-
-        finally:
-            loop.set_task_factory(old_factory)
+        # Should complete when awaited
+        assert await result == "completed_async"
 
     async def test_eager_task_factory_with_custom_task(self):
         """Test that create_eager_task_factory uses custom task constructor"""
@@ -226,35 +213,23 @@ class TestEagerFactory:
         finally:
             loop.set_task_factory(old_factory)
 
-    async def test_eager_factory_exception_handling(self):
+    async def test_eager_factory_exception_handling(self, eager_factory):
         """Test that factory handles exceptions properly."""
 
         async def failing_coro():
             raise ValueError("test error")
 
-        # Create our eager task factory
-        factory = asynkit.eager_task_factory
+        # Create a task that will fail immediately
+        result = asyncio.create_task(failing_coro())
 
-        # Set it on the loop
-        loop = asyncio.get_running_loop()
-        old_factory = loop.get_task_factory()
-        loop.set_task_factory(factory)
+        # Should be completed with exception
+        assert result.done(), "Expected Future to be completed immediately"
 
-        try:
-            # Create a task that will fail immediately
-            result = asyncio.create_task(failing_coro())
+        # Should raise the exception when awaited
+        with pytest.raises(ValueError, match="test error"):
+            await result
 
-            # Should be completed with exception
-            assert result.done(), "Expected Future to be completed immediately"
-
-            # Should raise the exception when awaited
-            with pytest.raises(ValueError, match="test error"):
-                await result
-
-        finally:
-            loop.set_task_factory(old_factory)
-
-    async def test_loop_compatibility(self):
+    async def test_loop_compatibility(self, eager_factory):
         """Test that the event loop doesn't break with mixed return types."""
 
         async def sync_coro():
@@ -264,61 +239,38 @@ class TestEagerFactory:
             await asyncio.sleep(0.01)
             return "async"
 
-        # Create our eager task factory
-        factory = asynkit.eager_task_factory
+        # Create multiple tasks of different types
+        sync_task = asyncio.create_task(sync_coro())
+        async_task = asyncio.create_task(async_coro())
 
-        # Set it on the loop
-        loop = asyncio.get_running_loop()
-        old_factory = loop.get_task_factory()
-        loop.set_task_factory(factory)
+        # Both should work with asyncio.gather
+        results = await asyncio.gather(sync_task, async_task)
+        assert results == ["sync", "async"]
 
-        try:
-            # Create multiple tasks of different types
-            sync_task = asyncio.create_task(sync_coro())
-            async_task = asyncio.create_task(async_coro())
+        # Both should work individually
+        assert sync_task.done()
+        assert await sync_task == "sync"
+        assert await async_task == "async"
 
-            # Both should work with asyncio.gather
-            results = await asyncio.gather(sync_task, async_task)
-            assert results == ["sync", "async"]
-
-            # Both should work individually
-            assert sync_task.done()
-            assert await sync_task == "sync"
-            assert await async_task == "async"
-
-        finally:
-            loop.set_task_factory(old_factory)
-
-    async def test_tasklike_future_has_correct_name(self):
+    async def test_tasklike_future_has_correct_name(self, eager_factory):
         """Test that TaskLikeFuture has the correct name for eager completion."""
 
         async def sync_coro():
             """A coroutine that completes synchronously."""
             return "sync_result"
 
-        # Create eager task factory
-        factory = asynkit.eager_task_factory
+        # This should trigger eager execution and return TaskLikeFuture
+        task = asyncio.create_task(sync_coro(), name="test_eager_task")
 
-        loop = asyncio.get_running_loop()
-        old_factory = loop.get_task_factory()
-        loop.set_task_factory(factory)
+        # Verify it's a TaskLikeFuture with the correct name
+        assert isinstance(task, asynkit.coroutine.TaskLikeFuture)
+        assert task.get_name() == "test_eager_task"
 
-        try:
-            # This should trigger eager execution and return TaskLikeFuture
-            task = asyncio.create_task(sync_coro(), name="test_eager_task")
+        # Verify the result
+        result = await task
+        assert result == "sync_result"
 
-            # Verify it's a TaskLikeFuture with the correct name
-            assert isinstance(task, asynkit.coroutine.TaskLikeFuture)
-            assert task.get_name() == "test_eager_task"
-
-            # Verify the result
-            result = await task
-            assert result == "sync_result"
-
-        finally:
-            loop.set_task_factory(old_factory)
-
-    async def test_tasklike_future_not_used_for_blocking_coros(self):
+    async def test_tasklike_future_not_used_for_blocking_coros(self, eager_factory):
         """Test that TaskLikeFuture is not used for blocking coroutines."""
 
         async def blocking_coro():
@@ -326,30 +278,19 @@ class TestEagerFactory:
             await asyncio.sleep(0.001)  # Small delay to force suspension
             return "blocking_result"
 
-        # Create eager task factory
-        factory = asynkit.eager_task_factory
+        # This should NOT trigger TaskLikeFuture creation
+        task = asyncio.create_task(blocking_coro(), name="test_blocking_task")
 
-        loop = asyncio.get_running_loop()
-        old_factory = loop.get_task_factory()
-        loop.set_task_factory(factory)
+        # Verify it's a regular Task, not TaskLikeFuture
+        assert isinstance(task, asyncio.Task)
+        assert not isinstance(task, asynkit.coroutine.TaskLikeFuture)
+        assert task.get_name() == "test_blocking_task"
 
-        try:
-            # This should NOT trigger TaskLikeFuture creation
-            task = asyncio.create_task(blocking_coro(), name="test_blocking_task")
+        # Verify the result
+        result = await task
+        assert result == "blocking_result"
 
-            # Verify it's a regular Task, not TaskLikeFuture
-            assert isinstance(task, asyncio.Task)
-            assert not isinstance(task, asynkit.coroutine.TaskLikeFuture)
-            assert task.get_name() == "test_blocking_task"
-
-            # Verify the result
-            result = await task
-            assert result == "blocking_result"
-
-        finally:
-            loop.set_task_factory(old_factory)
-
-    async def test_eager_factory_context_handling(self):
+    async def test_eager_factory_context_handling(self, eager_factory):
         """Test that task factory respects context when available."""
         import contextvars
 
@@ -390,89 +331,78 @@ class TestEagerFactory:
         # Verify the context has the expected value
         ctx_value = ctx.run(var.get)
         assert ctx_value == "modified_context"
-
-        # Set up eager factory
-        factory = asynkit.eager_task_factory
-        loop = asyncio.get_running_loop()
-        old_factory = loop.get_task_factory()
-        loop.set_task_factory(factory)
-
+        # Try to use context parameter if supported (Python 3.11+)
         try:
-            # Try to use context parameter if supported (Python 3.11+)
-            try:
-                coro = context_checking_coro()
-                task = asyncio.create_task(coro, context=ctx)
-                context_param_supported = True
-            except TypeError:
-                # Python < 3.11 - test with manual context setting
-                context_param_supported = False
-                # Close the coroutine we created for the failed test
-                coro.close()
-                task = asyncio.create_task(context_checking_coro())
+            coro = context_checking_coro()
+            task = asyncio.create_task(coro, context=ctx)
+            context_param_supported = True
+        except TypeError:
+            # Python < 3.11 - test with manual context setting
+            context_param_supported = False
+            # Close the coroutine we created for the failed test
+            coro.close()
+            task = asyncio.create_task(context_checking_coro())
 
-            # Complete the task
-            result = await task
-            assert result == "result"
+        # Complete the task
+        result = await task
+        assert result == "result"
 
-            if context_param_supported:
-                # Verify the task saw the correct context values
-                assert len(context_values_seen) == 4
+        if context_param_supported:
+            # Verify the task saw the correct context values
+            assert len(context_values_seen) == 4
 
-                # Check initial inheritance (before suspension)
-                initial_label, initial_value = context_values_seen[0]
-                assert initial_label == "initial"
-                assert initial_value == "modified_context", (
-                    f"Task should inherit context value. "
-                    f"Expected 'modified_context', got '{initial_value}'"
-                )
+            # Check initial inheritance (before suspension)
+            initial_label, initial_value = context_values_seen[0]
+            assert initial_label == "initial"
+            assert initial_value == "modified_context", (
+                f"Task should inherit context value. "
+                f"Expected 'modified_context', got '{initial_value}'"
+            )
 
-                # Check modification before suspension
-                before_label, before_value = context_values_seen[1]
-                assert before_label == "before_suspend"
-                assert before_value == "before_suspend", (
-                    f"Task should be able to modify context before suspension. "
-                    f"Expected 'before_suspend', got '{before_value}'"
-                )
+            # Check modification before suspension
+            before_label, before_value = context_values_seen[1]
+            assert before_label == "before_suspend"
+            assert before_value == "before_suspend", (
+                f"Task should be able to modify context before suspension. "
+                f"Expected 'before_suspend', got '{before_value}'"
+            )
 
-                # Check persistence after resumption
-                resume_label, resume_value = context_values_seen[2]
-                assert resume_label == "after_resume"
-                assert resume_value == "before_suspend", (
-                    f"Context should persist across suspension. "
-                    f"Expected 'before_suspend', got '{resume_value}'"
-                )
+            # Check persistence after resumption
+            resume_label, resume_value = context_values_seen[2]
+            assert resume_label == "after_resume"
+            assert resume_value == "before_suspend", (
+                f"Context should persist across suspension. "
+                f"Expected 'before_suspend', got '{resume_value}'"
+            )
 
-                # Check modification after resumption
-                final_label, final_value = context_values_seen[3]
-                assert final_label == "final"
-                assert final_value == "after_resume", (
-                    f"Task should be able to modify context after resumption. "
-                    f"Expected 'after_resume', got '{final_value}'"
-                )
+            # Check modification after resumption
+            final_label, final_value = context_values_seen[3]
+            assert final_label == "final"
+            assert final_value == "after_resume", (
+                f"Task should be able to modify context after resumption. "
+                f"Expected 'after_resume', got '{final_value}'"
+            )
 
-                # Verify the original context and outer context are unchanged
-                outer_value = var.get()
-                assert outer_value == "original", (
-                    f"Outer context should be unchanged. "
-                    f"Expected 'original', got '{outer_value}'"
-                )
+            # Verify the original context and outer context are unchanged
+            outer_value = var.get()
+            assert outer_value == "original", (
+                f"Outer context should be unchanged. "
+                f"Expected 'original', got '{outer_value}'"
+            )
 
-                # The context we passed to create_task should show final changes
-                # This is correct behavior - the task runs in the context we provided
-                ctx_final_value = ctx.run(var.get)
-                assert ctx_final_value == "after_resume", (
-                    f"Passed context should show final task modifications. "
-                    f"Expected 'after_resume', got '{ctx_final_value}'"
-                )
-            else:
-                # For Python < 3.11, we can't test context parameter
-                # but we can verify the task runs in some context
-                assert len(context_values_seen) >= 1
+            # The context we passed to create_task should show final changes
+            # This is correct behavior - the task runs in the context we provided
+            ctx_final_value = ctx.run(var.get)
+            assert ctx_final_value == "after_resume", (
+                f"Passed context should show final task modifications. "
+                f"Expected 'after_resume', got '{ctx_final_value}'"
+            )
+        else:
+            # For Python < 3.11, we can't test context parameter
+            # but we can verify the task runs in some context
+            assert len(context_values_seen) >= 1
 
-        finally:
-            loop.set_task_factory(old_factory)
-
-    async def test_eager_task_factory_instance(self):
+    async def test_eager_task_factory_instance(self, eager_factory):
         """Test that the pre-created eager_task_factory instance works correctly."""
 
         async def sync_coro():
@@ -482,31 +412,19 @@ class TestEagerFactory:
             await asyncio.sleep(0)  # Force suspension
             return "async_result"
 
-        loop = asyncio.get_running_loop()
-        old_factory = loop.get_task_factory()
+        # Test sync coroutine - should complete immediately
+        sync_task = asyncio.create_task(sync_coro())
+        assert sync_task.done(), "Sync coroutine should complete immediately"
+        assert isinstance(sync_task, asynkit.TaskLikeFuture)
+        sync_result = await sync_task
+        assert sync_result == "immediate_result"
 
-        try:
-            # Set the pre-created eager_task_factory instance
-            loop.set_task_factory(asynkit.eager_task_factory)
-
-            # Test sync coroutine - should complete immediately
-            sync_task = asyncio.create_task(sync_coro())
-            assert sync_task.done(), "Sync coroutine should complete immediately"
-            assert isinstance(sync_task, asynkit.TaskLikeFuture)
-            sync_result = await sync_task
-            assert sync_result == "immediate_result"
-
-            # Test async coroutine - should create real Task
-            async_task = asyncio.create_task(async_coro())
-            assert not async_task.done(), (
-                "Async coroutine should not complete immediately"
-            )
-            assert isinstance(async_task, asyncio.Task)
-            async_result = await async_task
-            assert async_result == "async_result"
-
-        finally:
-            loop.set_task_factory(old_factory)
+        # Test async coroutine - should create real Task
+        async_task = asyncio.create_task(async_coro())
+        assert not async_task.done(), "Async coroutine should not complete immediately"
+        assert isinstance(async_task, asyncio.Task)
+        async_result = await async_task
+        assert async_result == "async_result"
 
 
 class TestCreateTask:
