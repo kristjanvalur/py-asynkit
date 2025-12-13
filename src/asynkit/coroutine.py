@@ -233,7 +233,35 @@ class CoroStartBase(Awaitable[T_co]):
     until its first suspension point, and then resumed. This facilitates
     later execution of coroutines, encapsulating them in Tasks only at the point when
     they initially become suspended.
-    `context`: A context object to run the coroutine in
+
+    **Usage Pattern:**
+
+    By default (autostart=True), CoroStart immediately executes the coroutine to its
+    first suspension point upon construction. This is the typical usage::
+
+        cs = CoroStart(my_coroutine())  # Starts immediately
+        if cs.done():
+            result = cs.result()
+        else:
+            result = await cs
+
+    For advanced use cases, you can defer execution by setting autostart=False.
+    This allows creating a Task before starting execution::
+
+        cs = CoroStart(my_coroutine(), autostart=False)
+        task = asyncio.create_task(cs.as_coroutine())  # Create task before starting
+        cs.start()  # Now start execution
+        result = await task
+
+    **Important:** When autostart=False, methods like `done()`, `result()`,
+    `exception()`, etc. have undefined behavior until `start()` is called.
+
+    Parameters:
+        coro: The coroutine to wrap
+        context: Optional context to run the coroutine in.  If autostarted, it will be
+            used for both phases of the run.  If not autostarted, it will be used
+            only for the continuation phase.
+        autostart: If True, automatically call start() during initialization (default True).
     """
 
     __slots__ = ["coro", "context", "_start_result"]
@@ -243,12 +271,43 @@ class CoroStartBase(Awaitable[T_co]):
         coro: Coroutine[Any, Any, T_co],
         *,
         context: Context | None = None,
+        autostart: bool = True,
     ):
         self.coro = coro
         self.context = context
-        self._start_result: tuple[Any, BaseException | None] | None = self._start()
+        self._start_result: tuple[Any, BaseException | None] | None = (
+            self._start(context) if autostart else None
+        )
 
-    def _start(self) -> tuple[Any, BaseException | None]:
+    def start(self, context: Context | None = None) -> bool:
+        """
+        Start the coroutine execution (only needed when autostart=False).
+
+        When autostart=False was used in __init__, this method **must be called**
+        before awaiting the CoroStart or using methods like `done()`, `result()`,
+        or `exception()`. It runs the coroutine to its first suspension point or
+        until it completes (by returning or raising an exception), whichever comes
+        first.
+
+        This method can only be called once. Calling it multiple times will raise
+        an error.
+
+        Parameters:
+            context: The context to be used for the initial execution phase only.
+                    This is independent of the context passed to __init__ (which is
+                    used for the continuation phase). If None, the coroutine runs
+                    in the current context.
+
+        Returns:
+            True if the coroutine completed during the initial execution (done()),
+            False if it suspended and will need to be awaited.
+        """
+        # context parameter is independent - doesn't use self.context as fallback
+        ctx = context
+        self._start_result = self._start(ctx)
+        return self._start_result[1] is not None
+
+    def _start(self, context: Context | None) -> tuple[Any, BaseException | None]:
         """
         Start the coroutine execution. It runs the coroutine to its first suspension
         point or until it raises an exception or returns a value, whichever comes
@@ -256,8 +315,8 @@ class CoroStartBase(Awaitable[T_co]):
         """
         try:
             return (
-                self.context.run(self.coro.send, None)
-                if self.context is not None
+                context.run(self.coro.send, None)
+                if context is not None
                 else self.coro.send(None)
             ), None
         except BaseException as exception:

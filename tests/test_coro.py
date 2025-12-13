@@ -7,6 +7,7 @@ from contextvars import ContextVar, copy_context
 from typing import Any
 from unittest.mock import Mock
 
+from asynkit.coroutine import eager
 import pytest
 from anyio import Event, create_task_group, sleep
 
@@ -218,21 +219,42 @@ class TestCoroStart:
         else:
             return self.coro1_nb, [1, 2, "a"]
 
-    async def test_auto_start(self, block, anyio_backend, corostart_type):
+    async def test_no_auto_start(self, block, anyio_backend, corostart_type):
         corofn, expect = self.get_coro1(block)
         log = []
         coro = corofn(log)
-        cs = corostart_type(coro)
+        cs = corostart_type(coro, autostart=False)
+        done = cs.start(None)
         if block:
-            assert not cs.done()
+            assert not done
             assert asynkit.coro_is_suspended(coro)
             assert not asynkit.coro_is_finished(coro)
             assert log == [1]
         else:
-            assert cs.done()
+            assert done
             assert not asynkit.coro_is_suspended(coro)
             assert asynkit.coro_is_finished(coro)
             assert log == [1, 2]
+
+    async def test_no_auto_start_context(self, block, corostart_type):
+        """Test that the start() method runs in its own context"""
+
+        async def coro():
+            eager_var.set("no_auto")
+
+        eager_var.set("initial")
+        ctxt = copy_context()
+        cs = corostart_type(coro(), context=ctxt, autostart=False)
+        assert eager_var.get() == "initial"
+        cs.start(ctxt)
+        assert eager_var.get() == "initial"
+        assert ctxt.run(lambda: eager_var.get()) == "no_auto"
+
+        ctxt = copy_context()
+        cs = corostart_type(coro(), context=ctxt, autostart=False)
+        assert eager_var.get() == "initial"
+        cs.start(None)
+        assert eager_var.get() == "no_auto"
 
     async def test_await(self, block, corostart_type):
         corofn, expect = self.get_coro1(block)
