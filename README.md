@@ -252,7 +252,11 @@ executing task to cancel. But during eager start, the *current* is the parent ta
 
 **Workarounds**:
 
-- **Add `await asyncio.sleep(0)` before timeout** (simplest): Forces task creation before entering timeout context
+- **Use `asyncio.wait_for()` instead** (recommended): Works correctly with eager execution
+  ```python
+  await asyncio.wait_for(operation(), timeout=5)
+  ```
+- **Add `await asyncio.sleep(0)` before timeout**: Forces task creation before entering timeout context
   ```python
   await asyncio.sleep(0)  # Force task creation
   async with asyncio.timeout(5):
