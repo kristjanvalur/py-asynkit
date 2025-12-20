@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.6] - 2025-12-20
+
+### Features
+
+- **CoroStart autostart parameter**: Added `autostart` parameter to `CoroStart.__init__()`
+  - When `autostart=False`, coroutine is not started automatically on construction
+  - Allows creating `CoroStart` object before calling `start()` explicitly
+  - Useful for advanced use cases requiring precise control over coroutine startup timing
+  - Default behavior unchanged (`autostart=True`)
+
+### Tests
+
+- **asyncio.wait_for() compatibility**: Added comprehensive tests for `asyncio.wait_for()` with eager execution
+  - `test_wait_for`: Tests timeout and fast completion scenarios
+  - `test_wait_for_zero_timeout`: Tests edge case of zero timeout
+  - Validates that `asyncio.wait_for()` works correctly with eager task factory
+
+### Documentation
+
+- **asyncio.timeout() workarounds**: Added `asyncio.wait_for()` as recommended workaround
+  - Listed as the recommended alternative to `asyncio.timeout()` for eager execution
+  - Works correctly without requiring additional `await asyncio.sleep(0)` calls
+  - Updated workarounds section in README.md
+
 ## [0.17.5] - 2025-12-12
 
 ### Breaking Changes
