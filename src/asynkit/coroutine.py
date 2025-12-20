@@ -7,6 +7,7 @@ import inspect
 import sys
 import types
 from asyncio import Future, Task
+from asyncio import tasks as asyncio_tasks
 from collections.abc import (
     AsyncGenerator,
     AsyncIterable,
@@ -30,7 +31,7 @@ from typing import (
 
 from typing_extensions import ParamSpec, Protocol
 
-from .compat import PY_311, swap_current_task
+from .compat import PY_311
 from .tools import Cancellable, cancelling
 from .tools import create_task as _create_task
 
@@ -966,35 +967,48 @@ def coro_eager_task_helper(
     if sys.version_info < (3, 11):
         context = None
 
-    cs: CoroStart[T]
-    current_task = asyncio.current_task(loop)
-    if current_task is not None:
-        if context is None:
-            cs = CoroStart(coro, context=copy_context())
-        else:
-            # Enter the context only for the initial start, then use None for CoroStart
-            # This way the continuation won't try to re-enter the context
-            cs = context.run(lambda: CoroStart(coro, context=None))
-    else:
-        # if there is no current task, then we need a fake task to run it in
-        # this is so that asyncio.get_current_task() returns a valid task during
-        # eager start.  This is not the same task as will be created later. This
-        # is purely to satisfy get_current_task() calls during eager start, such
-        # as for anyio that wants to detect the current async framework.
-        old = swap_current_task(loop, _get_ghost_task(loop, real_task_factory))
-        try:
-            if context is None:
-                cs = CoroStart(coro, context=copy_context())
-            else:
-                # Enter the context only for the initial start, then use None for CoroStart
-                # This way the continuation won't try to re-enter the context
-                cs = context.run(lambda: CoroStart(coro, context=None))
-        finally:
-            swap_current_task(loop, old)
+    # Import tasks module to patch current_task at the module level
+    # This is necessary because asyncio.timeouts imports current_task
+    # from asyncio.tasks module, not from asyncio directly
+    # We want to delay creating the tas until after the initial start to
+    # avoid the latency associated with creating and scheduling tasks, but
+    # we cannot avoid it if the initial start calls current_task().
+    default_get_current_task = asyncio_tasks.current_task
+    created_task = None
 
-    # if the coroutine is not done, set it as the awaitable for the helper and
-    # return the task
+    def get_current_task(task_loop=None):
+        """In case current_task() is called during eager start, we must
+        create a real task and present it to the caller."""
+        nonlocal created_task
+        if task_loop is not None and task_loop is not loop:
+            return default_get_current_task(task_loop)
+        if created_task is None:
+            created_task = real_task_factory(cs.as_coroutine())
+        return created_task
+
+    if context is None:
+        # use a fresh copy for both initial start and continuation
+        context = copy_context()
+        cs = CoroStart(coro, context=context, autostart=False)
+    else:
+        # use given context for initial start, the created task will
+        # supply it for the continuation phase
+        cs = CoroStart(coro, context=None, autostart=False)
+
+    # Patch both asyncio.current_task and asyncio.tasks.current_task
+    # because asyncio.timeouts uses the latter
+    asyncio.current_task = get_current_task
+    asyncio_tasks.current_task = get_current_task
+    try:
+        cs.start(context)
+    finally:
+        asyncio.current_task = default_get_current_task
+        asyncio_tasks.current_task = default_get_current_task
+
+    # if the coroutine is not done, return a real task.
     if not cs.done():
+        if created_task is not None:
+            return created_task
         return real_task_factory(cs.as_coroutine())
     else:
         return TaskLikeFuture(cs, name=name, context=context)

@@ -492,7 +492,7 @@ class TestEagerFactory:
 
     async def test_wait_for(self, eager_factory):
         """Test that eager task factory works with asyncio.wait_for().
-        
+
         Unlike asyncio.timeout(), wait_for() creates its own task internally,
         so it should work well with eager execution.
         """
