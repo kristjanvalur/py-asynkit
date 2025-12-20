@@ -974,9 +974,11 @@ def coro_eager_task_helper(
     # avoid the latency associated with creating and scheduling tasks, but
     # we cannot avoid it if the initial start calls current_task().
     default_get_current_task = asyncio_tasks.current_task
-    created_task = None
+    created_task: asyncio.Task[T] | None = None
 
-    def get_current_task(task_loop=None):
+    def get_current_task(
+        task_loop: asyncio.AbstractEventLoop | None = None,
+    ) -> asyncio.Task[Any] | None:
         """In case current_task() is called during eager start, we must
         create a real task and present it to the caller."""
         nonlocal created_task
@@ -997,8 +999,8 @@ def coro_eager_task_helper(
 
     # Patch both asyncio.current_task and asyncio.tasks.current_task
     # because asyncio.timeouts uses the latter
-    asyncio.current_task = get_current_task
-    asyncio_tasks.current_task = get_current_task
+    asyncio.current_task = get_current_task  # type: ignore[assignment]
+    asyncio_tasks.current_task = get_current_task  # type: ignore[assignment]
     try:
         cs.start(context)
     finally:
