@@ -490,69 +490,36 @@ class TestEagerFactory:
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(task, timeout=0)
 
-    async def test_wait_for(self, eager_factory):
-        """Test that eager task factory works with asyncio.wait_for().
-
-        Unlike asyncio.timeout(), wait_for() creates its own task internally,
-        so it should work well with eager execution.
+    async def test_timeout(self, eager_factory):
+        """Test that eager task factory works with asyncio.timeout(),
+        when the Timeout is entered in the eager part.
+        This verifies that the Timeout "cancel" message is delivered to the correct task,
+        even though it was set up during the eager execution.
         """
         eager = 0
 
-        async def operation_timeout():
-            """Operation that times out."""
+        async def timeout0():
+            """Operation that times out immediately."""
             nonlocal eager
-            eager = 1
-            await asyncio.sleep(0.1)  # Should cause timeout
-            return "completed"
+            async with asyncio.timeout(0):
+                eager = 1
+                await asyncio.sleep(0.1)  # Should cause timeout
 
-        async def operation_fast():
-            """Operation that completes before timeout."""
+        async def timeout1():
+            """Operation that times out after a short delay."""
             nonlocal eager
-            eager = 2
-            return "fast_result"
+            async with asyncio.timeout(0):
+                eager = 2
+                pass
 
-        # Test operation that times out
-        task = asyncio.create_task(operation_timeout())
+        task = asyncio.create_task(timeout0())
         assert eager == 1, "Eager task factory did not run eagerly"
         with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(task, timeout=0)
+            await task
 
-        # Test operation that completes synchronously
-        task = asyncio.create_task(operation_fast())
+        task = asyncio.create_task(timeout1())
         assert eager == 2, "Eager task factory did not run eagerly"
-        result = await asyncio.wait_for(task, timeout=1.0)
-        assert result == "fast_result"
-
-    async def test_wait_for_zero_timeout(self, eager_factory):
-        """Test wait_for with zero timeout on eager tasks."""
-        eager_ran = False
-
-        async def immediate_operation():
-            """Operation that completes synchronously."""
-            nonlocal eager_ran
-            eager_ran = True
-            return "immediate"
-
-        async def blocking_operation():
-            """Operation that blocks."""
-            nonlocal eager_ran
-            eager_ran = True
-            await asyncio.sleep(0.1)
-            return "blocked"
-
-        # Test immediate completion with zero timeout
-        task = asyncio.create_task(immediate_operation())
-        assert eager_ran, "Eager execution should have run"
-        # Should complete before timeout fires
-        result = await asyncio.wait_for(task, timeout=0)
-        assert result == "immediate"
-
-        # Test blocking operation with zero timeout
-        eager_ran = False
-        task = asyncio.create_task(blocking_operation())
-        assert eager_ran, "Eager execution should have run"
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(task, timeout=0)
+        await task  # no timeout expected
 
 
 class TestCreateTask:
