@@ -849,7 +849,11 @@ class TestCreateTask:
             await task2
 
     async def test_ghost_task_context_when_no_current_task(self):
-        """Test that ghost task provides context when creating eager task without current task."""
+        """Test that on-demand task creation provides proper context when creating eager task.
+
+        Previously used a separate "ghost task" for eager execution, then created a real task.
+        Now creates the real task on-demand when current_task() is called during eager execution.
+        """
         from asynkit.compat import swap_current_task
 
         # Track the current_task context during different phases
@@ -857,7 +861,7 @@ class TestCreateTask:
 
         async def context_checking_coro():
             """Coroutine that records current_task at different execution points."""
-            # Record initial current_task (should be ghost task during eager execution)
+            # Record initial current_task (should be the real task, created on-demand)
             initial_task = asyncio.current_task()
             context_states.append(("initial", initial_task))
 
@@ -889,7 +893,7 @@ class TestCreateTask:
                 no_task = asyncio.current_task()
                 assert no_task is None, "Should have no current task after swap"
 
-                # Create eager task in no-task context - should use ghost task
+                # Create eager task - will create real task on-demand when current_task() is called
                 task = asyncio.create_task(context_checking_coro())
 
                 # Restore original task context
@@ -910,9 +914,9 @@ class TestCreateTask:
                 assert initial_label == "initial"
                 assert resumed_label == "resumed"
 
-                # Initial execution should have had a ghost task (not None)
+                # Initial execution should have had a real task (created on-demand)
                 assert initial_task is not None, (
-                    "Initial execution should have ghost task context"
+                    "Initial execution should have on-demand created task context"
                 )
 
                 # Resumed execution should have the real task
@@ -923,16 +927,17 @@ class TestCreateTask:
                     "Resumed context should be the actual task we created"
                 )
 
-                # Ghost task should be different from the real task
-                assert initial_task is not resumed_task, (
-                    "Ghost task should be different from real task. "
-                    f"Ghost: {initial_task}, Real: {resumed_task}"
+                # With on-demand task creation, the initial task IS the real task
+                # (no separate ghost task needed)
+                assert initial_task is resumed_task, (
+                    "On-demand task creation: initial and resumed should be same task. "
+                    f"Initial: {initial_task}, Resumed: {resumed_task}"
                 )
 
-                # Ghost task should be different from original task
-                assert initial_task is not original_task, (
-                    "Ghost task should be different from original task. "
-                    f"Ghost: {initial_task}, Original: {original_task}"
+                # The on-demand created task should be the same as the returned task
+                assert initial_task is task, (
+                    "On-demand created task should be the returned task. "
+                    f"Initial: {initial_task}, Returned: {task}"
                 )
 
             finally:
