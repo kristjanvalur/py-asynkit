@@ -125,7 +125,6 @@ Use this for fine-grained control, selectively making specific tasks eager while
 1. **Both approaches always create a Task object**: Even if the coroutine completes synchronously, a Task is created
 2. **Compatibility**: May break code that relies on deferred task execution semantics
 3. **Python 3.12+ Only**: Not available in earlier Python versions
-4. **`asyncio.timeout()` incompatibility**: Python's native eager execution (3.12+) may also experience issues with `asyncio.timeout()` when the timeout fires during eager execution, as the context manager captures the parent task reference instead of the actual task.
 
 ## asynkit's Eager Execution
 
@@ -535,86 +534,63 @@ async def check_var():
 
 ### Understanding `asyncio.current_task()` with Eager Execution
 
-When using asynkit's eager task execution (either via `@eager` decorator, `eager_task_factory`, or `create_task(..., eager_start=True)`), the behavior of `asyncio.current_task()` differs from standard task creation:
+When using asynkit's eager task execution (either via `@eager` decorator, `eager_task_factory`, or `create_task(..., eager_start=True)`), Task objects are created **on-demand** only when `asyncio.current_task()` is actually called during the initial synchronous execution phase.
 
-**Before the first blocking call:**
+### How On-Demand Task Creation Works
 
-- If called from within an existing task: `current_task()` returns the **parent task**
-- If called outside a task context (e.g., from callbacks or synchronous code): `current_task()` returns a temporary **ghost task**
+Asynkit's implementation optimizes task creation by deferring it until absolutely necessary:
 
-**After the first blocking call:**
+- **No call to `current_task()`**: If `asyncio.current_task()` is never called during eager execution and the coroutine completes synchronously, no Task object is created at all
+- **Call to `current_task()` during eager execution**: A Task object is created on-demand and returned. This same task is used if the coroutine later suspends
+- **After suspension**: The Task object is always available (created if not already present)
 
-- `current_task()` returns the **actual task** as expected
+This provides optimal performance: coroutines that complete synchronously without needing task context incur zero Task creation overhead.
 
-### Why This Happens
+### Benefits of On-Demand Task Creation
 
-Eager execution starts the coroutine **immediately** during the `eager()` or `create_task()` call, before the new task's context is fully established. To provide task context during this initial execution phase:
+1. **Optimal performance**: No Task overhead for synchronous completions that don't need task context
+2. **Framework compatibility**: Libraries like `anyio` and `sniffio` that call `current_task()` trigger task creation and work correctly
+3. **Consistent task identity**: Once created, the task object remains the same throughout execution
+4. **`asyncio.timeout()` compatibility**: Timeout context managers work correctly because they trigger on-demand task creation
 
-1. **Parent task case**: If already executing within a task, the coroutine runs in that task's context until it blocks
-2. **Ghost task case**: If there's no current task (e.g., called from a callback or synchronous code), asynkit temporarily swaps in a reusable internal "ghost task" to provide task context
-
-Once the coroutine blocks and a real Task is created, that Task becomes the current task for subsequent execution.
-
-### The Ghost Task Pattern
-
-The ghost task is a **reusable internal task** that serves as a placeholder during eager execution. Key characteristics:
-
-- **Reusable**: A single ghost task instance is reused across multiple eager executions
-- **Temporary**: Only active during the initial synchronous execution phase
-- **Transparent**: Automatically swapped in and out as needed
-- **Context provider**: Ensures `current_task()` never returns `None`, maintaining compatibility
-
-### Why This Design?
-
-This design enables:
-
-1. **Framework compatibility**: Libraries like `anyio` and `sniffio` detect async frameworks by calling `asyncio.current_task()`. The ghost task ensures they get a valid task, not `None`
-2. **Performance**: Reusing a single ghost task is much more efficient than creating wrapper tasks
-3. **Correctness**: After the first blocking call, the real task context is established and used throughout
-
-### Practical Impact
-
-In **most cases**, this behavior is completely transparent. However, code that relies on **exact task identity** before any blocking calls should be aware of this:
-
-**Potentially affected code:**
+### Practical Example
 
 ```python
 @asynkit.eager
-async def check_task_identity():
-    # This may return the parent task or ghost task
-    task1 = asyncio.current_task()
+async def no_task_needed():
+    # Completes synchronously without calling current_task()
+    return 42  # No Task object created!
 
-    await asyncio.sleep(0)  # First blocking call
 
-    # This returns the actual task
+@asynkit.eager
+async def task_needed():
+    # Calls current_task() during eager execution
+    task1 = asyncio.current_task()  # Task created on-demand here
+
+    await asyncio.sleep(0)  # Suspension point
+
+    # Returns the same task
     task2 = asyncio.current_task()
 
-    # These may be different objects!
-    assert task1 is task2  # May fail!
-```
+    assert task1 is task2  # Always succeeds!
 
-**Robust code pattern:**
 
-```python
 @asynkit.eager
-async def robust_pattern():
-    # Don't rely on task identity before blocking
-    await asyncio.sleep(0)  # Ensure actual task is established
-
-    # Now safe to use current_task() for identity checks
-    my_task = asyncio.current_task()
-    # ... use my_task ...
+async def timeout_compatibility():
+    # asyncio.timeout() calls current_task(), triggering on-demand creation
+    async with asyncio.timeout(5):
+        await long_operation()  # Timeout works correctly!
 ```
 
 ### Comparison with Python 3.12+
 
-**Python's native eager tasks** (when using `asyncio.eager_task_factory` or `eager_start=True`) create the Task object **before** starting execution, so `current_task()` always returns the actual task, even during initial execution.
+**Python 3.12+ native eager tasks** always create the Task object upfront before starting execution, providing consistent `current_task()` behavior but with the overhead of Task creation even for synchronous completions.
 
-**asynkit's approach** defers Task creation until the coroutine blocks, which provides better performance (no Task creation for synchronous completion) but requires the ghost task pattern for framework compatibility.
+**asynkit's on-demand approach** defers Task creation until needed, providing better performance for synchronous completions while maintaining full compatibility when task context is required.
 
 ### Framework Compatibility
 
-Despite the difference in `current_task()` behavior, asynkit maintains full compatibility with framework detection libraries:
+Framework detection libraries work correctly because they trigger on-demand task creation:
 
 ```python
 import asynkit
@@ -624,92 +600,25 @@ import asyncio
 
 @asynkit.eager
 async def detect_framework():
-    # Works correctly even with ghost task
+    # sniffio calls current_task(), triggering on-demand task creation
     framework = sniffio.current_async_library()
     assert framework == "asyncio"  # Succeeds!
 
     await asyncio.sleep(0)
 
-    # Still works with actual task
+    # Same task is still available
     framework = sniffio.current_async_library()
     assert framework == "asyncio"  # Succeeds!
 ```
 
-This works because `sniffio` only needs to know that **some** task is current, not the specific task identity.
-
-## Known Issues and Limitations
-
-### `asyncio.timeout()` Incompatibility
-
-**Both** Python's native eager execution and asynkit's eager execution have a known incompatibility with `asyncio.timeout()` context managers (Python 3.11+) and `asyncio.wait_for()` (all Python versions).
-
-#### The Problem
-
-When a coroutine executes eagerly, it runs in the parent task's context before its own Task is created and becomes the current task. If the coroutine enters an `asyncio.timeout()` context during the eager phase:
-
-1. The timeout captures the **parent task** reference (not the coroutine's task)
-2. When the timeout fires, it cancels the parent task
-3. `CancelledError` propagates to the parent, not the coroutine that owns the timeout
-
-This affects **both single tasks and concurrent scenarios**. With multiple eager coroutines (e.g., `asyncio.gather()`), all timeouts capture the same parent task reference, making the problem worse.
-
-#### Example Failure
-
-```python
-import asyncio
-import asynkit
-
-
-async def check_socket(name):
-    """Similar pattern to Redis's can_read_destructive()"""
-    try:
-        async with asyncio.timeout(0):  # Non-blocking timeout check
-            await asyncio.sleep(0)
-    except TimeoutError:
-        pass  # Expected
-    return f"checked-{name}"
-
-
-# With eager execution enabled:
-loop.set_task_factory(asynkit.eager_task_factory)
-results = await asyncio.gather(check_socket("A"), check_socket("B"), check_socket("C"))
-# May raise CancelledError instead of completing successfully
-```
-
-#### Workarounds
-
-1. **Add `await asyncio.sleep(0)` before timeout** (simplest):
-
-   ```python
-   async def check_socket(name):
-       await asyncio.sleep(0)  # Force task creation
-       async with asyncio.timeout(0):  # Now safe
-           await asyncio.sleep(0)
-   ```
-
-   This forces task creation before entering the timeout context, ensuring each timeout has its own task reference.
-
-2. **Disable eager execution for timeout-sensitive code**:
-
-   ```python
-   # Don't use @asynkit.eager on functions that use timeout(0)
-   async def check_socket(name):
-       async with asyncio.timeout(0):
-           ...
-   ```
-
-3. **For Python 3.12+, use native eager execution**: Python's native `asyncio.eager_task_factory` creates Tasks before eager execution, which may handle timeouts differently (though the same fundamental issue can occur).
-
-See [docs/asyncio_timeout_incompatibility.md](asyncio_timeout_incompatibility.md) for detailed analysis, reproduction cases, and experimental patches.
-
 ## Conclusion
 
-Python 3.12's `eager_task_factory` and asynkit's `eager()` both provide valuable optimizations for async code, but serve different use cases:
+Python 3.12's `eager_task_factory` and asynkit's `eager()` both provide valuable optimizations for async code, with slightly different approaches:
 
-- **Python's eager_task_factory**: Global optimization, best for Python 3.12+ applications with many short-lived tasks. The `eager_start` parameter offers selective control.
-- **asynkit's eager()**: Targeted optimization, originally supported Python 3.8+ (now requires Python 3.10+ as of v0.13.0), provides finer control and avoids Task creation overhead
+- **Python's eager_task_factory**: Always creates Task objects upfront, ensuring consistent `current_task()` behavior. Best for Python 3.12+ applications. The `eager_start` parameter offers selective control.
+- **asynkit's eager()**: Uses on-demand task creation, avoiding Task overhead for synchronous completions while maintaining full compatibility when task context is needed. Provides optimal performance for mixed workloads.
 
-Choose based on your Python version requirements, performance goals, and whether you need global or selective eager execution. In many cases, using both together can provide the best results.
+Both approaches are fully compatible with `asyncio.timeout()` and framework detection libraries like `sniffio`. Choose based on your Python version requirements, performance goals, and whether you prefer guaranteed task objects (Python 3.12+) or optimal performance with on-demand creation (asynkit).
 
 ## See Also
 

@@ -408,6 +408,76 @@ class TestCoroStart:
             assert self.gen_exit
 
 
+class TestCoroStartAsCoroutineBeforeStartCompletes:
+    """Test that calling as_coroutine() before start() completes is safe.
+
+    This is critical for on-demand task creation where we need to create a task
+    from as_coroutine() during the eager execution phase.
+    """
+
+    @pytest.fixture
+    def anyio_backend(self):
+        """Use asyncio backend only - this is testing asyncio-specific task creation."""
+        return "asyncio"
+
+    async def test_blocking_coroutine(self, corostart_type):
+        """Test calling as_coroutine() before start() completes with a blocking coroutine.
+
+        This verifies that as_coroutine() just creates a coroutine wrapper without
+        executing it, so it's safe to call even while start() is still running.
+        """
+        created_task = None
+        started = False
+
+        async def blocking_coro():
+            nonlocal created_task, started
+            # Simulate what happens in coro_eager_task_helper:
+            # as_coroutine() is called during start() execution
+            created_task = asyncio.create_task(cs.as_coroutine())
+            started = True
+            await asyncio.sleep(0)  # Block
+            return "blocking_result"
+
+        cs = corostart_type(blocking_coro(), autostart=False)
+        cs.start()  # During this call, as_coroutine() will be called
+
+        assert started, "Coroutine should have started eagerly"
+        assert created_task is not None, "Task should have been created"
+        assert not cs.done(), "Blocking coroutine should not complete synchronously"
+
+        # The task should complete successfully when awaited
+        result = await created_task
+        assert result == "blocking_result"
+
+    async def test_nonblocking_coroutine(self, corostart_type):
+        """Test calling as_coroutine() before start() completes with a non-blocking coroutine.
+
+        Tests the synchronous completion case where the coroutine finishes during
+        start() but as_coroutine() has already been called.
+        """
+        created_task = None
+        started = False
+
+        async def nonblocking_coro():
+            nonlocal created_task, started
+            # Simulate what happens in coro_eager_task_helper:
+            # as_coroutine() is called during start() execution
+            created_task = asyncio.create_task(cs.as_coroutine())
+            started = True
+            return "sync_result"  # Complete synchronously
+
+        cs = corostart_type(nonblocking_coro(), autostart=False)
+        cs.start()  # During this call, as_coroutine() will be called
+
+        assert started, "Coroutine should have started eagerly"
+        assert created_task is not None, "Task should have been created"
+        assert cs.done(), "Non-blocking coroutine should complete synchronously"
+
+        # The task should complete successfully when awaited
+        result = await created_task
+        assert result == "sync_result"
+
+
 class TestCoroStartClose:
     # A separate test class to test close semantics
     # with no parametrization
