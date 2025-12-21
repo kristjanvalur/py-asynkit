@@ -496,6 +496,9 @@ class TestEagerFactory:
         This verifies that the Timeout "cancel" message is delivered to the correct task,
         even though it was set up during the eager execution.
         """
+        if not hasattr(asyncio, "timeout"):
+            pytest.skip("asyncio.timeout() requires Python 3.11+")
+
         eager = 0
 
         async def timeout0():
