@@ -509,7 +509,7 @@ class TestEagerFactory:
                 await asyncio.sleep(0.1)  # Should cause timeout
 
         async def timeout1():
-            """Operation that times out after a short delay."""
+            """Operation that would time out immediately but does not block."""
             nonlocal eager
             async with asyncio.timeout(0):
                 eager = 2
