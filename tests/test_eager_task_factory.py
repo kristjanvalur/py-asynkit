@@ -523,6 +523,49 @@ class TestEagerFactory:
         assert eager == 2, "Eager task factory did not run eagerly"
         await task  # no timeout expected
 
+    async def test_timeout_wrapping_eager_task(self, eager_factory):
+        """Test that asyncio.timeout() correctly times out an eager task created within its scope.
+
+        This tests the scenario where:
+        1. A timeout context is set up in the parent task
+        2. An eager task is created within that timeout's scope
+        3. The timeout should correctly identify and timeout the eager task (not the parent)
+
+        This verifies the on-demand task creation mechanism properly handles
+        timeout contexts that wrap the task creation.
+        """
+        if not hasattr(asyncio, "timeout"):
+            pytest.skip("asyncio.timeout() requires Python 3.11+")
+
+        eager_ran = False
+        parent_cancelled = False
+
+        async def operation_that_blocks():
+            """Eager task that should be timed out."""
+            nonlocal eager_ran
+            eager_ran = True
+            await asyncio.sleep(1)  # Should be cancelled by timeout
+            return "should_not_complete"
+
+        # Set up timeout in parent, then create eager task within that scope
+        try:
+            async with asyncio.timeout(0.01):
+                task = asyncio.create_task(operation_that_blocks())
+                assert eager_ran, "Eager task factory should have run eagerly"
+                # The timeout should cancel the task, not the parent
+                await task
+        except asyncio.TimeoutError:
+            # This is expected - the timeout should fire
+            pass
+        except asyncio.CancelledError:
+            # This would indicate the parent was cancelled instead of the task
+            parent_cancelled = True
+
+        assert not parent_cancelled, (
+            "Parent task should not be cancelled, only the eager task"
+        )
+        assert eager_ran, "Eager task should have started"
+
     async def test_nested_eager_task_creation(self, eager_factory):
         """Test that eager task factory handles nested task creation correctly.
 
