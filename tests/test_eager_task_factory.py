@@ -513,7 +513,6 @@ class TestEagerFactory:
             nonlocal eager
             async with asyncio.timeout(0):
                 eager = 2
-                pass
 
         task = asyncio.create_task(timeout0())
         assert eager == 1, "Eager task factory did not run eagerly"
@@ -526,20 +525,20 @@ class TestEagerFactory:
 
     async def test_nested_eager_task_creation(self, eager_factory):
         """Test that eager task factory handles nested task creation correctly.
-        
+
         This verifies that when an eagerly-started coroutine creates another eager
         task during its initial synchronous execution, the monkey-patching mechanism
         handles reentrancy correctly and both tasks execute properly.
         """
         inner_eager_ran = False
         outer_eager_ran = False
-        
+
         async def inner_eager():
             """Inner coroutine that completes synchronously."""
             nonlocal inner_eager_ran
             inner_eager_ran = True
             return "inner_result"
-        
+
         async def outer_eager():
             """Outer coroutine that creates an inner task during eager execution."""
             nonlocal outer_eager_ran
@@ -549,34 +548,36 @@ class TestEagerFactory:
             # Inner should have run eagerly too
             assert inner_eager_ran, "Inner task should have executed eagerly"
             return await inner_task
-        
+
         # Create outer task - both outer and inner should execute eagerly
         task = asyncio.create_task(outer_eager())
-        
+
         # Verify both coroutines ran eagerly (synchronously)
         assert outer_eager_ran, "Outer task should have executed eagerly"
-        assert inner_eager_ran, "Inner task should have executed eagerly during outer's execution"
-        
+        assert inner_eager_ran, (
+            "Inner task should have executed eagerly during outer's execution"
+        )
+
         # Verify the result is correct
         result = await task
         assert result == "inner_result"
 
     async def test_nested_eager_task_with_blocking_inner(self, eager_factory):
         """Test nested eager task creation where inner task blocks.
-        
+
         This verifies that when the inner task blocks (doesn't complete synchronously),
         it still creates a proper Task and the outer task can await it correctly.
         """
         inner_eager_ran = False
         outer_eager_ran = False
-        
+
         async def inner_blocking():
             """Inner coroutine that blocks."""
             nonlocal inner_eager_ran
             inner_eager_ran = True
             await asyncio.sleep(0)  # Block, forcing Task creation
             return "inner_blocked_result"
-        
+
         async def outer_eager():
             """Outer coroutine that creates a blocking inner task."""
             nonlocal outer_eager_ran
@@ -588,14 +589,14 @@ class TestEagerFactory:
             assert not inner_task.done(), "Inner task should not be done yet"
             # Now outer blocks waiting for inner
             return await inner_task
-        
+
         # Create outer task
         task = asyncio.create_task(outer_eager())
-        
+
         # Verify outer ran eagerly before blocking on inner
         assert outer_eager_ran, "Outer task should have executed eagerly"
         assert inner_eager_ran, "Inner task should have started eagerly"
-        
+
         # Verify the result is correct
         result = await task
         assert result == "inner_blocked_result"
