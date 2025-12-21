@@ -7,7 +7,6 @@ from contextvars import ContextVar, copy_context
 from typing import Any
 from unittest.mock import Mock
 
-from asynkit.coroutine import eager
 import pytest
 from anyio import Event, create_task_group, sleep
 
