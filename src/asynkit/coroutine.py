@@ -908,26 +908,29 @@ def coro_eager_task_helper(
 ) -> asyncio.Task[T] | TaskLikeFuture[T]:
     """
     Create a task with eager execution.  We use a CoroStart to start the
-    coroutine eagerly, and only create a real Task if the coroutine blocks, 
+    coroutine eagerly, and only create a real Task if the coroutine blocks,
     or if current_task() is called during the eager start.
 
-    If a "current_task()" call is executed during eager start, we must create
-    a real Task to provide the correct context.  This solves two things:
-    1. anyio/sniffio can detect the async framework via current_task() even before
-       for the first task created on the thread.
+    If a "current_task()" call is executed during eager start, we create
+    a real Task on-demand and provide it to the caller.  This solves two things:
+    1. anyio/sniffio can detect the async framework via current_task() even
+       during eager execution, before the first actual suspension.
     2. Code that uses asyncio.Timeout() to schedule a cancel() call to the current
        task will work correctly during eager execution.
-       
-    We delay the creation of a real Task, because creating and scheduling a Task
-    has non-trivial latency.  By delaying it until we know we need it, we
-    improve the performance of eager execution for coroutines that complete
-    synchronously.
-    
-    The coroutine is started immediately. If it blocks, we create a real Task, if
-    not already created, to continue execution. If it completes synchronously, we return a
-    TaskLikeFuture wrapping the result.
 
-    This ensures all parts of the execution run in the correct task context.
+    We delay the creation of a real Task, because creating and scheduling a Task
+    has non-trivial latency.  By deferring it until we know we need it (either
+    a current_task() call or actual suspension), we improve the performance of
+    eager execution for coroutines that complete synchronously without needing
+    task context.
+
+    The coroutine is started immediately. If it blocks, we create a real Task if
+    not already created, to continue execution. If it completes synchronously
+    without calling current_task(), we return a TaskLikeFuture wrapping the result
+    (no Task object created at all).
+
+    This on-demand approach ensures optimal performance while maintaining full
+    compatibility with code that depends on task context.
     """
 
     # if the loop is different from the current loop, we cannot run eager.
