@@ -122,7 +122,7 @@ Use this for fine-grained control, selectively making specific tasks eager while
 
 ### Limitations
 
-1. **Both approaches always create a Task object**: Even if the coroutine completes synchronously, a Task is created
+1. **Both approaches always create a Task object**: Even if the coroutine completes synchronously, a Task is created. However, Python 3.12 optimized this by making Task creation cheaper for eager execution. The task is instantiated with minimal state and not immediately scheduled to the event loop, reducing overhead compared to Python 3.11 and earlier.
 2. **Compatibility**: May break code that relies on deferred task execution semantics
 3. **Python 3.12+ Only**: Not available in earlier Python versions
 
@@ -584,9 +584,15 @@ async def timeout_compatibility():
 
 ### Comparison with Python 3.12+
 
-**Python 3.12+ native eager tasks** always create the Task object upfront before starting execution, providing consistent `current_task()` behavior but with the overhead of Task creation even for synchronous completions.
+**Python 3.12+ native eager tasks** always create the Task object upfront before starting execution. However, Python 3.12 optimized Task creation specifically for eager execution—when a Task is created with the intent to start eagerly, it doesn't incur the full scheduling overhead of earlier Python versions. The Task is instantiated but not immediately scheduled onto the event loop, making eager Task creation much cheaper than in Python 3.11 and earlier.
 
-**asynkit's on-demand approach** defers Task creation until needed, providing better performance for synchronous completions while maintaining full compatibility when task context is required.
+Despite this optimization, there is still overhead associated with Task object instantiation itself (memory allocation, initialization, etc.), even for coroutines that complete synchronously.
+
+**asynkit's on-demand approach** goes further by deferring Task creation entirely until needed. For coroutines that complete synchronously without requiring task context (no `current_task()` calls), no Task object is created at all, eliminating both the instantiation and scheduling overhead. When task context is needed, a Task is created on-demand and maintains consistent identity throughout execution.
+
+**Performance comparison:**
+- **Python 3.12+**: Optimized Task creation (no immediate scheduling), but Task object still instantiated for all eager executions
+- **asynkit**: Zero Task overhead for synchronous completions without task context; Task created on-demand only when needed
 
 ### Framework Compatibility
 
