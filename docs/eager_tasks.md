@@ -556,13 +556,18 @@ This provides optimal performance: coroutines that complete synchronously withou
 ### Practical Example
 
 ```python
-@asynkit.eager
+import asyncio
+import asynkit
+
+# Set up eager task factory
+asyncio.get_event_loop().set_task_factory(asynkit.eager_task_factory)
+
+
 async def no_task_needed():
     # Completes synchronously without calling current_task()
     return 42  # No Task object created!
 
 
-@asynkit.eager
 async def task_needed():
     # Calls current_task() during eager execution
     task1 = asyncio.current_task()  # Task created on-demand here
@@ -575,11 +580,17 @@ async def task_needed():
     assert task1 is task2  # Always succeeds!
 
 
-@asynkit.eager
 async def timeout_compatibility():
     # asyncio.timeout() calls current_task(), triggering on-demand creation
     async with asyncio.timeout(5):
         await long_operation()  # Timeout works correctly!
+
+
+async def main():
+    # Using eager task factory - tasks created with create_task()
+    result1 = await asyncio.create_task(no_task_needed())
+    await asyncio.create_task(task_needed())
+    await asyncio.create_task(timeout_compatibility())
 ```
 
 ### Comparison with Python 3.12+
@@ -605,7 +616,6 @@ import sniffio
 import asyncio
 
 
-@asynkit.eager
 async def detect_framework():
     # sniffio calls current_task(), triggering on-demand task creation
     framework = sniffio.current_async_library()
@@ -616,6 +626,12 @@ async def detect_framework():
     # Same task is still available
     framework = sniffio.current_async_library()
     assert framework == "asyncio"  # Succeeds!
+
+
+async def main():
+    # Using eager task factory or eager_start parameter
+    task = asyncio.create_task(detect_framework(), eager_start=True)
+    await task
 ```
 
 ## Conclusion
