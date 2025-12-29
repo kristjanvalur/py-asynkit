@@ -220,7 +220,7 @@ eager_factory = asynkit.create_eager_task_factory(MyTask)
 loop.set_task_factory(eager_factory)
 ```
 
-> ℹ️ **Note on `current_task()` behavior:** When using eager task execution, `asyncio.current_task()` returns the parent task or a temporary ghost task before the first blocking call, and the actual task afterwards. This ensures compatibility with framework detection libraries. See [Current Task Behavior](docs/eager_tasks.md#current-task-behavior-during-eager-execution) for details.
+> ℹ️ **Note on `current_task()` behavior:** When using eager task execution, a Task object is created on-demand only if `asyncio.current_task()` is called during the initial synchronous execution. If not called, no Task is created for coroutines that complete synchronously, providing optimal performance. See [Current Task Behavior](docs/eager_tasks.md#current-task-behavior-during-eager-execution) for details.
 
 #### Python 3.14+ Compatibility
 
@@ -244,28 +244,6 @@ Eager task factories provide **significant performance improvements** for task s
 **Important**: Eager execution provides **predictable performance** - latency remains constant regardless of work done between task creation and await, while non-eager latency scales with application complexity.
 
 See [docs/eager_task_factory_performance.md](docs/eager_task_factory_performance.md) for detailed performance analysis comparing asynkit's implementation with Python 3.14's native `eager_task_factory`.
-
-#### ⚠️ Known Limitations
-
-**`asyncio.timeout()` Incompatibility**: When using eager execution, there is a known incompatibility with `asyncio.timeout()`. The context manager captures the currently
-executing task to cancel. But during eager start, the *current* is the parent task. This will cause the timeout to manifest as a `CancelledError` in the parent task.
-
-**Workarounds**:
-
-- **Use `asyncio.wait_for()` instead** (recommended): Works correctly with eager execution
-  ```python
-  await asyncio.wait_for(operation(), timeout=5)
-  ```
-- **Add `await asyncio.sleep(0)` before timeout**: Forces task creation before entering timeout context
-  ```python
-  await asyncio.sleep(0)  # Force task creation
-  async with asyncio.timeout(5):
-      await operation()
-  ```
-- Disable eager execution for timeout-sensitive coroutines
-- For Python 3.12+, consider using Python's native `asyncio.eager_task_factory` instead
-
-See [docs/asyncio_timeout_incompatibility.md](docs/asyncio_timeout_incompatibility.md) for detailed analysis and additional workarounds.
 
 #### When to Use Task Factories vs. Decorators
 

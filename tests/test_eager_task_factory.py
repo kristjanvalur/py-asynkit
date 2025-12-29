@@ -490,6 +490,160 @@ class TestEagerFactory:
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(task, timeout=0)
 
+    async def test_timeout(self, eager_factory):
+        """Test that eager task factory works with asyncio.timeout(),
+        when the Timeout is entered in the eager part.
+        This verifies that the Timeout "cancel" message is delivered to the correct task,
+        even though it was set up during the eager execution.
+        """
+        if not hasattr(asyncio, "timeout"):
+            pytest.skip("asyncio.timeout() requires Python 3.11+")
+
+        eager = 0
+
+        async def timeout0():
+            """Operation that times out immediately."""
+            nonlocal eager
+            async with asyncio.timeout(0):
+                eager = 1
+                await asyncio.sleep(0.1)  # Should cause timeout
+
+        async def timeout1():
+            """Operation that would time out immediately but does not block."""
+            nonlocal eager
+            async with asyncio.timeout(0):
+                eager = 2
+
+        task = asyncio.create_task(timeout0())
+        assert eager == 1, "Eager task factory did not run eagerly"
+        with pytest.raises(asyncio.TimeoutError):
+            await task
+
+        task = asyncio.create_task(timeout1())
+        assert eager == 2, "Eager task factory did not run eagerly"
+        await task  # no timeout expected
+
+    async def test_timeout_wrapping_eager_task(self, eager_factory):
+        """Test that asyncio.timeout() correctly times out an eager task created within its scope.
+
+        This tests the scenario where:
+        1. A timeout context is set up in the parent task
+        2. An eager task is created within that timeout's scope
+        3. The timeout should correctly identify and timeout the eager task (not the parent)
+
+        This verifies the on-demand task creation mechanism properly handles
+        timeout contexts that wrap the task creation.
+        """
+        if not hasattr(asyncio, "timeout"):
+            pytest.skip("asyncio.timeout() requires Python 3.11+")
+
+        eager_ran = False
+        parent_cancelled = False
+
+        async def operation_that_blocks():
+            """Eager task that should be timed out."""
+            nonlocal eager_ran
+            eager_ran = True
+            await asyncio.sleep(1)  # Should be cancelled by timeout
+            return "should_not_complete"
+
+        # Set up timeout in parent, then create eager task within that scope
+        try:
+            async with asyncio.timeout(0.01):
+                task = asyncio.create_task(operation_that_blocks())
+                assert eager_ran, "Eager task factory should have run eagerly"
+                # The timeout should cancel the task, not the parent
+                await task
+        except asyncio.TimeoutError:
+            # This is expected - the timeout should fire
+            pass
+        except asyncio.CancelledError:
+            # This would indicate the parent was cancelled instead of the task
+            parent_cancelled = True
+
+        assert not parent_cancelled, (
+            "Parent task should not be cancelled, only the eager task"
+        )
+        assert eager_ran, "Eager task should have started"
+
+    async def test_nested_eager_task_creation(self, eager_factory):
+        """Test that eager task factory handles nested task creation correctly.
+
+        This verifies that when an eagerly-started coroutine creates another eager
+        task during its initial synchronous execution, the monkey-patching mechanism
+        handles reentrancy correctly and both tasks execute properly.
+        """
+        inner_eager_ran = False
+        outer_eager_ran = False
+
+        async def inner_eager():
+            """Inner coroutine that completes synchronously."""
+            nonlocal inner_eager_ran
+            inner_eager_ran = True
+            return "inner_result"
+
+        async def outer_eager():
+            """Outer coroutine that creates an inner task during eager execution."""
+            nonlocal outer_eager_ran
+            outer_eager_ran = True
+            # This create_task call happens during outer's eager start
+            inner_task = asyncio.create_task(inner_eager())
+            # Inner should have run eagerly too
+            assert inner_eager_ran, "Inner task should have executed eagerly"
+            return await inner_task
+
+        # Create outer task - both outer and inner should execute eagerly
+        task = asyncio.create_task(outer_eager())
+
+        # Verify both coroutines ran eagerly (synchronously)
+        assert outer_eager_ran, "Outer task should have executed eagerly"
+        assert inner_eager_ran, (
+            "Inner task should have executed eagerly during outer's execution"
+        )
+
+        # Verify the result is correct
+        result = await task
+        assert result == "inner_result"
+
+    async def test_nested_eager_task_with_blocking_inner(self, eager_factory):
+        """Test nested eager task creation where inner task blocks.
+
+        This verifies that when the inner task blocks (doesn't complete synchronously),
+        it still creates a proper Task and the outer task can await it correctly.
+        """
+        inner_eager_ran = False
+        outer_eager_ran = False
+
+        async def inner_blocking():
+            """Inner coroutine that blocks."""
+            nonlocal inner_eager_ran
+            inner_eager_ran = True
+            await asyncio.sleep(0)  # Block, forcing Task creation
+            return "inner_blocked_result"
+
+        async def outer_eager():
+            """Outer coroutine that creates a blocking inner task."""
+            nonlocal outer_eager_ran
+            outer_eager_ran = True
+            # This create_task call happens during outer's eager start
+            inner_task = asyncio.create_task(inner_blocking())
+            # Inner started eagerly but didn't complete
+            assert inner_eager_ran, "Inner task should have started eagerly"
+            assert not inner_task.done(), "Inner task should not be done yet"
+            # Now outer blocks waiting for inner
+            return await inner_task
+
+        # Create outer task
+        task = asyncio.create_task(outer_eager())
+
+        # Verify outer ran eagerly before blocking on inner
+        assert outer_eager_ran, "Outer task should have executed eagerly"
+        assert inner_eager_ran, "Inner task should have started eagerly"
+
+        # Verify the result is correct
+        result = await task
+        assert result == "inner_blocked_result"
+
 
 class TestCreateTask:
     """Test the create_task function with eager_start parameter."""
@@ -785,7 +939,11 @@ class TestCreateTask:
             await task2
 
     async def test_ghost_task_context_when_no_current_task(self):
-        """Test that ghost task provides context when creating eager task without current task."""
+        """Test that on-demand task creation provides proper context when creating eager task.
+
+        Previously used a separate "ghost task" for eager execution, then created a real task.
+        Now creates the real task on-demand when current_task() is called during eager execution.
+        """
         from asynkit.compat import swap_current_task
 
         # Track the current_task context during different phases
@@ -793,7 +951,7 @@ class TestCreateTask:
 
         async def context_checking_coro():
             """Coroutine that records current_task at different execution points."""
-            # Record initial current_task (should be ghost task during eager execution)
+            # Record initial current_task (should be the real task, created on-demand)
             initial_task = asyncio.current_task()
             context_states.append(("initial", initial_task))
 
@@ -825,7 +983,7 @@ class TestCreateTask:
                 no_task = asyncio.current_task()
                 assert no_task is None, "Should have no current task after swap"
 
-                # Create eager task in no-task context - should use ghost task
+                # Create eager task - will create real task on-demand when current_task() is called
                 task = asyncio.create_task(context_checking_coro())
 
                 # Restore original task context
@@ -846,9 +1004,9 @@ class TestCreateTask:
                 assert initial_label == "initial"
                 assert resumed_label == "resumed"
 
-                # Initial execution should have had a ghost task (not None)
+                # Initial execution should have had a real task (created on-demand)
                 assert initial_task is not None, (
-                    "Initial execution should have ghost task context"
+                    "Initial execution should have on-demand created task context"
                 )
 
                 # Resumed execution should have the real task
@@ -859,16 +1017,17 @@ class TestCreateTask:
                     "Resumed context should be the actual task we created"
                 )
 
-                # Ghost task should be different from the real task
-                assert initial_task is not resumed_task, (
-                    "Ghost task should be different from real task. "
-                    f"Ghost: {initial_task}, Real: {resumed_task}"
+                # With on-demand task creation, the initial task IS the real task
+                # (no separate ghost task needed)
+                assert initial_task is resumed_task, (
+                    "On-demand task creation: initial and resumed should be same task. "
+                    f"Initial: {initial_task}, Resumed: {resumed_task}"
                 )
 
-                # Ghost task should be different from original task
-                assert initial_task is not original_task, (
-                    "Ghost task should be different from original task. "
-                    f"Ghost: {initial_task}, Original: {original_task}"
+                # The on-demand created task should be the same as the returned task
+                assert initial_task is task, (
+                    "On-demand created task should be the returned task. "
+                    f"Initial: {initial_task}, Returned: {task}"
                 )
 
             finally:
