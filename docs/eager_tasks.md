@@ -591,6 +591,7 @@ Despite this optimization, there is still overhead associated with Task object i
 **asynkit's on-demand approach** goes further by deferring Task creation entirely until needed. For coroutines that complete synchronously without requiring task context (no `current_task()` calls), no Task object is created at all, eliminating both the instantiation and scheduling overhead. When task context is needed, a Task is created on-demand and maintains consistent identity throughout execution.
 
 **Performance comparison:**
+
 - **Python 3.12+**: Optimized Task creation (no immediate scheduling), but Task object still instantiated for all eager executions
 - **asynkit**: Zero Task overhead for synchronous completions without task context; Task created on-demand only when needed
 

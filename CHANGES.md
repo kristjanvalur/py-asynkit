@@ -4,6 +4,71 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.18.0] - 2025-12-29
+
+### Major Changes
+
+- **On-demand Task Creation**: Replaced ghost task pattern with on-demand task creation for eager execution
+  - Task objects are now created **only when needed** - specifically when `current_task()` is called during eager execution
+  - For coroutines that complete synchronously without calling `current_task()`, no Task object is created at all
+  - When a Task is needed, it's a **real Task object**, not a ghost task, eliminating previous limitations
+  - Implementation uses dual patching: both `asyncio.current_task` and `asyncio.tasks.current_task` are intercepted
+  - Leverages `CoroStart(autostart=False)` to create the object before starting the coroutine
+  - **Tradeoff**: Introduces overhead from patching `current_task()` calls, and frameworks like uvicorn that call `current_task()` for runtime detection now trigger task creation (whereas ghost tasks were sufficient before)
+  - **Best suited for busy applications** where the compatibility improvements outweigh the overhead
+
+### Bug Fixes
+
+- **asyncio.timeout() compatibility**: The `asyncio.timeout()` context manager now works correctly with eager task execution
+  - Previously failed because the ghost task pattern was incompatible with timeout internals
+  - The on-demand real task creation resolves this incompatibility completely
+  - No workarounds or `await asyncio.sleep(0)` calls needed anymore
+  - Added comprehensive tests for timeout scenarios (Python 3.11+ only, where `asyncio.timeout()` is available)
+
+### Tests
+
+- **Comprehensive timeout testing**: Added extensive test coverage for eager tasks with timeouts
+
+  - `test_timeout`: Tests `asyncio.timeout()` during eager execution
+  - `test_timeout_wrapping_eager_task`: Tests timeout set up in parent task wrapping eager task creation
+  - `test_wait_for` and `test_wait_for_zero_timeout`: Previously added, continue to validate `asyncio.wait_for()` compatibility
+  - `test_nested_eager_task_creation`: Tests nested task creation during eager execution
+  - Python 3.10 compatibility: Timeout tests automatically skipped on Python 3.10 (doesn't have `asyncio.timeout()`)
+
+- **CoroStart safety tests**: Added `TestCoroStartAsCoroutineBeforeStartCompletes` test class
+
+  - `test_blocking_coroutine`: Verifies `as_coroutine()` safe to call during `start()` with blocking coroutine
+  - `test_nonblocking_coroutine`: Verifies `as_coroutine()` safe to call during `start()` with synchronous completion
+  - Ensures the on-demand creation mechanism handles edge cases correctly
+
+- **Updated expectations**: Modified `test_ghost_task_context_when_no_current_task` to expect real task instead of ghost task
+
+  - Validates that the on-demand task creation creates actual Task objects
+
+### Documentation
+
+- **Removed ghost task references**: Updated all documentation to reflect the new on-demand task creation architecture
+
+  - **README.md**: Removed "Known Limitations" section about `asyncio.timeout()` incompatibility
+  - **README.md**: Updated `current_task()` behavior note to explain on-demand creation
+  - **README.md**: Removed `wait_for()` workaround documentation (no longer needed)
+  - **docs/eager_tasks.md**: Complete rewrite of "Current Task Behavior" section
+  - **docs/eager_tasks.md**: Removed all ghost task references throughout
+  - **docs/eager_tasks.md**: Added detailed explanation of on-demand task creation mechanism
+  - **docs/eager_tasks.md**: Clarified Python 3.12 Task creation optimization comparison
+
+- **Updated inline comments**: Reviewed and updated code comments in `coroutine.py` to reflect current implementation
+
+  - Comments now accurately describe the on-demand creation mechanism
+  - Removed outdated references to ghost task pattern
+
+### Internal Changes
+
+- **Removed ghost task implementation**: Eliminated the entire ghost task pattern from the codebase
+  - Cleaner, more maintainable implementation
+  - Better compatibility with asyncio ecosystem
+  - Reduced complexity in eager task factory logic
+
 ## [0.17.6] - 2025-12-20
 
 ### Features
