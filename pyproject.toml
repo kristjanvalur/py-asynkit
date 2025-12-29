@@ -41,6 +41,7 @@ dev = [
     "types-setuptools",  # Type stubs for setuptools (dev/build only)
     "mdformat>=0.7.0",
     "mdformat-ruff>=0.1.0",
+    "trio>=0.31.0",
 ]
 
 [project.optional-dependencies]
