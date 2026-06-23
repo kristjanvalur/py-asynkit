@@ -39,7 +39,7 @@ try:
     from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[attr-defined]
     from ._cext import get_build_info as _get_c_build_info  # type: ignore[attr-defined]
 
-    _cext_module = importlib.import_module("asynkit._cext")
+    _cext_module = importlib.import_module("._cext", __package__)
     _get_c_current_context = getattr(_cext_module, "get_current_context", None)
 
     _HAVE_C_EXTENSION = (
