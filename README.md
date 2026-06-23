@@ -497,6 +497,63 @@ async with aclosing(CoroStart(foo())) as coro:
 CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
 context.
 
+#### Experimental: sharing the current context
+
+Python intentionally does not expose the currently active `contextvars.Context` object. It only lets you copy it with
+`contextvars.copy_context()`. On CPython, and only when the asynkit C extension is available, `get_current_context()`
+returns that live current context object instead. If the live context cannot be retrieved, it raises `NotImplementedError`.
+
+This is an experimental escape hatch. It intentionally breaks normal context isolation, because two pieces of code can
+now mutate the same `Context` object. Use it only when you can guarantee that the caller waits while the remote execution
+is using the shared context. The same context must not be actively entered in two places at once.
+
+One use for this is to start a coroutine in the current context, then hand the blocking continuation to another executor,
+such as a worker thread:
+
+```python
+import asyncio
+import contextvars
+
+import asynkit
+
+var = contextvars.ContextVar("var")
+
+
+async def work():
+    var.set("started")
+
+    # after this point, the coroutine can be continued somewhere else
+    await asyncio.sleep(0)
+
+    var.set("finished")
+    return "done"
+
+
+async def main():
+    var.set("caller")
+    context = asynkit.get_current_context()
+
+    # `context` is for the continuation. The initial `start()` runs in the
+    # already-active caller context, so do not pass `context` to `start()`.
+    start = asynkit.CoroStart(work(), context=context, autostart=False)
+    if start.start():
+        return start.result()
+
+    assert var.get() == "started"
+
+    # The caller waits while the worker thread continues the coroutine.
+    # CoroStart itself enters `context` while driving the continuation.
+    result = await asyncio.to_thread(asyncio.run, start.as_coroutine())
+
+    assert result == "done"
+    assert var.get() == "finished"
+```
+
+Needless to say, this is a sharp tool. Do not wrap `start.as_coroutine()` in `context.run()` and do not also pass the
+same `context` to `asyncio.create_task(..., context=context)`, because `CoroStart` already uses that context when it
+resumes the coroutine. If you only need ordinary task context propagation, use `copy_context()` or the normal eager task
+helpers instead.
+
 ### Context helper
 
 `coro_await()` is a helper function to await a coroutine, optionally with a `contextvars.Context`

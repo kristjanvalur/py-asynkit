@@ -14,6 +14,18 @@ import asynkit
 import asynkit.coroutine
 
 
+def live_current_context_available() -> bool:
+    probe = contextvars.ContextVar("live_current_context_available")
+    token = probe.set(True)
+    try:
+        asynkit.get_current_context()
+    except NotImplementedError:
+        return False
+    finally:
+        probe.reset(token)
+    return True
+
+
 class TestEagerTaskFactoryContext:
     """Test context behavior in eager task factory."""
 
@@ -178,6 +190,59 @@ class TestEagerTaskFactoryContext:
 
         finally:
             loop.set_task_factory(old_factory)
+
+    async def test_explicit_current_context_shared_with_task_continuation(
+        self, implementations
+    ):
+        """Test explicit current context use shares task continuation changes."""
+        if not live_current_context_available():
+            pytest.skip("live current context requires the C extension helper")
+
+        for impl_name, impl_class in implementations:
+            original = asynkit.coroutine.CoroStart
+            asynkit.coroutine.CoroStart = impl_class
+            try:
+                await self._test_explicit_shared_context(impl_name)
+            finally:
+                asynkit.coroutine.CoroStart = original
+
+    async def _test_explicit_shared_context(self, impl_name: str):
+        self.test_var.set("creator_value")
+        shared_context = asynkit.get_current_context()
+        observations = []
+
+        async def blocking_task():
+            observations.append(("initial", self.test_var.get()))
+            assert self.test_var.get() == "creator_value"
+            self.test_var.set("before_sleep")
+            await asyncio.sleep(0)
+            observations.append(("after_sleep", self.test_var.get()))
+            assert self.test_var.get() == "before_sleep"
+            self.test_var.set("after_sleep")
+            return "done"
+
+        cs = asynkit.coroutine.CoroStart(
+            blocking_task(), context=shared_context, autostart=False
+        )
+        assert cs.start() is False
+        assert self.test_var.get() == "before_sleep"
+
+        task = asyncio.create_task(cs.as_coroutine())
+        result = await task
+
+        assert result == "done"
+        assert self.test_var.get() == "after_sleep"
+        assert observations == [
+            ("initial", "creator_value"),
+            ("after_sleep", "before_sleep"),
+        ], impl_name
+
+    async def test_get_current_context_raises_without_c_helper(self, monkeypatch):
+        """Test pure Python fallback reports unavailable live context."""
+
+        monkeypatch.setattr(asynkit.coroutine, "_get_c_current_context", None)
+        with pytest.raises(NotImplementedError):
+            asynkit.get_current_context()
 
     async def test_context_inheritance_with_provided_context(self, implementations):
         """

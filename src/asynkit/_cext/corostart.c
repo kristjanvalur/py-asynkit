@@ -1337,10 +1337,28 @@ static PyObject *cext_get_build_info(PyObject *_self)
     return info;
 }
 
+static PyObject *cext_get_current_context(PyObject *_self)
+{
+    (void) _self;
+    PyThreadState *tstate = PyThreadState_Get();
+    PyObject *context = tstate->context;
+    if(context == NULL) {
+        PyErr_SetString(PyExc_NotImplementedError,
+                        "the current context object is not available");
+        return NULL;
+    }
+    Py_INCREF(context);
+    return context;
+}
+
 static PyMethodDef module_methods[] = {{"get_build_info",
                                         (PyCFunction) cext_get_build_info,
                                         METH_NOARGS,
                                         "Get build configuration information"},
+                                       {"get_current_context",
+                                        (PyCFunction) cext_get_current_context,
+                                        METH_NOARGS,
+                                        "Get the live current context object"},
                                        {NULL, NULL, 0, NULL}};
 
 /* Module slots for GIL configuration */
