@@ -25,6 +25,7 @@ from asynkit.compat import (
     ReferenceTypeTaskAny,
 )
 from asynkit.loop.default import task_from_handle
+from asynkit.loop.eventloop import _DefaultEventLoopPolicy, _warn_policy_deprecated
 from asynkit.loop.schedulingloop import AbstractSchedulingLoop
 from asynkit.loop.types import TaskAny
 from asynkit.scheduling import task_is_runnable
@@ -724,6 +725,10 @@ if hasattr(asyncio, "ProactorEventLoop"):  # pragma: no coverage
     __all__.append("PriorityProactorEventLoop")
 
 
-class PriorityEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+class PriorityEventLoopPolicy(_DefaultEventLoopPolicy):
+    def __init__(self) -> None:
+        _warn_policy_deprecated("PriorityEventLoopPolicy")
+        super().__init__()
+
     def new_event_loop(self) -> asyncio.AbstractEventLoop:
         return DefaultPriorityEventLoop()  # type: ignore

@@ -4,7 +4,8 @@ import asyncio
 import asyncio.base_events
 import contextlib
 import sys
-from asyncio import AbstractEventLoop, AbstractEventLoopPolicy, Future, Handle, Task
+import warnings
+from asyncio import AbstractEventLoop, Future, Handle, Task
 from collections import deque
 from collections.abc import Callable, Generator, Iterable
 from contextvars import Context
@@ -40,6 +41,44 @@ else:
     FutureAny = Future
 
 T = TypeVar("T")
+
+_ASYNCIO_POLICY_DEPRECATION = (
+    r"'asyncio\.(AbstractEventLoopPolicy|DefaultEventLoopPolicy|"
+    r"get_event_loop_policy|set_event_loop_policy)' is deprecated"
+)
+
+
+@contextlib.contextmanager
+def _ignore_asyncio_policy_deprecation() -> Generator[None, Any, None]:
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=_ASYNCIO_POLICY_DEPRECATION,
+            category=DeprecationWarning,
+        )
+        yield
+
+
+def _warn_policy_deprecated(name: str, stacklevel: int = 2) -> None:
+    if sys.version_info >= (3, 14):
+        warnings.warn(
+            f"{name} uses asyncio event loop policies, which are deprecated "
+            "as of Python 3.14 and will be removed in Python 3.16. "
+            "Use scheduling_loop_factory() with asyncio.run() or "
+            "asyncio.Runner instead.",
+            DeprecationWarning,
+            stacklevel=stacklevel,
+        )
+
+
+if TYPE_CHECKING:
+    from asyncio import AbstractEventLoopPolicy
+
+    _DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
+else:
+    with _ignore_asyncio_policy_deprecation():
+        AbstractEventLoopPolicy = asyncio.AbstractEventLoopPolicy
+        _DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
 
 
 class HasReadyQueue(Protocol):
@@ -142,7 +181,7 @@ def scheduling_loop_factory() -> AbstractEventLoop:
     return DefaultSchedulingEventLoop()  # type: ignore
 
 
-class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+class SchedulingEventLoopPolicy(_DefaultEventLoopPolicy):
     """
     Event loop policy that creates scheduling event loops.
 
@@ -154,6 +193,10 @@ class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
     code that hasn't migrated away from the policy system.
     """
 
+    def __init__(self) -> None:
+        _warn_policy_deprecated("SchedulingEventLoopPolicy")
+        super().__init__()
+
     def new_event_loop(self) -> AbstractEventLoop:
         return scheduling_loop_factory()
 
@@ -162,10 +205,15 @@ class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 def event_loop_policy(
     policy: AbstractEventLoopPolicy | None = None,
 ) -> Generator[AbstractEventLoopPolicy, Any, None]:
-    policy = policy or SchedulingEventLoopPolicy()
-    previous = asyncio.get_event_loop_policy()
-    asyncio.set_event_loop_policy(policy)
+    if policy is None:
+        policy = SchedulingEventLoopPolicy()
+    else:
+        _warn_policy_deprecated("event_loop_policy()")
+    with _ignore_asyncio_policy_deprecation():
+        previous = asyncio.get_event_loop_policy()
+        asyncio.set_event_loop_policy(policy)
     try:
         yield policy
     finally:
-        asyncio.set_event_loop_policy(previous)
+        with _ignore_asyncio_policy_deprecation():
+            asyncio.set_event_loop_policy(previous)

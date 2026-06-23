@@ -1,5 +1,7 @@
 import asyncio
+import subprocess
 import sys
+import warnings
 from asyncio import DefaultEventLoopPolicy
 from unittest.mock import patch
 
@@ -537,6 +539,31 @@ def test_event_loop_policy_context():
             assert isinstance(asyncio.get_running_loop(), asynkit.SchedulingMixin)
 
         asyncio.run(foo())
+
+
+def test_import_asynkit_does_not_warn_about_asyncio_policies():
+    subprocess.run(
+        [sys.executable, "-W", "error::DeprecationWarning", "-c", "import asynkit"],
+        check=True,
+    )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 14),
+    reason="asyncio event loop policy deprecation starts in Python 3.14",
+)
+def test_asynkit_policy_warning_replaces_asyncio_policy_warning():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        with asynkit.event_loop_policy() as policy:
+            assert isinstance(policy, asynkit.SchedulingEventLoopPolicy)
+
+    messages = [str(item.message) for item in caught]
+    assert any(
+        message.startswith("SchedulingEventLoopPolicy uses asyncio event loop policies")
+        for message in messages
+    )
+    assert not any(message.startswith("'asyncio.") for message in messages)
 
 
 @pytest.mark.skipif(
