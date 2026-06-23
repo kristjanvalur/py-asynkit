@@ -11,8 +11,7 @@ All notable changes to this project will be documented in this file.
 - **Experimental live context helper**: Added `get_current_context()` for CPython builds with the asynkit C extension
   - Returns the currently active `contextvars.Context` object instead of a copy
   - Raises `NotImplementedError` when the C extension helper is unavailable
-  - Allows advanced `CoroStart` users to explicitly share one context across eager start and remote continuation
-  - Documented the intentional break from normal `contextvars` isolation and the requirement that callers wait while shared-context remote execution runs
+  - Documented the intentional break from normal `contextvars` isolation and the restriction that an already-entered context cannot be re-entered by another Task
 
 ## [0.17.7] - 2026-06-23
 

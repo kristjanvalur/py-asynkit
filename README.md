@@ -503,65 +503,10 @@ Python intentionally does not expose the currently active `contextvars.Context` 
 `contextvars.copy_context()`. On CPython, and only when the asynkit C extension is available, `get_current_context()`
 returns that live current context object instead. If the live context cannot be retrieved, it raises `NotImplementedError`.
 
-This is an experimental escape hatch. It intentionally breaks normal context isolation, because two pieces of code can
-now mutate the same `Context` object. Use it only when you can guarantee that the caller waits while the remote execution
-is using the shared context. The same context must not be actively entered in two places at once.
-
-One use for this is synchronous code that receives an async operation and wants to run the non-blocking prefix directly.
-If the coroutine blocks, it has already blocked on the current thread's event loop. The continuation must therefore run
-on that same loop, for example by creating a Task there while the synchronous caller waits using polling, stack switching,
-or some other mechanism that lets the loop keep making progress:
-
-```python
-import asyncio
-import contextvars
-
-import asynkit
-
-var = contextvars.ContextVar("var")
-
-
-async def work():
-    var.set("started")
-
-    # after this point, the coroutine is blocked on the current event loop
-    await asyncio.sleep(0)
-
-    var.set("finished")
-    return "done"
-
-
-def wait_for_task(task):
-    ...  # poll or switch stacks until `task` is done, while letting the loop run
-    return task.result()
-
-
-def run_from_blocking_code(coro, wait_for_task):
-    loop = asyncio.get_running_loop()
-    context = asynkit.get_current_context()
-
-    # `context` is for the continuation. The initial `start()` runs in the
-    # already-active caller context, so do not pass `context` to `start()`.
-    start = asynkit.CoroStart(coro, context=context, autostart=False)
-    if start.start():
-        return start.result()
-
-    assert var.get() == "started"
-
-    # Continue on the same loop the coroutine blocked on. `wait_for_task()`
-    # might poll, switch stacks, or otherwise wait while letting `loop` run.
-    # CoroStart itself enters `context` while driving the continuation.
-    task = loop.create_task(start.as_coroutine())
-    result = wait_for_task(task)
-
-    assert result == "done"
-    assert var.get() == "finished"
-
-
-async def main():
-    var.set("caller")
-    return run_from_blocking_code(work(), wait_for_task)
-```
+This is an experimental escape hatch with no broadly recommended use case yet. It intentionally breaks normal context
+isolation, because two pieces of code can now mutate the same `Context` object. More importantly, a `Context` cannot be
+entered twice at the same time. If synchronous code is still running inside the live context, another Task cannot use that
+same context to continue a blocked `CoroStart`; Python will raise `RuntimeError` because the context is already entered.
 
 Needless to say, this is a sharp tool. Do not wrap `start.as_coroutine()` in `context.run()` and do not also pass the
 same `context` to `asyncio.create_task(..., context=context)`, because `CoroStart` already uses that context when it
