@@ -209,9 +209,16 @@ def event_loop_policy(
     policy: AbstractEventLoopPolicy | None = None,
 ) -> Generator[AbstractEventLoopPolicy, Any, None]:
     if policy is None:
-        policy = SchedulingEventLoopPolicy()
+        _warn_policy_deprecated("event_loop_policy()", stacklevel=4)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="SchedulingEventLoopPolicy uses asyncio event loop policies",
+                category=DeprecationWarning,
+            )
+            policy = SchedulingEventLoopPolicy()
     else:
-        _warn_policy_deprecated("event_loop_policy()")
+        _warn_policy_deprecated("event_loop_policy()", stacklevel=4)
     with _ignore_asyncio_policy_deprecation():
         previous = asyncio.get_event_loop_policy()
         asyncio.set_event_loop_policy(policy)

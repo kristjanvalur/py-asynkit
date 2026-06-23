@@ -1,7 +1,9 @@
 import asyncio
+import os
 import subprocess
 import sys
 import warnings
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -538,7 +540,7 @@ def test_event_loop_policy_context():
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
-            message="SchedulingEventLoopPolicy uses asyncio event loop policies",
+            message=r"event_loop_policy\(\) uses asyncio event loop policies",
             category=DeprecationWarning,
         )
         with asynkit.event_loop_policy() as a:
@@ -551,10 +553,35 @@ def test_event_loop_policy_context():
 
 
 def test_import_asynkit_does_not_warn_about_asyncio_policies():
+    env = os.environ.copy()
+    src_path = str(Path(__file__).resolve().parents[1] / "src")
+    env["PYTHONPATH"] = os.pathsep.join(
+        path for path in (src_path, env.get("PYTHONPATH", "")) if path
+    )
     subprocess.run(
         [sys.executable, "-W", "error::DeprecationWarning", "-c", "import asynkit"],
         check=True,
+        env=env,
     )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 14),
+    reason="asyncio event loop policy deprecation starts in Python 3.14",
+)
+def test_asynkit_policy_warnings_point_to_user_code():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        asynkit.SchedulingEventLoopPolicy()
+
+    assert caught[0].filename == __file__
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        with asynkit.event_loop_policy():
+            pass
+
+    assert caught[0].filename == __file__
 
 
 def test_policy_warning_filter_keeps_unrelated_deprecations():
@@ -588,7 +615,7 @@ def test_asynkit_policy_warning_replaces_asyncio_policy_warning():
 
     messages = [str(item.message) for item in caught]
     assert any(
-        message.startswith("SchedulingEventLoopPolicy uses asyncio event loop policies")
+        message.startswith("event_loop_policy() uses asyncio event loop policies")
         for message in messages
     )
     asynkit_warning_prefixes = (
