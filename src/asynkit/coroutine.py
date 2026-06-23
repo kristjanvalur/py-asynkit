@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import importlib
 import inspect
 import sys
 import types
@@ -22,7 +23,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Generic,
-    TypeAlias,
     TypeVar,
     cast,
     overload,
@@ -39,12 +39,16 @@ try:
     from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[attr-defined]
     from ._cext import get_build_info as _get_c_build_info  # type: ignore[attr-defined]
 
+    _cext_module = importlib.import_module("._cext", __package__)
+    _get_c_current_context = getattr(_cext_module, "get_current_context", None)
+
     _HAVE_C_EXTENSION = (
         True  # Re-enabled - C extension now has continued/pending methods
     )
 except ImportError:
     _CCoroStartBase = None
     _get_c_build_info = None
+    _get_c_current_context = None
     _HAVE_C_EXTENSION = False
 
 
@@ -98,6 +102,7 @@ __all__ = [
     "func_eager",
     "eager",
     "eager_ctx",
+    "get_current_context",
     "get_implementation_info",
     "create_eager_task_factory",
     "eager_task_factory",
@@ -116,6 +121,19 @@ __all__ = [
     "syncfunction",
 ]
 
+
+def get_current_context() -> Context:
+    """Return the live current context object.
+
+    This uses a CPython implementation detail and may not be available when the
+    C extension is missing or on Python implementations that do not expose the
+    current context object. Use `copy_context()` when a snapshot is sufficient.
+    """
+    if _get_c_current_context is None:
+        raise NotImplementedError("the live current context is not available")
+    return cast(Context, _get_c_current_context())
+
+
 T = TypeVar("T")
 S = TypeVar("S")
 P = ParamSpec("P")
@@ -127,9 +145,6 @@ Suspendable = (
 
 class CAwaitable(Awaitable[T_co], Cancellable, Protocol):
     pass
-
-
-Future_Type: TypeAlias = Future
 
 
 """
@@ -523,7 +538,7 @@ class CoroStartMixin(Generic[T_co]):
         """
         return await self
 
-    def as_future(self) -> Future_Type[T_co]:
+    def as_future(self) -> Future[T_co]:
         """
         if `done()` convert the result of the coroutine into a `Future`
         and return it.  Otherwise raise a `RuntimeError`
