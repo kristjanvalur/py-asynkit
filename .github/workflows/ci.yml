@@ -25,9 +25,9 @@ jobs:
       ASYNKIT_FORCE_CEXT: 1
       ASYNKIT_DEBUG: 1
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v8
         with:
           enable-cache: true
       - name: Set up Python ${{ matrix.python-version }}
@@ -60,9 +60,9 @@ jobs:
       ASYNKIT_FORCE_CEXT: 1
       ASYNKIT_DEBUG: 1
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
     - name: Install uv
-      uses: astral-sh/setup-uv@v4
+      uses: astral-sh/setup-uv@v8
       with:
         enable-cache: true
     - name: Set up Python ${{ matrix.python-version }}
@@ -97,7 +97,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
 
     - name: Build wheels
       uses: pypa/cibuildwheel@v3.2.1
@@ -139,9 +139,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [tests, lint]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
     - name: Install uv
-      uses: astral-sh/setup-uv@v4
+      uses: astral-sh/setup-uv@v8
       with:
         enable-cache: true
     - name: Set up Python 3.13
@@ -181,7 +181,7 @@ jobs:
       id-token: write
       contents: write  # Required for creating GitHub releases
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
     
     # Download all wheel artifacts
     - uses: actions/download-artifact@v5
