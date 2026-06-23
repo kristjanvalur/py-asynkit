@@ -1,11 +1,11 @@
 import asyncio
 import sys
-import warnings
 
 import pytest
 
 import asynkit
 import asynkit.coroutine as coroutine_module
+from asynkit.loop.eventloop import _ignore_asyncio_policy_deprecation
 
 DefaultLoop = asynkit.DefaultSchedulingEventLoop
 SelectorLoop = asynkit.SchedulingSelectorEventLoop
@@ -93,12 +93,7 @@ def scheduling_loop_type(request):
 
 
 # loop policy for pytest-anyio plugin
-with warnings.catch_warnings():
-    warnings.filterwarnings(
-        "ignore",
-        message=r"'asyncio\.DefaultEventLoopPolicy' is deprecated",
-        category=DeprecationWarning,
-    )
+with _ignore_asyncio_policy_deprecation():
     _DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
 
 

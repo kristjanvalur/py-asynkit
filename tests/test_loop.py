@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 import asynkit
+from asynkit.loop.eventloop import _ignore_asyncio_policy_deprecation
 from asynkit.loop.extensions import (
     call_pos,
     get_ready_queue,
@@ -24,12 +25,7 @@ from .experimental.test_priority import PriorityEventLoopPolicy
 
 pytestmark = pytest.mark.anyio
 
-with warnings.catch_warnings():
-    warnings.filterwarnings(
-        "ignore",
-        message=r"'asyncio\.DefaultEventLoopPolicy' is deprecated",
-        category=DeprecationWarning,
-    )
+with _ignore_asyncio_policy_deprecation():
     DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
 
 
@@ -559,6 +555,25 @@ def test_import_asynkit_does_not_warn_about_asyncio_policies():
         [sys.executable, "-W", "error::DeprecationWarning", "-c", "import asynkit"],
         check=True,
     )
+
+
+def test_policy_warning_filter_keeps_unrelated_deprecations():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        with _ignore_asyncio_policy_deprecation():
+            asyncio.DefaultEventLoopPolicy
+            warnings.warn(
+                "The DefaultEventLoopPolicy class is deprecated",
+                DeprecationWarning,
+            )
+            warnings.warn(
+                "The set_event_loop_policy() function is deprecated",
+                DeprecationWarning,
+            )
+            warnings.warn("some other thing is deprecated", DeprecationWarning)
+
+    messages = [str(item.message) for item in caught]
+    assert messages == ["some other thing is deprecated"]
 
 
 @pytest.mark.skipif(
