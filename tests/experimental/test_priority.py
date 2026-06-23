@@ -1,5 +1,6 @@
 import asyncio
 import random
+import warnings
 from unittest.mock import Mock
 
 import pytest
@@ -16,10 +17,18 @@ from ..conftest import make_loop_factory
 
 pytestmark = pytest.mark.anyio
 
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message=r"'asyncio\.DefaultEventLoopPolicy' is deprecated",
+        category=DeprecationWarning,
+    )
+    _DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
+
 
 @pytest.fixture
 def anyio_backend():
-    policy = asyncio.DefaultEventLoopPolicy()
+    policy = _DefaultEventLoopPolicy()
     return "asyncio", {"loop_factory": make_loop_factory(policy)}
 
 
@@ -618,7 +627,7 @@ class TestPosPriorityQueue:
 
 
 # loop policy for pytest-anyio plugin
-class PriorityEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+class PriorityEventLoopPolicy(_DefaultEventLoopPolicy):
     def __init__(self, request):
         super().__init__()
         self.request = request

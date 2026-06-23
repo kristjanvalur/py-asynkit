@@ -539,13 +539,19 @@ class TestTaskIsBlocked:
 
 
 def test_event_loop_policy_context():
-    with asynkit.event_loop_policy() as a:
-        assert isinstance(a, asynkit.SchedulingEventLoopPolicy)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="SchedulingEventLoopPolicy uses asyncio event loop policies",
+            category=DeprecationWarning,
+        )
+        with asynkit.event_loop_policy() as a:
+            assert isinstance(a, asynkit.SchedulingEventLoopPolicy)
 
-        async def foo():
-            assert isinstance(asyncio.get_running_loop(), asynkit.SchedulingMixin)
+            async def foo():
+                assert isinstance(asyncio.get_running_loop(), asynkit.SchedulingMixin)
 
-        asyncio.run(foo())
+            asyncio.run(foo())
 
 
 def test_import_asynkit_does_not_warn_about_asyncio_policies():

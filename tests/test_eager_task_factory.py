@@ -1,6 +1,7 @@
 """Tests for eager_task_factory functionality."""
 
 import asyncio
+import warnings
 
 import pytest
 
@@ -34,7 +35,14 @@ def asyncio_run_eager():
     eager task factory on new loops. This tests the modern asyncio.run()
     pattern with eager execution.
     """
-    original_policy = asyncio.get_event_loop_policy()
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"'asyncio\.(get_event_loop_policy|set_event_loop_policy)' "
+            "is deprecated",
+            category=DeprecationWarning,
+        )
+        original_policy = asyncio.get_event_loop_policy()
 
     # Create a custom policy that installs eager task factory
     class EagerPolicy(type(original_policy)):
@@ -44,11 +52,23 @@ def asyncio_run_eager():
             return loop
 
     policy = EagerPolicy()
-    asyncio.set_event_loop_policy(policy)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"'asyncio\.set_event_loop_policy' is deprecated",
+            category=DeprecationWarning,
+        )
+        asyncio.set_event_loop_policy(policy)
     try:
         yield asyncio.run
     finally:
-        asyncio.set_event_loop_policy(original_policy)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"'asyncio\.set_event_loop_policy' is deprecated",
+                category=DeprecationWarning,
+            )
+            asyncio.set_event_loop_policy(original_policy)
 
 
 class TestEagerFactory:

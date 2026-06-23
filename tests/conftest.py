@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import warnings
 
 import pytest
 
@@ -92,7 +93,16 @@ def scheduling_loop_type(request):
 
 
 # loop policy for pytest-anyio plugin
-class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message=r"'asyncio\.DefaultEventLoopPolicy' is deprecated",
+        category=DeprecationWarning,
+    )
+    _DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
+
+
+class SchedulingEventLoopPolicy(_DefaultEventLoopPolicy):
     def __init__(self, request, eager_tasks=False):
         super().__init__()
         self.request = request
