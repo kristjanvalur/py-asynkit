@@ -81,6 +81,8 @@ static PyObject *corostart_result(PyObject *_self);
 static PyObject *corostart_exception(PyObject *_self);
 static PyObject *corostart__throw(PyObject *_self, PyObject *exc);
 static PyObject *corostart_close(PyObject *_self);
+static PyObject *corostart_get_context(PyObject *_self, void *closure);
+static int corostart_set_context(PyObject *_self, PyObject *value, void *closure);
 
 /* CoroStartWrapper method forward declarations */
 static PyObject *corostart_wrapper_send(PyObject *_self, PyObject *arg);
@@ -149,8 +151,9 @@ static int corostart_clear(CoroStartObject *self);
 static PyObject *corostart_await(CoroStartObject *self);
 static int corostart_start(CoroStartObject *self, PyObject *context);
 static PyObject *corostart_start_method(PyObject *_self,
-                                        PyObject *args,
-                                        PyObject *kwargs);
+                                        PyObject *const *args,
+                                        Py_ssize_t nargs,
+                                        PyObject *kwnames);
 
 /* State checking macros for CoroStart objects
  * UNSTARTED means started flag is 0 (start() not yet called)
@@ -661,16 +664,53 @@ static PyObject *corostart_await(CoroStartObject *self)
 
 /* Public start() method */
 static PyObject *corostart_start_method(PyObject *_self,
-                                        PyObject *args,
-                                        PyObject *kwargs)
+                                        PyObject *const *args,
+                                        Py_ssize_t nargs,
+                                        PyObject *kwnames)
 {
     CoroStartObject *self = (CoroStartObject *) _self;
     PyObject *context = NULL;
 
-    static char *kwlist[] = {"context", NULL};
-
-    if(!PyArg_ParseTupleAndKeywords(args, kwargs, "|O", kwlist, &context)) {
+    if(nargs > 1) {
+        PyErr_Format(PyExc_TypeError,
+                     "start() takes at most 1 positional argument (%zd given)",
+                     nargs);
         return NULL;
+    }
+
+    if(nargs == 1) {
+        context = args[0];
+    }
+
+    if(kwnames != NULL) {
+        Py_ssize_t nkwargs = PyTuple_GET_SIZE(kwnames);
+        for(Py_ssize_t i = 0; i < nkwargs; i++) {
+            PyObject *name = PyTuple_GET_ITEM(kwnames, i);
+            PyObject *value = args[nargs + i];
+            if(!PyUnicode_Check(name)) {
+                PyErr_Format(PyExc_TypeError,
+                             "start() keywords must be strings, got %.200R",
+                             name);
+                return NULL;
+            }
+
+            int cmp = PyUnicode_CompareWithASCIIString(name, "context");
+            if(cmp < 0) {
+                return NULL;
+            }
+            if(cmp != 0) {
+                PyErr_Format(PyExc_TypeError,
+                             "start() got an unexpected keyword argument '%U'",
+                             name);
+                return NULL;
+            }
+            if(context != NULL) {
+                PyErr_SetString(PyExc_TypeError,
+                                "start() got multiple values for argument 'context'");
+                return NULL;
+            }
+            context = value;
+        }
     }
 
     // Convert None to NULL for context - this makes context checks work properly
@@ -685,8 +725,9 @@ static PyObject *corostart_start_method(PyObject *_self,
         return NULL;
     }
 
-    // Call internal start with provided context (or NULL)
-    if(corostart_start(self, context) < 0) {
+    // Use the stored context as the default when no override is provided
+    PyObject *start_context = context != NULL ? context : self->context;
+    if(corostart_start(self, start_context) < 0) {
         return NULL;
     }
 
@@ -695,6 +736,30 @@ static PyObject *corostart_start_method(PyObject *_self,
         Py_RETURN_TRUE;
     }
     Py_RETURN_FALSE;
+}
+
+static PyObject *corostart_get_context(PyObject *_self, void *closure)
+{
+    (void) closure;
+    CoroStartObject *self = (CoroStartObject *) _self;
+    if(self->context == NULL) {
+        Py_RETURN_NONE;
+    }
+    Py_INCREF(self->context);
+    return self->context;
+}
+
+static int corostart_set_context(PyObject *_self, PyObject *value, void *closure)
+{
+    (void) closure;
+    CoroStartObject *self = (CoroStartObject *) _self;
+    if(value == NULL || value == Py_None) {
+        Py_CLEAR(self->context);
+        return 0;
+    }
+    Py_INCREF(value);
+    Py_XSETREF(self->context, value);
+    return 0;
 }
 
 static PyObject *corostart_done(PyObject *_self)
@@ -926,7 +991,7 @@ static PyObject *corostart_close(PyObject *_self)
 static PyMethodDef corostart_methods[] =
     {{"start",
       (PyCFunction) corostart_start_method,
-      METH_VARARGS | METH_KEYWORDS,
+      METH_FASTCALL | METH_KEYWORDS,
       "Start the coroutine execution (only needed when autostart=False)"},
      {"done",
       (PyCFunction) corostart_done,
@@ -955,6 +1020,13 @@ static PyMethodDef corostart_methods[] =
      {"close", (PyCFunction) corostart_close, METH_NOARGS, "Close the coroutine"},
      {NULL, NULL, 0, NULL}};
 
+static PyGetSetDef corostart_getset[] = {{"context",
+                                          (getter) corostart_get_context,
+                                          (setter) corostart_set_context,
+                                          "Default context for CoroStart execution",
+                                          NULL},
+                                         {NULL, NULL, NULL, NULL, NULL}};
+
 /* CoroStart slots for PyType_Spec */
 static PyType_Slot corostart_slots[] = {
     {Py_tp_new, corostart_new},
@@ -962,6 +1034,7 @@ static PyType_Slot corostart_slots[] = {
     {Py_tp_traverse, corostart_traverse},
     {Py_tp_clear, corostart_clear},
     {Py_tp_methods, corostart_methods},
+    {Py_tp_getset, corostart_getset},
     {Py_am_await, corostart_await}, /* Async await protocol */
 
     {0, NULL},

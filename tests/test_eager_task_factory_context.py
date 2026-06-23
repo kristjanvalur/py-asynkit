@@ -221,13 +221,11 @@ class TestEagerTaskFactoryContext:
             self.test_var.set("after_sleep")
             return "done"
 
-        cs = asynkit.coroutine.CoroStart(
-            blocking_task(), context=shared_context, autostart=False
-        )
+        cs = asynkit.coroutine.CoroStart(blocking_task(), autostart=False)
         assert cs.start() is False
         assert self.test_var.get() == "before_sleep"
 
-        task = asyncio.create_task(cs.as_coroutine())
+        task = asyncio.create_task(cs.as_coroutine(context=shared_context))
         result = await task
 
         assert result == "done"
@@ -235,6 +233,110 @@ class TestEagerTaskFactoryContext:
         assert observations == [
             ("initial", "creator_value"),
             ("after_sleep", "before_sleep"),
+        ], impl_name
+
+    async def test_constructor_context_defaults_to_both_phases(self, implementations):
+        """Test constructor context is the default for start and continuation."""
+
+        for impl_name, impl_class in implementations:
+            await self._test_constructor_context_defaults(impl_name, impl_class)
+
+    async def _test_constructor_context_defaults(self, impl_name: str, impl_class):
+        self.test_var.set("ambient")
+        default_context = contextvars.copy_context()
+        default_context.run(self.test_var.set, "default")
+        observations = []
+
+        async def context_task():
+            observations.append(("start", self.test_var.get()))
+            self.test_var.set("after_start")
+            await asyncio.sleep(0)
+            observations.append(("continuation", self.test_var.get()))
+            self.test_var.set("after_continuation")
+            return "done"
+
+        cs = impl_class(context_task(), context=default_context, autostart=False)
+        assert cs.start() is False
+        assert self.test_var.get() == "ambient", impl_name
+        assert default_context.run(self.test_var.get) == "after_start", impl_name
+
+        result = await cs.as_coroutine()
+
+        assert result == "done"
+        assert self.test_var.get() == "ambient", impl_name
+        assert default_context.run(self.test_var.get) == "after_continuation", impl_name
+        assert observations == [
+            ("start", "default"),
+            ("continuation", "after_start"),
+        ], impl_name
+
+    async def test_phase_context_overrides_constructor_context(self, implementations):
+        """Test start and continuation can each override the constructor context."""
+
+        for impl_name, impl_class in implementations:
+            await self._test_phase_context_overrides(impl_name, impl_class)
+
+    async def _test_phase_context_overrides(self, impl_name: str, impl_class):
+        default_context = contextvars.copy_context()
+        default_context.run(self.test_var.set, "default")
+        start_context = contextvars.copy_context()
+        start_context.run(self.test_var.set, "start")
+        continuation_context = contextvars.copy_context()
+        continuation_context.run(self.test_var.set, "continuation")
+        observations = []
+
+        async def context_task():
+            observations.append(("start", self.test_var.get()))
+            self.test_var.set("after_start")
+            await asyncio.sleep(0)
+            observations.append(("continuation", self.test_var.get()))
+            self.test_var.set("after_continuation")
+            return "done"
+
+        cs = impl_class(context_task(), context=default_context, autostart=False)
+        assert cs.start(context=start_context) is False
+        assert start_context.run(self.test_var.get) == "after_start", impl_name
+        assert default_context.run(self.test_var.get) == "default", impl_name
+
+        result = await cs.as_coroutine(context=continuation_context)
+
+        assert result == "done"
+        assert continuation_context.run(self.test_var.get) == "after_continuation", (
+            impl_name
+        )
+        assert default_context.run(self.test_var.get) == "default", impl_name
+        assert observations == [
+            ("start", "start"),
+            ("continuation", "continuation"),
+        ], impl_name
+
+    async def test_none_context_uses_constructor_default(self, implementations):
+        """Test context=None means use the default context, not force ambient."""
+
+        for impl_name, impl_class in implementations:
+            await self._test_none_context_uses_default(impl_name, impl_class)
+
+    async def _test_none_context_uses_default(self, impl_name: str, impl_class):
+        self.test_var.set("ambient")
+        default_context = contextvars.copy_context()
+        default_context.run(self.test_var.set, "default")
+        observations = []
+
+        async def context_task():
+            observations.append(("start", self.test_var.get()))
+            await asyncio.sleep(0)
+            observations.append(("continuation", self.test_var.get()))
+            return "done"
+
+        cs = impl_class(context_task(), context=default_context, autostart=False)
+        assert cs.start(context=None) is False
+        result = await cs.as_coroutine(context=None)
+
+        assert result == "done"
+        assert self.test_var.get() == "ambient", impl_name
+        assert observations == [
+            ("start", "default"),
+            ("continuation", "default"),
         ], impl_name
 
     async def test_get_current_context_raises_without_c_helper(self, monkeypatch):

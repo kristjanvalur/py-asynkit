@@ -309,16 +309,14 @@ class CoroStartBase(Awaitable[T_co]):
 
         Parameters:
             context: The context to be used for the initial execution phase only.
-                    This is independent of the context passed to __init__ (which is
-                    used for the continuation phase). If None, the coroutine runs
-                    in the current context.
+                If None, the context passed to __init__ is used. If no context
+                was passed to __init__, the coroutine runs in the current context.
 
         Returns:
             True if the coroutine completed during the initial execution (done()),
             False if it suspended and will need to be awaited.
         """
-        # context parameter is independent - doesn't use self.context as fallback
-        ctx = context
+        ctx = self.context if context is None else context
         self._start_result = self._start(ctx)
         return self._start_result[1] is not None
 
@@ -531,12 +529,20 @@ class CoroStartMixin(Generic[T_co]):
             # Expected - coroutine closed cleanly
             pass
 
-    async def as_coroutine(self) -> T_co:
+    async def as_coroutine(self, context: Context | None = None) -> T_co:
         """
         Continue execution of the coroutine that was started by start().
         Returns a coroutine which can be awaited
         """
-        return await self
+        if context is None:
+            return await self
+
+        old_context = self.context
+        self.context = context
+        try:
+            return await self
+        finally:
+            self.context = old_context
 
     def as_future(self) -> Future[T_co]:
         """
@@ -554,7 +560,7 @@ class CoroStartMixin(Generic[T_co]):
             future.set_exception(exc)
         return future
 
-    def as_awaitable(self) -> Awaitable[T_co]:
+    def as_awaitable(self, context: Context | None = None) -> Awaitable[T_co]:
         """
         If `done()`, return `as_future()`, else return self.
         This is a convenience function for use when the instance
@@ -565,7 +571,7 @@ class CoroStartMixin(Generic[T_co]):
         if self.done():
             return self.as_future()
         else:
-            return self
+            return self.as_coroutine(context=context)
 
 
 class CoroStart(CoroStartBase[T_co], CoroStartMixin[T_co]):

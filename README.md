@@ -472,10 +472,10 @@ Similarly to a `Future`, it has these methods:
 But more importantly it has these:
 
 - `__await__()` - A magic method making it directly _awaitable_. If it has already finished, awaiting this coroutine is the same as calling `result()`, otherwise it awaits the original coroutine's continued execution
-- `as_coroutine()` - A helper which returns a proper _coroutine_ object to await the `CoroStart`
+- `as_coroutine(context=None)` - A helper which returns a proper _coroutine_ object to await the `CoroStart`
 - `as_future()` - If `done()`, returns a `Future` holding its result, otherwise, a `RuntimeError`
   is raised.
-- `as_awaitable()` - If `done()`, returns `as_future()`, else returns `self`.
+- `as_awaitable(context=None)` - If `done()`, returns `as_future()`, else returns `as_coroutine()`.
   This is a convenience method for use with functions such as `asyncio.gather()`, which would otherwise wrap a completed coroutine in a `Task`.
 
 In addition it has:
@@ -494,8 +494,10 @@ async with aclosing(CoroStart(foo())) as coro:
     return await coro
 ```
 
-CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will be run using that
-context.
+CoroStart can be provided with a `contextvars.Context` object, in which case the coroutine will use it as the default
+context for both the initial start and later continuation. To control the phases separately, omit the constructor
+context and pass one directly to `start(context=...)` or `as_coroutine(context=...)`. The convenience helper
+`as_awaitable(context=...)` accepts the same continuation context override.
 
 #### Experimental: sharing the current context
 

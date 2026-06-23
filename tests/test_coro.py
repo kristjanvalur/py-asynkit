@@ -236,7 +236,7 @@ class TestCoroStart:
             assert log == [1, 2]
 
     async def test_no_auto_start_context(self, block, corostart_type):
-        """Test that the start() method runs in its own context"""
+        """Test that the start() method uses explicit and default contexts"""
 
         async def coro():
             eager_var.set("no_auto")
@@ -253,7 +253,31 @@ class TestCoroStart:
         cs = corostart_type(coro(), context=ctxt, autostart=False)
         assert eager_var.get() == "initial"
         cs.start(None)
+        assert eager_var.get() == "initial"
+        assert ctxt.run(lambda: eager_var.get()) == "no_auto"
+
+        eager_var.set("initial")
+        cs = corostart_type(coro(), autostart=False)
+        assert eager_var.get() == "initial"
+        cs.start(None)
         assert eager_var.get() == "no_auto"
+
+    async def test_no_auto_start_signature(self, block, corostart_type):
+        """Test that start() accepts only its optional context argument"""
+
+        async def coro():
+            return None
+
+        async def assert_start_type_error(*args, **kwargs):
+            coroutine = coro()
+            cs = corostart_type(coroutine, autostart=False)
+            with pytest.raises(TypeError):
+                cs.start(*args, **kwargs)
+            coroutine.close()
+
+        await assert_start_type_error(None, None)
+        await assert_start_type_error(foo=None)
+        await assert_start_type_error(None, context=None)
 
     async def test_await(self, block, corostart_type):
         corofn, expect = self.get_coro1(block)
@@ -347,6 +371,33 @@ class TestCoroStart:
         else:
             assert isinstance(awaitable, asyncio.Future)
         assert await awaitable == expect
+
+    @pytest.mark.parametrize("anyio_backend", ["asyncio"])
+    async def test_as_awaitable_context(self, block, anyio_backend, corostart_type):
+        ctxt = copy_context()
+        ctxt.run(eager_var.set, "as_awaitable")
+
+        if block:
+
+            async def coro():
+                await sleep(0)
+                return eager_var.get()
+
+            cs = corostart_type(coro())
+            assert await cs.as_awaitable(context=ctxt) == "as_awaitable"
+        else:
+
+            async def coro():
+                return "done"
+
+            cs = corostart_type(coro())
+            mock = Mock(wraps=cs.as_future)
+            cs.as_future = mock
+
+            awaitable = cs.as_awaitable(context=ctxt)
+
+            mock.assert_called_once_with()
+            assert await awaitable == "done"
 
     async def test_result(self, block, corostart_type):
         coro, _ = self.get_coro1(block)

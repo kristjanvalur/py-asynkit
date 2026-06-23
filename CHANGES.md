@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **CoroStart context defaults**: `CoroStart(..., context=...)` now supplies the
+  default context for both startup and continuation phases. `start(context=...)`
+  overrides only the startup phase, while `as_coroutine(context=...)` and
+  `as_awaitable(context=...)` override the continuation phase.
+
+### Performance
+
+- **C extension call overhead**: Converted `CoroStart.start()` to CPython's
+  FASTCALL convention to avoid tuple and dict creation for the deferred-start
+  path.
+
 ## [0.18.0] - 2026-06-23
 
 ### Features
