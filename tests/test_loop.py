@@ -576,7 +576,22 @@ def test_asynkit_policy_warning_replaces_asyncio_policy_warning():
         message.startswith("SchedulingEventLoopPolicy uses asyncio event loop policies")
         for message in messages
     )
-    assert not any(message.startswith("'asyncio.") for message in messages)
+    asynkit_warning_prefixes = (
+        "SchedulingEventLoopPolicy uses asyncio event loop policies",
+        "PriorityEventLoopPolicy uses asyncio event loop policies",
+        "event_loop_policy() uses asyncio event loop policies",
+    )
+
+    def is_asyncio_policy_deprecation(message: str) -> bool:
+        normalized = message.lower()
+        return (
+            not message.startswith(asynkit_warning_prefixes)
+            and "asyncio." in normalized
+            and "policy" in normalized
+            and "deprecated" in normalized
+        )
+
+    assert not any(is_asyncio_policy_deprecation(message) for message in messages)
 
 
 @pytest.mark.skipif(

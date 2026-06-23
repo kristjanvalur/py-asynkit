@@ -42,24 +42,16 @@ else:
 
 T = TypeVar("T")
 
-_ASYNCIO_POLICY_DEPRECATION = (
-    r"'asyncio\.(AbstractEventLoopPolicy|DefaultEventLoopPolicy|"
-    r"get_event_loop_policy|set_event_loop_policy)' is deprecated"
-)
-
 
 @contextlib.contextmanager
 def _ignore_asyncio_policy_deprecation() -> Generator[None, Any, None]:
     with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message=_ASYNCIO_POLICY_DEPRECATION,
-            category=DeprecationWarning,
-        )
+        # this context only wraps our own deprecated policy API calls
+        warnings.simplefilter("ignore", DeprecationWarning)
         yield
 
 
-def _warn_policy_deprecated(name: str, stacklevel: int = 2) -> None:
+def _warn_policy_deprecated(name: str, stacklevel: int = 3) -> None:
     if sys.version_info >= (3, 14):
         warnings.warn(
             f"{name} uses asyncio event loop policies, which are deprecated "
