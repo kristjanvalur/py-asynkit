@@ -1,11 +1,15 @@
 import asyncio
+import os
+import subprocess
 import sys
-from asyncio import DefaultEventLoopPolicy
+import warnings
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 import asynkit
+from asynkit.loop.eventloop import _ignore_asyncio_policy_deprecation
 from asynkit.loop.extensions import (
     call_pos,
     get_ready_queue,
@@ -22,6 +26,9 @@ from .conftest import SchedulingEventLoopPolicy, make_loop_factory
 from .experimental.test_priority import PriorityEventLoopPolicy
 
 pytestmark = pytest.mark.anyio
+
+with _ignore_asyncio_policy_deprecation():
+    DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
 
 
 @pytest.fixture(params=["regular", "custom", "priority"])
@@ -530,13 +537,103 @@ class TestTaskIsBlocked:
 
 
 def test_event_loop_policy_context():
-    with asynkit.event_loop_policy() as a:
-        assert isinstance(a, asynkit.SchedulingEventLoopPolicy)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"event_loop_policy\(\) uses asyncio event loop policies",
+            category=DeprecationWarning,
+        )
+        with asynkit.event_loop_policy() as a:
+            assert isinstance(a, asynkit.SchedulingEventLoopPolicy)
 
-        async def foo():
-            assert isinstance(asyncio.get_running_loop(), asynkit.SchedulingMixin)
+            async def foo():
+                assert isinstance(asyncio.get_running_loop(), asynkit.SchedulingMixin)
 
-        asyncio.run(foo())
+            asyncio.run(foo())
+
+
+def test_import_asynkit_does_not_warn_about_asyncio_policies():
+    env = os.environ.copy()
+    src_path = str(Path(__file__).resolve().parents[1] / "src")
+    env["PYTHONPATH"] = os.pathsep.join(
+        path for path in (src_path, env.get("PYTHONPATH", "")) if path
+    )
+    subprocess.run(
+        [sys.executable, "-W", "error::DeprecationWarning", "-c", "import asynkit"],
+        check=True,
+        env=env,
+    )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 14),
+    reason="asyncio event loop policy deprecation starts in Python 3.14",
+)
+def test_asynkit_policy_warnings_point_to_user_code():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        asynkit.SchedulingEventLoopPolicy()
+
+    assert caught[0].filename == __file__
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        with asynkit.event_loop_policy():
+            pass
+
+    assert caught[0].filename == __file__
+
+
+def test_policy_warning_filter_keeps_unrelated_deprecations():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        with _ignore_asyncio_policy_deprecation():
+            asyncio.DefaultEventLoopPolicy
+            warnings.warn(
+                "The DefaultEventLoopPolicy class is deprecated",
+                DeprecationWarning,
+            )
+            warnings.warn(
+                "The set_event_loop_policy() function is deprecated",
+                DeprecationWarning,
+            )
+            warnings.warn("some other thing is deprecated", DeprecationWarning)
+
+    messages = [str(item.message) for item in caught]
+    assert messages == ["some other thing is deprecated"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 14),
+    reason="asyncio event loop policy deprecation starts in Python 3.14",
+)
+def test_asynkit_policy_warning_replaces_asyncio_policy_warning():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        with asynkit.event_loop_policy() as policy:
+            assert isinstance(policy, asynkit.SchedulingEventLoopPolicy)
+
+    messages = [str(item.message) for item in caught]
+    assert any(
+        message.startswith("event_loop_policy() uses asyncio event loop policies")
+        for message in messages
+    )
+    asynkit_warning_prefixes = (
+        "SchedulingEventLoopPolicy uses asyncio event loop policies",
+        "PriorityEventLoopPolicy uses asyncio event loop policies",
+        "event_loop_policy() uses asyncio event loop policies",
+    )
+
+    def is_asyncio_policy_deprecation(message: str) -> bool:
+        normalized = message.lower()
+        return (
+            not message.startswith(asynkit_warning_prefixes)
+            and "asyncio." in normalized
+            and "policy" in normalized
+            and "deprecated" in normalized
+        )
+
+    assert not any(is_asyncio_policy_deprecation(message) for message in messages)
 
 
 @pytest.mark.skipif(

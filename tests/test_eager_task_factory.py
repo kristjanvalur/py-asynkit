@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 import asynkit
+from asynkit.loop.eventloop import _ignore_asyncio_policy_deprecation
 
 
 @pytest.fixture
@@ -34,7 +35,8 @@ def asyncio_run_eager():
     eager task factory on new loops. This tests the modern asyncio.run()
     pattern with eager execution.
     """
-    original_policy = asyncio.get_event_loop_policy()
+    with _ignore_asyncio_policy_deprecation():
+        original_policy = asyncio.get_event_loop_policy()
 
     # Create a custom policy that installs eager task factory
     class EagerPolicy(type(original_policy)):
@@ -44,11 +46,13 @@ def asyncio_run_eager():
             return loop
 
     policy = EagerPolicy()
-    asyncio.set_event_loop_policy(policy)
+    with _ignore_asyncio_policy_deprecation():
+        asyncio.set_event_loop_policy(policy)
     try:
         yield asyncio.run
     finally:
-        asyncio.set_event_loop_policy(original_policy)
+        with _ignore_asyncio_policy_deprecation():
+            asyncio.set_event_loop_policy(original_policy)
 
 
 class TestEagerFactory:
