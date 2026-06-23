@@ -1341,6 +1341,11 @@ static PyObject *cext_get_current_context(PyObject *_self)
 {
     (void) _self;
     PyThreadState *tstate = PyThreadState_Get();
+    if(tstate == NULL) {
+        PyErr_SetString(PyExc_NotImplementedError,
+                        "the current thread state is not available");
+        return NULL;
+    }
     PyObject *context = tstate->context;
     if(context == NULL) {
         PyErr_SetString(PyExc_NotImplementedError,
