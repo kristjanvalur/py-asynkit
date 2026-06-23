@@ -5,6 +5,7 @@ import pytest
 
 import asynkit
 import asynkit.coroutine as coroutine_module
+from asynkit.loop.eventloop import _ignore_asyncio_policy_deprecation
 
 DefaultLoop = asynkit.DefaultSchedulingEventLoop
 SelectorLoop = asynkit.SchedulingSelectorEventLoop
@@ -92,7 +93,11 @@ def scheduling_loop_type(request):
 
 
 # loop policy for pytest-anyio plugin
-class SchedulingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+with _ignore_asyncio_policy_deprecation():
+    _DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
+
+
+class SchedulingEventLoopPolicy(_DefaultEventLoopPolicy):
     def __init__(self, request, eager_tasks=False):
         super().__init__()
         self.request = request

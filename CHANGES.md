@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.7] - 2026-06-23
+
+### Bug Fixes
+
+- **Python 3.14 event loop policy warnings**: Suppressed `asyncio`'s own event loop policy deprecation warnings when asynkit internally touches policy APIs for compatibility
+  - `import asynkit` no longer emits policy deprecation warnings on Python 3.14+
+  - `SchedulingEventLoopPolicy`, `PriorityEventLoopPolicy`, and `event_loop_policy()` remain available for clients still using loop policies
+  - asynkit now emits its own deprecation warning when those policy extension APIs are used on Python 3.14+, pointing users toward `scheduling_loop_factory()` with `asyncio.run()` or `asyncio.Runner`
+
 ## [0.17.6] - 2025-12-20
 
 ### Features

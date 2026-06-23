@@ -11,15 +11,19 @@ from asynkit.experimental.priority import (
     PriorityLock,
     PriorityTask,
 )
+from asynkit.loop.eventloop import _ignore_asyncio_policy_deprecation
 
 from ..conftest import make_loop_factory
 
 pytestmark = pytest.mark.anyio
 
+with _ignore_asyncio_policy_deprecation():
+    _DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
+
 
 @pytest.fixture
 def anyio_backend():
-    policy = asyncio.DefaultEventLoopPolicy()
+    policy = _DefaultEventLoopPolicy()
     return "asyncio", {"loop_factory": make_loop_factory(policy)}
 
 
@@ -618,7 +622,7 @@ class TestPosPriorityQueue:
 
 
 # loop policy for pytest-anyio plugin
-class PriorityEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+class PriorityEventLoopPolicy(_DefaultEventLoopPolicy):
     def __init__(self, request):
         super().__init__()
         self.request = request
