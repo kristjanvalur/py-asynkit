@@ -72,8 +72,7 @@ def _warn_policy_deprecated(name: str, stacklevel: int = 2) -> None:
 
 
 if TYPE_CHECKING:
-    from asyncio import AbstractEventLoopPolicy
-
+    AbstractEventLoopPolicy = asyncio.AbstractEventLoopPolicy
     _DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
 else:
     with _ignore_asyncio_policy_deprecation():

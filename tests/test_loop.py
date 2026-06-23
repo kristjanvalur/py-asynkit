@@ -2,7 +2,6 @@ import asyncio
 import subprocess
 import sys
 import warnings
-from asyncio import DefaultEventLoopPolicy
 from unittest.mock import patch
 
 import pytest
@@ -24,6 +23,14 @@ from .conftest import SchedulingEventLoopPolicy, make_loop_factory
 from .experimental.test_priority import PriorityEventLoopPolicy
 
 pytestmark = pytest.mark.anyio
+
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message=r"'asyncio\.DefaultEventLoopPolicy' is deprecated",
+        category=DeprecationWarning,
+    )
+    DefaultEventLoopPolicy = asyncio.DefaultEventLoopPolicy
 
 
 @pytest.fixture(params=["regular", "custom", "priority"])
