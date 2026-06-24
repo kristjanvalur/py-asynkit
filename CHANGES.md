@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Namespace hygiene**: Added explicit `__all__` exports for the package and
+  helper modules so wildcard imports expose only the intended public API.
+
 ## [0.18.1] - 2026-06-24
 
 ### Changed

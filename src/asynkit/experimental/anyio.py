@@ -11,6 +11,11 @@ from anyio.abc import TaskGroup, TaskStatus
 
 from asynkit import CoroStart
 
+__all__ = [
+    "EagerTaskGroup",
+    "create_eager_task_group",
+]
+
 """
 Experimental anyio integration for asynkit.
 

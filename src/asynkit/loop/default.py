@@ -12,6 +12,15 @@ from ..tools import deque_pop
 from .schedulingloop import AbstractSchedulingLoop
 from .types import QueueType, TaskAny
 
+__all__ = [
+    "PyTask",
+    "SchedulingLoopHelper",
+    "call_pos",
+    "queue_find",
+    "queue_remove",
+    "task_from_handle",
+]
+
 # asyncio by default uses a C implemented task from _asyncio module
 TaskTypes: tuple[Any, ...]
 if hasattr(asyncio.tasks, "_PyTask"):

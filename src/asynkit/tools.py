@@ -16,6 +16,14 @@ from typing_extensions import Protocol
 
 T = TypeVar("T")
 
+__all__ = [
+    "Cancellable",
+    "PriorityQueue",
+    "cancelling",
+    "create_task",
+    "deque_pop",
+]
+
 
 class Sortable(Protocol):
     """Objects that have the < operator defined"""

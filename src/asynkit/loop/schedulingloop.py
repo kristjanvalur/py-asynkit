@@ -8,6 +8,8 @@ from typing import Any
 
 from .types import TaskAny
 
+__all__ = ["AbstractSchedulingLoop"]
+
 """
 Here we define a certain base class for event loops which
 implement extended scheduling primitives.
