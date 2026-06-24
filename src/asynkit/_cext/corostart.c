@@ -100,6 +100,7 @@ static PySendResult corostart_wrapper_am_send_slot(PyObject *_self,
 /* Helper function forward declarations */
 static PyObject *invalid_state_error(void);
 static PyObject *coro_get_iterator(PyObject *coro);
+static int unicode_eq_ascii(PyObject *unicode, const char *ascii);
 static PyObject *call_iter_next(PyObject *iter);
 static int call_iter_next_result(PyObject *iter, PyObject **result);
 static PyObject *extract_current_stopiteration_value(void);
@@ -149,11 +150,19 @@ static void corostart_dealloc(CoroStartObject *self);
 static int corostart_traverse(CoroStartObject *self, visitproc visit, void *arg);
 static int corostart_clear(CoroStartObject *self);
 static PyObject *corostart_await(CoroStartObject *self);
+static PyObject *corostart_create(PyTypeObject *type,
+                                  PyObject *coro,
+                                  PyObject *context,
+                                  int autostart);
 static int corostart_start(CoroStartObject *self, PyObject *context);
 static PyObject *corostart_start_method(PyObject *_self,
                                         PyObject *const *args,
                                         Py_ssize_t nargs,
                                         PyObject *kwnames);
+static PyObject *cext_coro_start(PyObject *module,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs,
+                                 PyObject *kwnames);
 
 /* State checking macros for CoroStart objects
  * UNSTARTED means started flag is 0 (start() not yet called)
@@ -297,6 +306,15 @@ static PyObject *coro_get_iterator(PyObject *coro)
         TRACE_LOG("Failed to get await iterator");
     }
     return await_iterator;
+}
+
+static int unicode_eq_ascii(PyObject *unicode, const char *ascii)
+{
+    int cmp = PyUnicode_CompareWithASCIIString(unicode, ascii);
+    if(cmp == -1 && PyErr_Occurred()) {
+        return -1;
+    }
+    return cmp == 0;
 }
 
 // Call the __next__ method of an iterator using direct slot access if possible
@@ -462,22 +480,11 @@ static PyObject *extract_stopiteration_value(PyObject *exc_type, PyObject *exc_v
 
 /* ========== COROSTART TYPE IMPLEMENTATION ========== */
 
-/* CoroStart type constructor (will be used by PyType_FromSpec) */
-static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+static PyObject *corostart_create(PyTypeObject *type,
+                                  PyObject *coro,
+                                  PyObject *context,
+                                  int autostart)
 {
-    PyObject *coro;
-    PyObject *context = NULL;  // Optional context parameter
-    int autostart = 1;         // Default to True
-
-    static char *kwlist[] = {"coro", "context", "autostart", NULL};
-
-    TRACE_LOG("CoroStart.__new__ called");
-
-    if(!PyArg_ParseTupleAndKeywords(
-           args, kwargs, "O|Op", kwlist, &coro, &context, &autostart)) {
-        return NULL;
-    }
-
     PyObject *await_iterator = coro_get_iterator(coro);
     if(await_iterator == NULL) {
         // Failed to get await iterator
@@ -524,6 +531,25 @@ static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwa
 
     ASSERT_COROSTART_INVARIANT(cs);
     return (PyObject *) cs;
+}
+
+/* CoroStart type constructor (will be used by PyType_FromSpec) */
+static PyObject *corostart_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+{
+    PyObject *coro;
+    PyObject *context = NULL;  // Optional context parameter
+    int autostart = 1;         // Default to True
+
+    static char *kwlist[] = {"coro", "context", "autostart", NULL};
+
+    TRACE_LOG("CoroStart.__new__ called");
+
+    if(!PyArg_ParseTupleAndKeywords(
+           args, kwargs, "O|Op", kwlist, &coro, &context, &autostart)) {
+        return NULL;
+    }
+
+    return corostart_create(type, coro, context, autostart);
 }
 
 /* CoroStart _start method - simplified eager execution logic */
@@ -694,11 +720,11 @@ static PyObject *corostart_start_method(PyObject *_self,
                 return NULL;
             }
 
-            int cmp = PyUnicode_CompareWithASCIIString(name, "context");
-            if(cmp < 0) {
+            int is_context = unicode_eq_ascii(name, "context");
+            if(is_context < 0) {
                 return NULL;
             }
-            if(cmp != 0) {
+            if(!is_context) {
                 PyErr_Format(PyExc_TypeError,
                              "start() got an unexpected keyword argument '%U'",
                              name);
@@ -1429,6 +1455,155 @@ static PyObject *cext_get_current_context(PyObject *_self)
     return context;
 }
 
+static PyObject *cext_coro_start(PyObject *module,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs,
+                                 PyObject *kwnames)
+{
+    module_state *state = get_module_state(module);
+    if(state == NULL || state->CoroStartType == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "CoroStart type is not initialized");
+        return NULL;
+    }
+
+    PyTypeObject *type = NULL;
+    PyObject *coro = NULL;
+    PyObject *context = NULL;
+    int autostart = 1;
+
+    if(nargs < 2) {
+        PyErr_SetString(PyExc_TypeError,
+                        "coro_start() missing required positional arguments");
+        return NULL;
+    }
+    if(nargs > 4) {
+        PyErr_Format(PyExc_TypeError,
+                     "coro_start() takes at most 4 positional arguments (%zd given)",
+                     nargs);
+        return NULL;
+    }
+    if(!PyType_Check(args[0])) {
+        PyErr_SetString(PyExc_TypeError, "coro_start() first argument must be a type");
+        return NULL;
+    }
+    type = (PyTypeObject *) args[0];
+    coro = args[1];
+    if(nargs >= 3) {
+        context = args[2];
+    }
+    if(nargs >= 4) {
+        autostart = PyObject_IsTrue(args[3]);
+        if(autostart < 0) {
+            return NULL;
+        }
+    }
+
+    if(kwnames != NULL) {
+        Py_ssize_t nkwargs = PyTuple_GET_SIZE(kwnames);
+        for(Py_ssize_t i = 0; i < nkwargs; i++) {
+            PyObject *name = PyTuple_GET_ITEM(kwnames, i);
+            PyObject *value = args[nargs + i];
+            if(!PyUnicode_Check(name)) {
+                PyErr_Format(PyExc_TypeError,
+                             "coro_start() keywords must be strings, got %.200R",
+                             name);
+                return NULL;
+            }
+
+            int is_type = unicode_eq_ascii(name, "type");
+            if(is_type < 0) {
+                return NULL;
+            }
+            if(is_type) {
+                PyErr_SetString(PyExc_TypeError,
+                                "coro_start() got positional-only argument 'type' "
+                                "passed as keyword");
+                return NULL;
+            }
+
+            int is_coro = unicode_eq_ascii(name, "coro");
+            if(is_coro < 0) {
+                return NULL;
+            }
+            if(is_coro) {
+                PyErr_SetString(PyExc_TypeError,
+                                "coro_start() got positional-only argument 'coro' "
+                                "passed as keyword");
+                return NULL;
+            }
+
+            int is_context = unicode_eq_ascii(name, "context");
+            if(is_context < 0) {
+                return NULL;
+            }
+            if(is_context) {
+                if(context != NULL) {
+                    PyErr_SetString(
+                        PyExc_TypeError,
+                        "coro_start() got multiple values for argument 'context'");
+                    return NULL;
+                }
+                context = value;
+                continue;
+            }
+
+            int is_autostart = unicode_eq_ascii(name, "autostart");
+            if(is_autostart < 0) {
+                return NULL;
+            }
+            if(is_autostart) {
+                if(nargs >= 4) {
+                    PyErr_SetString(
+                        PyExc_TypeError,
+                        "coro_start() got multiple values for argument 'autostart'");
+                    return NULL;
+                }
+                autostart = PyObject_IsTrue(value);
+                if(autostart < 0) {
+                    return NULL;
+                }
+                continue;
+            }
+
+            PyErr_Format(PyExc_TypeError,
+                         "coro_start() got an unexpected keyword argument '%U'",
+                         name);
+            return NULL;
+        }
+    }
+
+    int is_subtype = PyObject_IsSubclass((PyObject *) type,
+                                         (PyObject *) state->CoroStartType);
+    if(is_subtype < 0) {
+        return NULL;
+    }
+    if(!is_subtype) {
+        PyObject *call_args = PyTuple_Pack(1, coro);
+        if(call_args == NULL) {
+            return NULL;
+        }
+        PyObject *call_kwargs = PyDict_New();
+        if(call_kwargs == NULL) {
+            Py_DECREF(call_args);
+            return NULL;
+        }
+        PyObject *context_arg = context == NULL ? Py_None : context;
+        PyObject *autostart_arg = autostart ? Py_True : Py_False;
+        if(PyDict_SetItemString(call_kwargs, "context", context_arg) < 0 ||
+           PyDict_SetItemString(call_kwargs, "autostart", autostart_arg) < 0) {
+            Py_DECREF(call_args);
+            Py_DECREF(call_kwargs);
+            return NULL;
+        }
+        PyObject *result = PyObject_Call((PyObject *) type, call_args, call_kwargs);
+        Py_DECREF(call_args);
+        Py_DECREF(call_kwargs);
+        return result;
+    }
+
+    return corostart_create(type, coro, context, autostart);
+}
+
 static PyMethodDef module_methods[] = {{"get_build_info",
                                         (PyCFunction) cext_get_build_info,
                                         METH_NOARGS,
@@ -1437,6 +1612,10 @@ static PyMethodDef module_methods[] = {{"get_build_info",
                                         (PyCFunction) cext_get_current_context,
                                         METH_NOARGS,
                                         "Get the live current context object"},
+                                       {"coro_start",
+                                        (PyCFunction) cext_coro_start,
+                                        METH_FASTCALL | METH_KEYWORDS,
+                                        "Fast CoroStart constructor helper"},
                                        {NULL, NULL, 0, NULL}};
 
 /* Module slots for GIL configuration */

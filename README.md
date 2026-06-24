@@ -499,6 +499,10 @@ context for both the initial start and later continuation. To control the phases
 context and pass one directly to `start(context=...)` or `as_coroutine(context=...)`. The convenience helper
 `as_awaitable(context=...)` accepts the same continuation context override.
 
+The `coro_start(CoroStart, ...)` helper constructs a `CoroStart` object using the provided implementation class. When
+the C extension is active, it uses a fast constructor path that avoids normal Python type-call argument handling for
+C-backed implementations.
+
 #### Experimental: sharing the current context
 
 Python intentionally does not expose the currently active `contextvars.Context` object. It only lets you copy it with

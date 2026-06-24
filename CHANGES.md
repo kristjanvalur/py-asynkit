@@ -16,6 +16,9 @@ All notable changes to this project will be documented in this file.
 - **C extension call overhead**: Converted `CoroStart.start()` to CPython's
   FASTCALL convention to avoid tuple and dict creation for the deferred-start
   path.
+- **Fast CoroStart helper**: Added `coro_start(CoroStart, ...)` as a helper
+  constructor which uses a C extension FASTCALL allocator for C-backed
+  implementations, bypassing normal Python type-call argument mechanics.
 
 ## [0.18.0] - 2026-06-23
 

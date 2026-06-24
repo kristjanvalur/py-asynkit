@@ -11,6 +11,7 @@ import pytest
 from anyio import Event, create_task_group, sleep
 
 import asynkit
+import asynkit.coroutine
 import asynkit.tools
 
 try:
@@ -119,6 +120,49 @@ class TestEager:
         await future
         assert log == expect
         assert eager_var.get() == "X"
+
+    async def test_coro_start_helper(self, block):
+        context = copy_context()
+        context.run(eager_var.set, "helper")
+
+        async def coro():
+            if block:
+                await sleep(0)
+            return eager_var.get()
+
+        cs = asynkit.coro_start(asynkit.CoroStart, coro(), context)
+
+        assert isinstance(cs, asynkit.CoroStart)
+        assert await cs.as_awaitable() == "helper"
+
+    async def test_c_coro_start_helper_subclass(self, block):
+        c_coro_start = asynkit.coroutine.coro_start
+        c_corostart = getattr(asynkit.coroutine, "_CCoroStart", None)
+        if c_corostart is None:
+            pytest.skip("C extension helper not available")
+
+        async def coro():
+            if block:
+                await sleep(0)
+            return "done"
+
+        cs = c_coro_start(c_corostart, coro(), None, True)
+
+        assert type(cs) is c_corostart
+        assert await cs.as_awaitable() == "done"
+
+    async def test_coro_start_positional_only_args(self, block):
+        async def coro():
+            if block:
+                await sleep(0)
+            return "done"
+
+        coroutine = coro()
+        try:
+            with pytest.raises(TypeError):
+                asynkit.coro_start(corostart_type=asynkit.CoroStart, coro=coroutine)
+        finally:
+            coroutine.close()
 
     async def test_func_eager(self, block):
         log = []
@@ -234,6 +278,25 @@ class TestCoroStart:
             assert not asynkit.coro_is_suspended(coro)
             assert asynkit.coro_is_finished(coro)
             assert log == [1, 2]
+
+    async def test_constructor_positional_context_autostart(
+        self, block, corostart_type
+    ):
+        corofn, expect = self.get_coro1(block)
+        log = []
+        ctxt = copy_context()
+        coro = corofn(log)
+        cs = corostart_type(coro, ctxt, False)
+
+        assert log == []
+        if block:
+            assert not cs.start()
+            assert log == [1]
+            cs.close()
+        else:
+            assert cs.start()
+            assert log == expect[:-1]
+            assert cs.result() == expect[:-1]
 
     async def test_no_auto_start_context(self, block, corostart_type):
         """Test that the start() method uses explicit and default contexts"""

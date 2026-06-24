@@ -37,6 +37,7 @@ from .tools import create_task as _create_task
 # Try to import C extension for performance-critical components
 try:
     from ._cext import CoroStartBase as _CCoroStartBase  # type: ignore[attr-defined]
+    from ._cext import coro_start  # type: ignore[attr-defined]
     from ._cext import get_build_info as _get_c_build_info  # type: ignore[attr-defined]
 
     _cext_module = importlib.import_module("._cext", __package__)
@@ -50,6 +51,15 @@ except ImportError:
     _get_c_build_info = None
     _get_c_current_context = None
     _HAVE_C_EXTENSION = False
+
+    def coro_start(
+        corostart_type: type[CoroStart[T]],
+        coro: Coroutine[Any, Any, T],
+        /,
+        context: Context | None = None,
+        autostart: bool = True,
+    ) -> CoroStart[T]:
+        return corostart_type(coro, context=context, autostart=autostart)
 
 
 def get_implementation_info() -> dict[str, Any]:
@@ -97,6 +107,7 @@ __all__ = [
     "PyCoroStart",
     "awaitmethod",
     "awaitmethod_iter",
+    "coro_start",
     "coro_await",
     "coro_eager",
     "func_eager",
@@ -284,7 +295,6 @@ class CoroStartBase(Awaitable[T_co]):
     def __init__(
         self,
         coro: Coroutine[Any, Any, T_co],
-        *,
         context: Context | None = None,
         autostart: bool = True,
     ):
@@ -622,7 +632,7 @@ async def coro_await(
     `context` can be provided for the coroutine to run in instead
     of the currently active context.
     """
-    cs = CoroStart(coro, context=context)
+    cs = cast(CoroStart[T], coro_start(CoroStart, coro, context))
     return await cs
 
 
@@ -642,7 +652,10 @@ def coro_eager(
     """
 
     # start the coroutine. Run it to the first block, exception or return value.
-    cs = CoroStart(coro, context=context if context is not None else copy_context())
+    cs = cast(
+        CoroStart[T],
+        coro_start(CoroStart, coro, context if context is not None else copy_context()),
+    )
     if cs.done():
         return cs.as_future()
 
@@ -991,11 +1004,11 @@ def coro_eager_task_helper(
     current_task = asyncio.current_task(loop)
     if current_task is not None:
         if context is None:
-            cs = CoroStart(coro, context=copy_context())
+            cs = coro_start(CoroStart, coro, copy_context())
         else:
             # Enter the context only for the initial start, then use None for CoroStart
             # This way the continuation won't try to re-enter the context
-            cs = context.run(lambda: CoroStart(coro, context=None))
+            cs = context.run(lambda: coro_start(CoroStart, coro, None))
     else:
         # if there is no current task, then we need a fake task to run it in
         # this is so that asyncio.get_current_task() returns a valid task during
@@ -1005,11 +1018,11 @@ def coro_eager_task_helper(
         old = swap_current_task(loop, _get_ghost_task(loop, real_task_factory))
         try:
             if context is None:
-                cs = CoroStart(coro, context=copy_context())
+                cs = coro_start(CoroStart, coro, copy_context())
             else:
                 # Enter the context only for the initial start, then use None for CoroStart
                 # This way the continuation won't try to re-enter the context
-                cs = context.run(lambda: CoroStart(coro, context=None))
+                cs = context.run(lambda: coro_start(CoroStart, coro, None))
         finally:
             swap_current_task(loop, old)
 
