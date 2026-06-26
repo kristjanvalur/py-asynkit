@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Type checker support for C accelerators**: Kept the annotated Python
+  definitions visible during type checking when `CoroStart` and `coro_drive()`
+  are replaced by faster C extension implementations at runtime.
+
 ## [0.19.0] - 2026-06-26
 
 ### Features

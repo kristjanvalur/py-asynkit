@@ -610,7 +610,8 @@ _PyCoroStart = CoroStart  # Keep reference to Python implementation
 
 # Simple multiple inheritance approach for C extension integration
 
-if _HAVE_C_EXTENSION and _CCoroStartBase is not None:
+_CCoroStart = None
+if not TYPE_CHECKING and _HAVE_C_EXTENSION and _CCoroStartBase is not None:
     # Pure C implementation with Python mixin via multiple inheritance
     class _CCoroStart(_CCoroStartBase, CoroStartMixin[T_co]):  # type: ignore[misc]
         """C CoroStartBase + Python CoroStartMixin via multiple inheritance"""
@@ -619,11 +620,6 @@ if _HAVE_C_EXTENSION and _CCoroStartBase is not None:
 
     # Public API uses C implementation when available (follows asyncio convention)
     CoroStart = _CCoroStart  # type: ignore[misc]
-
-else:
-    # Python implementation only
-    _CCoroStart = None  # type: ignore[assignment,misc]
-    CoroStart = _PyCoroStart  # type: ignore[misc]
 
 # Always export Python implementation for advanced use cases
 # (follows asyncio convention)
@@ -1099,7 +1095,7 @@ def coro_drive(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
 
 
 _py_coro_drive = coro_drive
-if _HAVE_C_EXTENSION and _c_coro_drive is not None:
+if not TYPE_CHECKING and _HAVE_C_EXTENSION and _c_coro_drive is not None:
     coro_drive = _c_coro_drive
 
 
