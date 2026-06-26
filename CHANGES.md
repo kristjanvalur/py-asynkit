@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-06-26
+
 ### Features
 
 - **Synchronous method decorator**: Added `syncmethod()` and `SyncMethod` for
