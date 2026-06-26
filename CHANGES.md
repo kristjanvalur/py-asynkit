@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-06-26
+
 ### Fixed
 
 - **Type checker support for C accelerators**: Kept the annotated Python
