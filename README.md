@@ -6,7 +6,7 @@
 
 - Helper tools for controlling coroutine execution, such as [`CoroStart`](#corostart) and [`Monitor`](#monitor)
 - Utility classes such as [`GeneratorObject`](#generatorobject)
-- Coroutine helpers such [`coro_drive()`](#coro_drive), [`coro_iter()`](#coro_iter), and the [`awaitmethod()`](#awaitmethod) decorator
+- Coroutine helpers such as [`coro_drive()`](#coro_drive), [`coro_iter()`](#coro_iter), and the [`awaitmethod()`](#awaitmethod) decorator
 - Helpers to run _async_ code from _non-async_ code, such as `await_sync()` and `aiter_sync()`
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - [`eager_task_factory`](#eager_task_factory-and-create_eager_task_factory---global-eager-execution) support for global eager task execution (Python 3.12 API, backward compatible)
@@ -412,7 +412,10 @@ By default, `await_sync()` ignores bare `yield None` suspension points, such as
 `ignore_nullsleep=False` to treat those suspension points as blocking too.
 If the invoked coroutine blocks, a `SynchronousError` is raised from the internal
 stop signal used to abort the synchronous run. This makes it easy to pinpoint the
-location in the code where the async code blocked. If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
+location in the code where the async code blocked. A coroutine may catch that
+stop signal and return instead; in that case it has intentionally decided not to
+block after all, and `await_sync()` returns its result. If the code tries to
+access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
 
 The `syncfunction()` decorator can be used to automatically wrap an async function
 so that it is executed using `await_sync()`:

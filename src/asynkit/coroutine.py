@@ -1134,11 +1134,12 @@ def awaitmethod_iter(
     return wrapper
 
 
-def await_sync(
-    coro: Coroutine[Any, Any, T], *, ignore_nullsleep: bool = True
-) -> T:
+def await_sync(coro: Coroutine[Any, Any, T], *, ignore_nullsleep: bool = True) -> T:
     """Runs a coroutine synchronously.  If the coroutine blocks, a
     SynchronousError is raised.
+
+    If the coroutine catches the stop signal and returns, it has decided not to
+    block after all and the return value is used.
     """
     yielded = False
 
@@ -1156,9 +1157,7 @@ def await_sync(
     try:
         return coro_drive(coro, callback)
     except (GeneratorExit, SynchronousAbort) as err:
-        raise SynchronousError(
-            "coroutine failed to complete synchronously"
-        ) from err
+        raise SynchronousError("coroutine failed to complete synchronously") from err
 
 
 def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:

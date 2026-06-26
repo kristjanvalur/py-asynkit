@@ -802,6 +802,13 @@ class TestCoroRun:
         except BaseException:
             pass
 
+    async def handled_abort(self):
+        try:
+            await self.sleep(0)
+        except asynkit.SynchronousAbort:
+            return "handled"
+        return "blocked"
+
     async def noexit(self):
         while True:
             try:
@@ -855,6 +862,12 @@ class TestCoroRun:
 
     def test_genexit(self):
         assert self.sync_genexit() is None
+
+    def test_handled_abort(self):
+        assert (
+            asynkit.await_sync(self.handled_abort(), ignore_nullsleep=False)
+            == "handled"
+        )
 
     def test_noexit(self):
         with pytest.raises(asynkit.SynchronousError) as err:
