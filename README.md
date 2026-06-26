@@ -407,9 +407,9 @@ of code duplication where the same logic is repeated inside async helper closure
 
 Using `await_sync()` it is possible to write the entire logic as `async` methods and
 then simply fail if the code tries to invoke any truly async operations.
-If the invoked coroutine blocks, a `SynchronousError` is raised _from_ a `SynchronousAbort` exception which
-contains a traceback. This makes it easy to pinpoint the location in the code where the
-async code blocked. If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
+If the invoked coroutine blocks, a `SynchronousError` is raised from the internal
+stop signal used to abort the synchronous run. This makes it easy to pinpoint the
+location in the code where the async code blocked. If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
 
 The `syncfunction()` decorator can be used to automatically wrap an async function
 so that it is executed using `await_sync()`:
@@ -459,7 +459,7 @@ application.
 
 ### `CoroStart`
 
-This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` and `await_sync()` functions.
+This class manages the state of a partially run coroutine and is what powers the `coro_eager()` function.
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
 an exception. It can subsequently be _awaited_ to retrieve the result.
 
@@ -546,8 +546,9 @@ assert asynkit.coro_drive(immediate(), callback) == "done"
 
 In real bridge code, the callback might take the yielded `Future`, send it to an event loop, wait for it from a
 stackless or greenlet-style synchronous thread, and then return the completed result. This lets synchronous control flow
-drive async functions while still using the coroutine's normal `send()` and `throw()` protocol. If the coroutine raises
-`GeneratorExit`, `coro_drive()` closes it and re-raises, just like a hand-written coroutine driver should.
+drive async functions while still using the coroutine's normal `send()` and `throw()` protocol. If the callback raises
+`GeneratorExit`, `coro_drive()` closes the coroutine and re-raises it. `GeneratorExit` is the normal close signal for
+generators and coroutines, so it stops the driver rather than being thrown into the coroutine as ordinary callback data.
 
 ### Context helper
 

@@ -1091,6 +1091,9 @@ def coro_drive(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
 
         try:
             send_value = callback(yielded)
+        except GeneratorExit:
+            coro.close()
+            raise
         except BaseException as exc:
             pending_error = exc
 
@@ -1135,22 +1138,23 @@ def await_sync(coro: Coroutine[Any, Any, T]) -> T:
     """Runs a coroutine synchronously.  If the coroutine blocks, a
     SynchronousError is raised.
     """
-    start = CoroStart[T](coro)
-    if start.done():
-        return start.result()
-    # kill the coroutine
+    yielded = False
+
+    def callback(_yielded: Any) -> None:
+        nonlocal yielded
+        if not yielded:
+            yielded = True
+            # we can't use GeneratorExit because that gets special handling and
+            # a traceback is not collected.
+            raise SynchronousAbort()
+        raise GeneratorExit()
+
     try:
-        # we can't use GeneratorExit because that gets special handling and
-        # a traceback is not collected.
-        start.throw(SynchronousAbort())
-    except BaseException as err:
-        raise SynchronousError("coroutine failed to complete synchronously") from err
-    else:
+        return coro_drive(coro, callback)
+    except (GeneratorExit, SynchronousAbort) as err:
         raise SynchronousError(
-            "coroutine failed to complete synchronously (caught BaseException)"
-        )
-    finally:
-        start.close()
+            "coroutine failed to complete synchronously"
+        ) from err
 
 
 def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:

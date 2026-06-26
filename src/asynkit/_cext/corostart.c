@@ -1790,6 +1790,16 @@ static PyObject *cext_coro_drive(PyObject *module,
         send_value = PyObject_CallOneArg(callback, yielded);
         Py_DECREF(yielded);
         if(send_value == NULL) {
+            if(PyErr_ExceptionMatches(PyExc_GeneratorExit)) {
+                if(coro_close_with_generator_exit(await_iter) < 0) {
+                    Py_DECREF(await_iter);
+                    Py_XDECREF(pending_error);
+                    return NULL;
+                }
+                Py_DECREF(await_iter);
+                Py_XDECREF(pending_error);
+                return NULL;
+            }
             pending_error = fetch_current_exception_instance();
             if(pending_error == NULL) {
                 Py_DECREF(await_iter);

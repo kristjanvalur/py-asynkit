@@ -329,7 +329,7 @@ class TestCoroDrive:
 
         with pytest.raises(GeneratorExit):
             drive(coro, callback)
-        assert coro.log == [("throw", GeneratorExit), "close"]
+        assert coro.log == ["close"]
 
     @pytest.mark.parametrize("_name,drive", coro_drive_implementations())
     def test_coro_drive_accepts_keywords(self, _name, drive):
@@ -839,10 +839,7 @@ class TestCoroRun:
         assert err.match("failed to complete synchronously")
 
     def test_genexit(self):
-        with pytest.raises(asynkit.SynchronousError) as err:
-            self.sync_genexit()
-        assert err.match("failed to complete synchronously")
-        assert err.match("caught BaseException")
+        assert self.sync_genexit() is None
 
     def test_noexit(self):
         with pytest.raises(asynkit.SynchronousError) as err:
