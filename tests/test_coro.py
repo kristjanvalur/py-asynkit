@@ -31,6 +31,18 @@ eager_var: ContextVar[str] = ContextVar("eager_var")
 pytestmark = pytest.mark.anyio
 
 
+@types.coroutine
+def drive_yield(value):
+    return (yield value)
+
+
+def coro_drive_implementations():
+    implementations = [("python", asynkit.coroutine._py_coro_drive)]
+    if asynkit.coroutine.coro_drive is not asynkit.coroutine._py_coro_drive:
+        implementations.append(("active", asynkit.coroutine.coro_drive))
+    return implementations
+
+
 @pytest.mark.parametrize("block", [True, False])
 class TestEager:
     @pytest.fixture
@@ -231,6 +243,101 @@ class TestEager:
             assert c.cancelled()
         else:
             assert log == expect
+
+
+class TestCoroDrive:
+    @pytest.mark.parametrize("_name,drive", coro_drive_implementations())
+    def test_coro_drive_returns_value(self, _name, drive):
+        seen = []
+
+        async def coro():
+            value = await drive_yield("need-value")
+            return value + 1
+
+        def callback(yielded):
+            seen.append(yielded)
+            return 41
+
+        assert drive(coro(), callback) == 42
+        assert seen == ["need-value"]
+
+    @pytest.mark.parametrize("_name,drive", coro_drive_implementations())
+    def test_coro_drive_throws_callback_error_into_coro(self, _name, drive):
+        @types.coroutine
+        def handled_yield():
+            try:
+                yield "need-error"
+            except ValueError as exc:
+                return str(exc)
+
+        async def coro():
+            return await handled_yield()
+
+        def callback(yielded):
+            assert yielded == "need-error"
+            raise ValueError("handled")
+
+        assert drive(coro(), callback) == "handled"
+
+    @pytest.mark.parametrize("_name,drive", coro_drive_implementations())
+    def test_coro_drive_propagates_unhandled_callback_error(self, _name, drive):
+        async def coro():
+            await drive_yield("need-error")
+
+        def callback(yielded):
+            assert yielded == "need-error"
+            raise RuntimeError("unhandled")
+
+        with pytest.raises(RuntimeError, match="unhandled"):
+            drive(coro(), callback)
+
+    @pytest.mark.parametrize("_name,drive", coro_drive_implementations())
+    def test_coro_drive_closes_on_generator_exit(self, _name, drive):
+        class ClosingCoro:
+            def __init__(self):
+                self.started = False
+                self.log = []
+
+            def __await__(self):
+                return self
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                return self.send(None)
+
+            def send(self, value):
+                assert value is None
+                if not self.started:
+                    self.started = True
+                    return "need-exit"
+                raise StopIteration(None)
+
+            def throw(self, exc):
+                self.log.append(("throw", type(exc)))
+                raise exc
+
+            def close(self):
+                self.log.append("close")
+
+        coro = ClosingCoro()
+
+        def callback(yielded):
+            assert yielded == "need-exit"
+            raise GeneratorExit()
+
+        with pytest.raises(GeneratorExit):
+            drive(coro, callback)
+        assert coro.log == [("throw", GeneratorExit), "close"]
+
+    @pytest.mark.parametrize("_name,drive", coro_drive_implementations())
+    def test_coro_drive_accepts_keywords(self, _name, drive):
+        async def coro():
+            await drive_yield("ignored")
+            return "done"
+
+        assert drive(coro=coro(), callback=lambda yielded: None) == "done"
 
 
 @pytest.mark.parametrize("block", [True, False], ids=["block", "noblock"])

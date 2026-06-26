@@ -19,6 +19,7 @@ def test_package_star_exports_public_api_only():
     exports = {name for name in namespace if not name.startswith("_")}
     assert exports == set(asynkit.__all__)
     assert "coro_start" in exports
+    assert "coro_drive" in exports
     assert "cancelling" in exports
     assert "coroutine" not in exports
     assert "loop" not in exports

@@ -6,7 +6,7 @@
 
 - Helper tools for controlling coroutine execution, such as [`CoroStart`](#corostart) and [`Monitor`](#monitor)
 - Utility classes such as [`GeneratorObject`](#generatorobject)
-- Coroutine helpers such [`coro_iter()`](#coro_iter) and the [`awaitmethod()`](#awaitmethod) decorator
+- Coroutine helpers such [`coro_drive()`](#coro_drive), [`coro_iter()`](#coro_iter), and the [`awaitmethod()`](#awaitmethod) decorator
 - Helpers to run _async_ code from _non-async_ code, such as `await_sync()` and `aiter_sync()`
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - [`eager_task_factory`](#eager_task_factory-and-create_eager_task_factory---global-eager-execution) support for global eager task execution (Python 3.12 API, backward compatible)
@@ -519,6 +519,35 @@ same `context` to `asyncio.create_task(..., context=context)`, because `CoroStar
 resumes the coroutine. Also do not move a blocked `CoroStart` to a different event loop with `asyncio.run()` or a worker
 thread: the coroutine may already be waiting on an asyncio object owned by the original loop. If you only need ordinary
 task context propagation, use `copy_context()` or the normal eager task helpers instead.
+
+### `coro_drive()`
+
+`coro_drive()` drives a coroutine directly, calling a callback for every value the coroutine yields. The value returned
+by the callback is sent back into the coroutine. If the callback raises an exception, that exception is thrown into the
+coroutine instead.
+
+This is the low-level protocol loop behind ordinary `await`, exposed for code that wants to decide what each yielded
+object means. For example, the callback can simply acknowledge each suspension point:
+
+```python
+import asynkit
+
+
+async def immediate():
+    return "done"
+
+
+def callback(yielded):
+    return None
+
+
+assert asynkit.coro_drive(immediate(), callback) == "done"
+```
+
+In real bridge code, the callback might take the yielded `Future`, send it to an event loop, wait for it from a
+stackless or greenlet-style synchronous thread, and then return the completed result. This lets synchronous control flow
+drive async functions while still using the coroutine's normal `send()` and `throw()` protocol. If the coroutine raises
+`GeneratorExit`, `coro_drive()` closes it and re-raises, just like a hand-written coroutine driver should.
 
 ### Context helper
 
