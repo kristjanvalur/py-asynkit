@@ -269,7 +269,7 @@ class GeneratorObjectIterator(AsyncGenerator[T_co, T_contra]):
     def __init__(self, monitor: Monitor[Any], coro: Coroutine[Any, Any, Any]) -> None:
         self.monitor = monitor
         self.coro = coro
-        # Mypy thinks ag_running is read-only
+        # type checkers think ag_running is read-only
         self.ag_running = False
         self.finalizer: Callable[[Any], None] | None = None
 

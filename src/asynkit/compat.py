@@ -24,7 +24,7 @@ T = TypeVar("T")
 
 # The following is needed because some generic types (like asyncio.Task and
 # weakref.ReferenceType) cannot be subscripted at runtime, even in Python 3.10+.
-# We use TYPE_CHECKING to provide subscripted types for mypy while using
+# We use TYPE_CHECKING to provide subscripted types for type checkers while using
 # unsubscripted types at runtime to avoid TypeError.
 if TYPE_CHECKING:
     _TaskAny = asyncio.Task[Any]
