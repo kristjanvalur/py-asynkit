@@ -41,6 +41,7 @@ try:
     from ._cext import get_build_info as _get_c_build_info  # type: ignore[attr-defined]
 
     _cext_module = importlib.import_module("._cext", __package__)
+    _c_coro_drive = getattr(_cext_module, "coro_drive", None)
     _get_c_current_context = getattr(_cext_module, "get_current_context", None)
 
     _HAVE_C_EXTENSION = (
@@ -48,6 +49,7 @@ try:
     )
 except ImportError:
     _CCoroStartBase = None
+    _c_coro_drive = None
     _get_c_build_info = None
     _get_c_current_context = None
     _HAVE_C_EXTENSION = False
@@ -108,6 +110,7 @@ __all__ = [
     "awaitmethod",
     "awaitmethod_iter",
     "coro_start",
+    "coro_drive",
     "coro_await",
     "coro_eager",
     "func_eager",
@@ -156,6 +159,10 @@ Suspendable = (
 
 class CAwaitable(Awaitable[T_co], Cancellable, Protocol):
     pass
+
+
+class _CoroYieldCallback(Protocol):
+    def __call__(self, yielded: Any, /) -> Any: ...
 
 
 """
@@ -1063,6 +1070,39 @@ def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
                 return cast(T, exc.value)
 
 
+def coro_drive(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
+    """Drive a coroutine by passing each yielded value to a callback."""
+    send_value = None
+    pending_error: BaseException | None = None
+
+    while True:
+        try:
+            if pending_error is not None:
+                yielded = coro.throw(pending_error)
+                pending_error = None
+            else:
+                yielded = coro.send(send_value)
+                send_value = None
+        except StopIteration as exc:
+            return cast(T, exc.value)
+        except GeneratorExit:
+            coro.close()
+            raise
+
+        try:
+            send_value = callback(yielded)
+        except GeneratorExit:
+            coro.close()
+            raise
+        except BaseException as exc:
+            pending_error = exc
+
+
+_py_coro_drive = coro_drive
+if _HAVE_C_EXTENSION and _c_coro_drive is not None:
+    coro_drive = _c_coro_drive
+
+
 def awaitmethod(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, Iterator[T]]:
     """
     Decorator to make a function return an awaitable.
@@ -1094,26 +1134,30 @@ def awaitmethod_iter(
     return wrapper
 
 
-def await_sync(coro: Coroutine[Any, Any, T]) -> T:
+def await_sync(coro: Coroutine[Any, Any, T], *, ignore_nullsleep: bool = True) -> T:
     """Runs a coroutine synchronously.  If the coroutine blocks, a
     SynchronousError is raised.
+
+    If the coroutine catches the stop signal and returns, it has decided not to
+    block after all and the return value is used.
     """
-    start = CoroStart[T](coro)
-    if start.done():
-        return start.result()
-    # kill the coroutine
+    yielded = False
+
+    def callback(value: Any) -> None:
+        nonlocal yielded
+        if ignore_nullsleep and value is None:
+            return None
+        if not yielded:
+            yielded = True
+            # we can't use GeneratorExit because that gets special handling and
+            # a traceback is not collected.
+            raise SynchronousAbort()
+        raise GeneratorExit()
+
     try:
-        # we can't use GeneratorExit because that gets special handling and
-        # a traceback is not collected.
-        start.throw(SynchronousAbort())
-    except BaseException as err:
+        return coro_drive(coro, callback)
+    except (GeneratorExit, SynchronousAbort) as err:
         raise SynchronousError("coroutine failed to complete synchronously") from err
-    else:
-        raise SynchronousError(
-            "coroutine failed to complete synchronously (caught BaseException)"
-        )
-    finally:
-        start.close()
 
 
 def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:

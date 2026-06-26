@@ -163,6 +163,10 @@ static PyObject *cext_coro_start(PyObject *module,
                                  PyObject *const *args,
                                  Py_ssize_t nargs,
                                  PyObject *kwnames);
+static PyObject *cext_coro_drive(PyObject *module,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs,
+                                 PyObject *kwnames);
 
 /* State checking macros for CoroStart objects
  * UNSTARTED means started flag is 0 (start() not yet called)
@@ -1604,6 +1608,207 @@ static PyObject *cext_coro_start(PyObject *module,
     return corostart_create(type, coro, context, autostart);
 }
 
+static int coro_close_with_generator_exit(PyObject *await_iter)
+{
+#if NEW_EXC
+    PyObject *exc_value = PyErr_GetRaisedException();
+#else
+    PyObject *exc_type, *exc_value, *exc_traceback;
+    PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
+#endif
+
+    PyObject *close_result = PyObject_CallMethod(await_iter, "close", NULL);
+    if(close_result == NULL) {
+#if NEW_EXC
+        Py_DECREF(exc_value);
+#else
+        Py_XDECREF(exc_type);
+        Py_XDECREF(exc_value);
+        Py_XDECREF(exc_traceback);
+#endif
+        return -1;
+    }
+    Py_DECREF(close_result);
+
+#if NEW_EXC
+    PyErr_SetRaisedException(exc_value);
+#else
+    PyErr_Restore(exc_type, exc_value, exc_traceback);
+#endif
+    return 0;
+}
+
+static PyObject *fetch_current_exception_instance(void)
+{
+#if NEW_EXC
+    return PyErr_GetRaisedException();
+#else
+    PyObject *exc_type, *exc_value, *exc_traceback;
+    PyErr_Fetch(&exc_type, &exc_value, &exc_traceback);
+    PyErr_NormalizeException(&exc_type, &exc_value, &exc_traceback);
+    Py_XDECREF(exc_type);
+    Py_XDECREF(exc_traceback);
+    if(exc_value == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "could not normalize exception");
+    }
+    return exc_value;
+#endif
+}
+
+static PyObject *throw_into_coro(PyObject *await_iter, PyObject *exc)
+{
+    return PyObject_CallMethod(await_iter, "throw", "O", exc);
+}
+
+static PyObject *cext_coro_drive(PyObject *module,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs,
+                                 PyObject *kwnames)
+{
+    (void) module;
+    PyObject *coro = NULL;
+    PyObject *callback = NULL;
+
+    if(nargs > 2) {
+        PyErr_Format(PyExc_TypeError,
+                     "coro_drive() takes 2 positional arguments (%zd given)",
+                     nargs);
+        return NULL;
+    }
+    if(nargs >= 1) {
+        coro = args[0];
+    }
+    if(nargs >= 2) {
+        callback = args[1];
+    }
+
+    if(kwnames != NULL) {
+        Py_ssize_t nkwargs = PyTuple_GET_SIZE(kwnames);
+        for(Py_ssize_t i = 0; i < nkwargs; i++) {
+            PyObject *name = PyTuple_GET_ITEM(kwnames, i);
+            PyObject *value = args[nargs + i];
+            if(!PyUnicode_Check(name)) {
+                PyErr_Format(PyExc_TypeError,
+                             "coro_drive() keywords must be strings, got %.200R",
+                             name);
+                return NULL;
+            }
+
+            int is_coro = unicode_eq_ascii(name, "coro");
+            if(is_coro < 0) {
+                return NULL;
+            }
+            if(is_coro) {
+                if(coro != NULL) {
+                    PyErr_SetString(PyExc_TypeError,
+                                    "coro_drive() got multiple values for argument "
+                                    "'coro'");
+                    return NULL;
+                }
+                coro = value;
+                continue;
+            }
+
+            int is_callback = unicode_eq_ascii(name, "callback");
+            if(is_callback < 0) {
+                return NULL;
+            }
+            if(is_callback) {
+                if(callback != NULL) {
+                    PyErr_SetString(
+                        PyExc_TypeError,
+                        "coro_drive() got multiple values for argument 'callback'");
+                    return NULL;
+                }
+                callback = value;
+                continue;
+            }
+
+            PyErr_Format(PyExc_TypeError,
+                         "coro_drive() got an unexpected keyword argument '%U'",
+                         name);
+            return NULL;
+        }
+    }
+
+    if(coro == NULL || callback == NULL) {
+        PyErr_SetString(PyExc_TypeError,
+                        "coro_drive() missing required positional arguments");
+        return NULL;
+    }
+
+    PyObject *await_iter = coro_get_iterator(coro);
+    if(await_iter == NULL) {
+        return NULL;
+    }
+
+    PyObject *send_value = Py_NewRef(Py_None);
+    PyObject *pending_error = NULL;
+
+    while(1) {
+        PyObject *yielded = NULL;
+        PySendResult send_result;
+
+        if(pending_error != NULL) {
+            yielded = throw_into_coro(await_iter, pending_error);
+            Py_CLEAR(pending_error);
+            if(yielded != NULL) {
+                send_result = PYGEN_NEXT;
+            } else if(PyErr_ExceptionMatches(PyExc_StopIteration)) {
+                yielded = extract_current_stopiteration_value();
+                send_result = yielded == NULL ? PYGEN_ERROR : PYGEN_RETURN;
+            } else {
+                send_result = PYGEN_ERROR;
+            }
+        } else {
+            send_result = PyIter_Send(await_iter, send_value, &yielded);
+            Py_CLEAR(send_value);
+        }
+
+        if(send_result == PYGEN_RETURN) {
+            Py_DECREF(await_iter);
+            Py_XDECREF(send_value);
+            Py_XDECREF(pending_error);
+            return yielded;
+        }
+
+        if(send_result == PYGEN_ERROR) {
+            if(PyErr_ExceptionMatches(PyExc_GeneratorExit)) {
+                if(coro_close_with_generator_exit(await_iter) < 0) {
+                    Py_DECREF(await_iter);
+                    Py_XDECREF(send_value);
+                    Py_XDECREF(pending_error);
+                    return NULL;
+                }
+            }
+            Py_DECREF(await_iter);
+            Py_XDECREF(send_value);
+            Py_XDECREF(pending_error);
+            return NULL;
+        }
+
+        send_value = PyObject_CallOneArg(callback, yielded);
+        Py_DECREF(yielded);
+        if(send_value == NULL) {
+            if(PyErr_ExceptionMatches(PyExc_GeneratorExit)) {
+                if(coro_close_with_generator_exit(await_iter) < 0) {
+                    Py_DECREF(await_iter);
+                    Py_XDECREF(pending_error);
+                    return NULL;
+                }
+                Py_DECREF(await_iter);
+                Py_XDECREF(pending_error);
+                return NULL;
+            }
+            pending_error = fetch_current_exception_instance();
+            if(pending_error == NULL) {
+                Py_DECREF(await_iter);
+                return NULL;
+            }
+        }
+    }
+}
+
 static PyMethodDef module_methods[] = {{"get_build_info",
                                         (PyCFunction) cext_get_build_info,
                                         METH_NOARGS,
@@ -1616,6 +1821,10 @@ static PyMethodDef module_methods[] = {{"get_build_info",
                                         (PyCFunction) cext_coro_start,
                                         METH_FASTCALL | METH_KEYWORDS,
                                         "Fast CoroStart constructor helper"},
+                                       {"coro_drive",
+                                        (PyCFunction) cext_coro_drive,
+                                        METH_FASTCALL | METH_KEYWORDS,
+                                        "Drive a coroutine with a callback"},
                                        {NULL, NULL, 0, NULL}};
 
 /* Module slots for GIL configuration */

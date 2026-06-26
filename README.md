@@ -6,7 +6,7 @@
 
 - Helper tools for controlling coroutine execution, such as [`CoroStart`](#corostart) and [`Monitor`](#monitor)
 - Utility classes such as [`GeneratorObject`](#generatorobject)
-- Coroutine helpers such [`coro_iter()`](#coro_iter) and the [`awaitmethod()`](#awaitmethod) decorator
+- Coroutine helpers such as [`coro_drive()`](#coro_drive), [`coro_iter()`](#coro_iter), and the [`awaitmethod()`](#awaitmethod) decorator
 - Helpers to run _async_ code from _non-async_ code, such as `await_sync()` and `aiter_sync()`
 - Scheduling helpers for `asyncio`, and extended event-loop implementations
 - [`eager_task_factory`](#eager_task_factory-and-create_eager_task_factory---global-eager-execution) support for global eager task execution (Python 3.12 API, backward compatible)
@@ -407,9 +407,15 @@ of code duplication where the same logic is repeated inside async helper closure
 
 Using `await_sync()` it is possible to write the entire logic as `async` methods and
 then simply fail if the code tries to invoke any truly async operations.
-If the invoked coroutine blocks, a `SynchronousError` is raised _from_ a `SynchronousAbort` exception which
-contains a traceback. This makes it easy to pinpoint the location in the code where the
-async code blocked. If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
+By default, `await_sync()` ignores bare `yield None` suspension points, such as
+`await asyncio.sleep(0)`, and sends `None` back into the coroutine. Pass
+`ignore_nullsleep=False` to treat those suspension points as blocking too.
+If the invoked coroutine blocks, a `SynchronousError` is raised from the internal
+stop signal used to abort the synchronous run. This makes it easy to pinpoint the
+location in the code where the async code blocked. A coroutine may catch that
+stop signal and return instead; in that case it has intentionally decided not to
+block after all, and `await_sync()` returns its result. If the code tries to
+access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
 
 The `syncfunction()` decorator can be used to automatically wrap an async function
 so that it is executed using `await_sync()`:
@@ -459,7 +465,7 @@ application.
 
 ### `CoroStart`
 
-This class manages the state of a partially run coroutine and is what what powers the `coro_eager()` and `await_sync()` functions.
+This class manages the state of a partially run coroutine and is what powers the `coro_eager()` function.
 When initialized, it will _start_ the coroutine, running it until it either suspends, returns, or raises
 an exception. It can subsequently be _awaited_ to retrieve the result.
 
@@ -519,6 +525,36 @@ same `context` to `asyncio.create_task(..., context=context)`, because `CoroStar
 resumes the coroutine. Also do not move a blocked `CoroStart` to a different event loop with `asyncio.run()` or a worker
 thread: the coroutine may already be waiting on an asyncio object owned by the original loop. If you only need ordinary
 task context propagation, use `copy_context()` or the normal eager task helpers instead.
+
+### `coro_drive()`
+
+`coro_drive()` drives a coroutine directly, calling a callback for every value the coroutine yields. The value returned
+by the callback is sent back into the coroutine. If the callback raises an exception, that exception is thrown into the
+coroutine instead.
+
+This is the low-level protocol loop behind ordinary `await`, exposed for code that wants to decide what each yielded
+object means. For example, the callback can simply acknowledge each suspension point:
+
+```python
+import asynkit
+
+
+async def immediate():
+    return "done"
+
+
+def callback(yielded):
+    return None
+
+
+assert asynkit.coro_drive(immediate(), callback) == "done"
+```
+
+In real bridge code, the callback might take the yielded `Future`, send it to an event loop, wait for it from a
+stackless or greenlet-style synchronous thread, and then return the completed result. This lets synchronous control flow
+drive async functions while still using the coroutine's normal `send()` and `throw()` protocol. If the callback raises
+`GeneratorExit`, `coro_drive()` closes the coroutine and re-raises it. `GeneratorExit` is the normal close signal for
+generators and coroutines, so it stops the driver rather than being thrown into the coroutine as ordinary callback data.
 
 ### Context helper
 
