@@ -22,6 +22,7 @@ from types import FrameType
 from typing import (
     TYPE_CHECKING,
     Any,
+    Concatenate,
     Generic,
     TypeVar,
     cast,
@@ -133,6 +134,8 @@ __all__ = [
     "SynchronousAbort",
     "asyncfunction",
     "syncfunction",
+    "syncmethod",
+    "SyncMethod",
 ]
 
 
@@ -150,6 +153,7 @@ def get_current_context() -> Context:
 
 T = TypeVar("T")
 S = TypeVar("S")
+SelfT = TypeVar("SelfT")
 P = ParamSpec("P")
 T_co = TypeVar("T_co", covariant=True)
 Suspendable = (
@@ -1166,6 +1170,59 @@ def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
         return await_sync(func(*args, **kwargs))
 
     return helper
+
+
+class SyncMethod(Generic[SelfT, P, T]):
+    """Descriptor which makes an async method synchronous.
+
+    Unlike `syncfunction()`, this preserves method binding semantics when used
+    for class-body aliases such as `run = syncmethod(arun)`.
+    """
+
+    def __init__(
+        self,
+        func: Callable[Concatenate[SelfT, P], Coroutine[Any, Any, T]],
+    ) -> None:
+        self._func = func
+        functools.update_wrapper(self, func)
+
+    @overload
+    def __get__(
+        self,
+        instance: None,
+        owner: type[SelfT],
+    ) -> Callable[Concatenate[SelfT, P], T]: ...
+
+    @overload
+    def __get__(
+        self,
+        instance: SelfT,
+        owner: type[SelfT] | None = None,
+    ) -> Callable[P, T]: ...
+
+    def __get__(
+        self,
+        instance: SelfT | None,
+        owner: type[SelfT] | None = None,
+    ) -> Callable[..., T]:
+        if instance is None:
+            return self
+
+        @functools.wraps(self._func)
+        def helper(*args: P.args, **kwargs: P.kwargs) -> T:
+            return self(instance, *args, **kwargs)
+
+        return helper
+
+    def __call__(self, instance: SelfT, *args: P.args, **kwargs: P.kwargs) -> T:
+        return await_sync(self._func(instance, *args, **kwargs))
+
+
+def syncmethod(
+    func: Callable[Concatenate[SelfT, P], Coroutine[Any, Any, T]],
+) -> SyncMethod[SelfT, P, T]:
+    """Make an async method synchronous while preserving descriptor typing."""
+    return SyncMethod(func)
 
 
 def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:

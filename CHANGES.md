@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Features
+
+- **Synchronous method decorator**: Added `syncmethod()` and `SyncMethod` for
+  class-body aliases such as `run = syncmethod(arun)`. The descriptor preserves
+  bound and unbound method typing so subclasses can override the generated
+  synchronous method cleanly.
+
 ## [0.19.1] - 2026-06-26
 
 ### Fixed

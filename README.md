@@ -432,6 +432,17 @@ so that it is executed using `await_sync()`:
 >>>
 ```
 
+For methods, use `syncmethod()` when creating a class-body alias. It behaves
+like `syncfunction()` at runtime, but exposes descriptor typing so type checkers
+can distinguish bound and unbound method access:
+
+```python
+class Runner:
+    async def arun(self, *, yield_every: int | None = None) -> None: ...
+
+    run = asynkit.syncmethod(arun)
+```
+
 the `asyncfunction()` utility can be used when passing synchronous callbacks to async
 code, to make them async. This, along with `syncfunction()` and `await_sync()`,
 can be used to integrate synchronous code with async middleware:

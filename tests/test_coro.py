@@ -826,6 +826,9 @@ class TestCoroRun:
         await self.sleep(0)
         return "nullsleep"
 
+    async def blocks(self):
+        await drive_yield("blocked")
+
     @asynkit.syncfunction
     async def sync_simple(self):
         return await self.simple()
@@ -837,6 +840,9 @@ class TestCoroRun:
     @asynkit.syncfunction
     async def sync_genexit(self):
         return await self.genexit()
+
+    method_simple = asynkit.syncmethod(simple)
+    method_blocks = asynkit.syncmethod(blocks)
 
     def test_simple(self):
         assert asynkit.await_sync(self.simple()) == "simple"
@@ -851,6 +857,23 @@ class TestCoroRun:
 
     def test_sync_simple(self):
         assert self.sync_simple() == "simple"
+
+    def test_syncmethod_bound(self):
+        assert self.method_simple() == "simple"
+
+    def test_syncmethod_unbound(self):
+        assert type(self).method_simple(self) == "simple"
+
+    def test_syncmethod_descriptor(self):
+        descriptor = type(self).__dict__["method_simple"]
+        assert isinstance(descriptor, asynkit.SyncMethod)
+        assert type(self).method_simple.__name__ == "simple"
+        assert self.method_simple.__name__ == "simple"
+
+    def test_syncmethod_blocks(self):
+        with pytest.raises(asynkit.SynchronousError) as err:
+            self.method_blocks()
+        assert err.match("failed to complete synchronously")
 
     def test_cleanup(self):
         assert self.sync_cleanup() is None

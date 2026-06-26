@@ -141,10 +141,8 @@ ignore = [
 python-version = "3.10"
 
 [tool.ty.src]
-include = ["src/asynkit"]
+include = ["src/asynkit", "tests/typing"]
 exclude = [
-    "tests",
-    "examples",
     "build",
     "src/asynkit.egg-info",
 ]
