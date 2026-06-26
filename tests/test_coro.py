@@ -815,6 +815,10 @@ class TestCoroRun:
     async def simple(self):
         return "simple"
 
+    async def nullsleep(self):
+        await self.sleep(0)
+        return "nullsleep"
+
     @asynkit.syncfunction
     async def sync_simple(self):
         return await self.simple()
@@ -830,12 +834,23 @@ class TestCoroRun:
     def test_simple(self):
         assert asynkit.await_sync(self.simple()) == "simple"
 
+    def test_nullsleep(self):
+        assert asynkit.await_sync(self.nullsleep()) == "nullsleep"
+
+    def test_nullsleep_strict(self):
+        with pytest.raises(asynkit.SynchronousError) as err:
+            asynkit.await_sync(self.nullsleep(), ignore_nullsleep=False)
+        assert err.match("failed to complete synchronously")
+
     def test_sync_simple(self):
         assert self.sync_simple() == "simple"
 
     def test_cleanup(self):
+        assert self.sync_cleanup() is None
+
+    def test_cleanup_strict(self):
         with pytest.raises(asynkit.SynchronousError) as err:
-            self.sync_cleanup()
+            asynkit.await_sync(self.cleanupper(), ignore_nullsleep=False)
         assert err.match("failed to complete synchronously")
 
     def test_genexit(self):
@@ -843,7 +858,7 @@ class TestCoroRun:
 
     def test_noexit(self):
         with pytest.raises(asynkit.SynchronousError) as err:
-            asynkit.await_sync(self.noexit())
+            asynkit.await_sync(self.noexit(), ignore_nullsleep=False)
         assert err.match("failed to complete synchronously")
 
 

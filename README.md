@@ -407,6 +407,9 @@ of code duplication where the same logic is repeated inside async helper closure
 
 Using `await_sync()` it is possible to write the entire logic as `async` methods and
 then simply fail if the code tries to invoke any truly async operations.
+By default, `await_sync()` ignores bare `yield None` suspension points, such as
+`await asyncio.sleep(0)`, and sends `None` back into the coroutine. Pass
+`ignore_nullsleep=False` to treat those suspension points as blocking too.
 If the invoked coroutine blocks, a `SynchronousError` is raised from the internal
 stop signal used to abort the synchronous run. This makes it easy to pinpoint the
 location in the code where the async code blocked. If the code tries to access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.

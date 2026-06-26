@@ -1134,14 +1134,18 @@ def awaitmethod_iter(
     return wrapper
 
 
-def await_sync(coro: Coroutine[Any, Any, T]) -> T:
+def await_sync(
+    coro: Coroutine[Any, Any, T], *, ignore_nullsleep: bool = True
+) -> T:
     """Runs a coroutine synchronously.  If the coroutine blocks, a
     SynchronousError is raised.
     """
     yielded = False
 
-    def callback(_yielded: Any) -> None:
+    def callback(value: Any) -> None:
         nonlocal yielded
+        if ignore_nullsleep and value is None:
+            return None
         if not yielded:
             yielded = True
             # we can't use GeneratorExit because that gets special handling and
