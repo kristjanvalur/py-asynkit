@@ -4,10 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-06-26
+
+### Features
+
+- **Coroutine driver primitive**: Added `coro_drive()` as a public helper for
+  driving a coroutine by passing each yielded value to a callback.
+  - Callback return values are sent back into the coroutine.
+  - Ordinary callback exceptions are thrown into the coroutine.
+  - `GeneratorExit` remains the close signal: if raised by either the coroutine
+    or callback, `coro_drive()` closes the coroutine and re-raises it.
+- **Synchronous await flexibility**: Added `ignore_nullsleep=True` to
+  `await_sync()` so bare `yield None` suspension points, such as
+  `await asyncio.sleep(0)`, can be treated as non-blocking by default.
+  - Passing `ignore_nullsleep=False` restores strict handling where those
+    suspension points raise `SynchronousError`.
+
 ### Changed
 
+- **`await_sync()` coroutine driving**: Reimplemented `await_sync()` using
+  `coro_drive()`, keeping the guard focused on _real_ blocking operations.
+  If a coroutine catches the injected stop signal and returns instead of
+  yielding again, `await_sync()` now returns that value because the coroutine has
+  intentionally decided not to block after all.
 - **Namespace hygiene**: Added explicit `__all__` exports for the package and
   helper modules so wildcard imports expose only the intended public API.
+- **Type checking**: Migrated the `poe typing` task from mypy to `ty`, with
+  targeted configuration for asynkit's low-level asyncio internals.
+
+### Performance
+
+- **C extension coroutine driver**: Added a C implementation of `coro_drive()`
+  using the same low-level coroutine protocol accelerations as `CoroStart` and
+  CPython's FASTCALL convention.
 
 ## [0.18.1] - 2026-06-24
 
