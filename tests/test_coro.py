@@ -1452,6 +1452,36 @@ async def test_sync_drive_async_outside_await_sync():
     assert err.match("synchronously driven")
 
 
+def test_concurrent_drive_async_isolated_per_thread():
+    import threading
+
+    observations: list[tuple[str, bool, int]] = []
+    lock = threading.Lock()
+    start = threading.Barrier(2)
+
+    async def work(label: str) -> None:
+        start.wait(timeout=5)
+        with lock:
+            observations.append(
+                (
+                    label,
+                    asynkit.in_sync_drive(),
+                    asynkit.sync_drive_depth(),
+                )
+            )
+
+    def run(label: str) -> None:
+        asynkit.await_sync(work(label))
+
+    threads = [threading.Thread(target=run, args=(label,)) for label in ("a", "b")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(observations) == [("a", True, 1), ("b", True, 1)]
+
+
 class TestSyncDriveStaleContext:
     @pytest.fixture
     def anyio_backend(self):

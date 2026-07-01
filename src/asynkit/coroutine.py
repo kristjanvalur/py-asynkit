@@ -6,6 +6,7 @@ import functools
 import importlib
 import inspect
 import sys
+import threading
 import types
 from asyncio import Future, Task
 from collections.abc import (
@@ -198,20 +199,45 @@ class SyncDriveRequiredError(RuntimeError):
 
 
 _sync_drive_session: ContextVar[int] = ContextVar("_sync_drive_session", default=0)
-_active_sync_drive_sessions: list[int] = []
-_sync_drive_session_counter = 0
+_sync_drive_thread_state = threading.local()
+
+
+class _ThreadSyncDriveState:
+    __slots__ = ("session_counter", "active_sessions")
+
+    session_counter: int
+    active_sessions: list[int]
+
+    def __init__(self) -> None:
+        self.session_counter = 0
+        self.active_sessions = []
+
+
+def _thread_sync_drive_state() -> _ThreadSyncDriveState:
+    state = getattr(_sync_drive_thread_state, "state", None)
+    if state is None:
+        state = _ThreadSyncDriveState()
+        _sync_drive_thread_state.state = state
+    return state
 
 
 def _sync_drive_session_active() -> bool:
     session = _sync_drive_session.get()
-    return session != 0 and session in _active_sync_drive_sessions
+    if session == 0:
+        return False
+    return session in _thread_sync_drive_state().active_sessions
 
 
 def sync_drive_depth() -> int:
-    """Return the current synchronous-drive nesting depth."""
-    if not _sync_drive_session_active():
+    """Return the current synchronous-drive nesting depth on this thread."""
+    session = _sync_drive_session.get()
+    if session == 0:
         return 0
-    return len(_active_sync_drive_sessions)
+    active_sessions = _thread_sync_drive_state().active_sessions
+    try:
+        return active_sessions.index(session) + 1
+    except ValueError:
+        return 0
 
 
 def in_sync_drive() -> bool:
@@ -230,17 +256,16 @@ def require_sync_drive() -> None:
 
 @contextlib.contextmanager
 def _sync_drive_context() -> Generator[None, None, None]:
-    global _sync_drive_session_counter
-
-    _sync_drive_session_counter += 1
-    session = _sync_drive_session_counter
+    state = _thread_sync_drive_state()
+    state.session_counter += 1
+    session = state.session_counter
 
     session_token = _sync_drive_session.set(session)
-    _active_sync_drive_sessions.append(session)
+    state.active_sessions.append(session)
     try:
         yield
     finally:
-        _active_sync_drive_sessions.pop()
+        state.active_sessions.remove(session)
         _sync_drive_session.reset(session_token)
 
 
@@ -1128,7 +1153,11 @@ def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
 
 
 def coro_drive(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
-    """Drive a coroutine by passing each yielded value to a callback."""
+    """Drive a coroutine by passing each yielded value to a callback.
+
+    This is the low-level pump. Use `drive_async()` instead when
+    `sync_drive_async()` or `require_sync_drive()` must work.
+    """
     send_value = None
     pending_error: BaseException | None = None
 
@@ -1161,7 +1190,12 @@ if not TYPE_CHECKING and _HAVE_C_EXTENSION and _c_coro_drive is not None:
 
 
 def drive_async(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
-    """Drive a coroutine synchronously and mark the context as sync-driven."""
+    """Drive a coroutine synchronously and mark the context as sync-driven.
+
+    Custom synchronous pumps must use this rather than `coro_drive()` alone
+    when participating in the sync-drive contract used by `sync_drive_async()`
+    and `require_sync_drive()`. Session tracking is per-thread.
+    """
     with _sync_drive_context():
         return coro_drive(coro, callback)
 
