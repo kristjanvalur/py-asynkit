@@ -17,7 +17,7 @@ from collections.abc import (
     Generator,
     Iterator,
 )
-from contextvars import Context, copy_context
+from contextvars import Context, ContextVar, copy_context
 from types import FrameType
 from typing import (
     TYPE_CHECKING,
@@ -130,9 +130,15 @@ __all__ = [
     "coro_iter",
     "aiter_sync",
     "await_sync",
+    "drive_async",
+    "in_sync_drive",
+    "require_sync_drive",
+    "sync_drive_depth",
     "SynchronousError",
     "SynchronousAbort",
+    "SyncDriveRequiredError",
     "asyncfunction",
+    "sync_drive_async",
     "syncfunction",
     "syncmethod",
     "SyncMethod",
@@ -185,6 +191,41 @@ class SynchronousAbort(BaseException):
     """
     Exception thrown into coroutine to abort it.
     """
+
+
+class SyncDriveRequiredError(RuntimeError):
+    """Raised when a sync-drive-only async wrapper is awaited outside drive_async."""
+
+
+_sync_drive_depth: ContextVar[int] = ContextVar("_sync_drive_depth", default=0)
+
+
+def sync_drive_depth() -> int:
+    """Return the current synchronous-drive nesting depth."""
+    return _sync_drive_depth.get()
+
+
+def in_sync_drive() -> bool:
+    """Return True when the current context is inside drive_async()."""
+    return _sync_drive_depth.get() > 0
+
+
+def require_sync_drive() -> None:
+    """Require that the current context is inside drive_async()."""
+    if _sync_drive_depth.get() == 0:
+        raise SyncDriveRequiredError(
+            "operation requires a coroutine being synchronously driven "
+            "(e.g. via await_sync())"
+        )
+
+
+@contextlib.contextmanager
+def _sync_drive_context() -> Generator[None, None, None]:
+    token = _sync_drive_depth.set(_sync_drive_depth.get() + 1)
+    try:
+        yield
+    finally:
+        _sync_drive_depth.reset(token)
 
 
 # Helpers to find if a coroutine (or a generator as created by types.coroutine)
@@ -1103,6 +1144,12 @@ if not TYPE_CHECKING and _HAVE_C_EXTENSION and _c_coro_drive is not None:
     coro_drive = _c_coro_drive
 
 
+def drive_async(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
+    """Drive a coroutine synchronously and mark the context as sync-driven."""
+    with _sync_drive_context():
+        return coro_drive(coro, callback)
+
+
 def awaitmethod(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, Iterator[T]]:
     """
     Decorator to make a function return an awaitable.
@@ -1155,7 +1202,7 @@ def await_sync(coro: Coroutine[Any, Any, T], *, ignore_nullsleep: bool = True) -
         raise GeneratorExit()
 
     try:
-        return coro_drive(coro, callback)
+        return drive_async(coro, callback)
     except (GeneratorExit, SynchronousAbort) as err:
         raise SynchronousError("coroutine failed to complete synchronously") from err
 
@@ -1232,6 +1279,22 @@ def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
 
     @functools.wraps(func)
     async def helper(*args: P.args, **kwargs: P.kwargs) -> T:
+        return func(*args, **kwargs)
+
+    return helper
+
+
+def sync_drive_async(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
+    """Make a synchronous function appear async for sync-driven coroutines.
+
+    The returned coroutine function may invoke blocking code and is only valid
+    when awaited inside a context established by drive_async(), such as via
+    await_sync().
+    """
+
+    @functools.wraps(func)
+    async def helper(*args: P.args, **kwargs: P.kwargs) -> T:
+        require_sync_drive()
         return func(*args, **kwargs)
 
     return helper

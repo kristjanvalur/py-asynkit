@@ -1338,6 +1338,85 @@ async def test_async_function():
     assert await sync_method2() == "bar"
 
 
+def test_sync_drive_context_outside_drive():
+    assert not asynkit.in_sync_drive()
+    assert asynkit.sync_drive_depth() == 0
+
+
+def test_sync_drive_context_inside_await_sync():
+    depths: list[int] = []
+
+    async def record_depth() -> None:
+        depths.append(asynkit.sync_drive_depth())
+        assert asynkit.in_sync_drive()
+
+    asynkit.await_sync(record_depth())
+    assert depths == [1]
+    assert not asynkit.in_sync_drive()
+
+
+def test_sync_drive_context_nested():
+    depths: list[int] = []
+
+    async def inner() -> None:
+        depths.append(asynkit.sync_drive_depth())
+
+    async def outer() -> None:
+        depths.append(asynkit.sync_drive_depth())
+        asynkit.await_sync(inner())
+
+    asynkit.await_sync(outer())
+    assert depths == [1, 2]
+    assert not asynkit.in_sync_drive()
+
+
+def test_sync_drive_async_inside_await_sync():
+    @asynkit.sync_drive_async
+    def blocking_read() -> str:
+        return "payload"
+
+    async def fetch() -> str:
+        return await blocking_read()
+
+    assert asynkit.await_sync(fetch()) == "payload"
+
+
+def test_syncfunction_uses_drive_async_via_await_sync():
+    @asynkit.sync_drive_async
+    def blocking_read() -> str:
+        return "payload"
+
+    @asynkit.syncfunction
+    async def fetch() -> str:
+        return await blocking_read()
+
+    assert fetch() == "payload"
+
+
+def test_syncmethod_uses_drive_async_via_await_sync():
+    class Client:
+        @asynkit.sync_drive_async
+        def blocking_read(self) -> str:
+            return "payload"
+
+        async def afetch(self) -> str:
+            return await self.blocking_read()
+
+        fetch = asynkit.syncmethod(afetch)
+
+    assert Client().fetch() == "payload"
+
+
+async def test_sync_drive_async_outside_await_sync():
+    @asynkit.sync_drive_async
+    def blocking_read() -> str:
+        return "payload"
+
+    with pytest.raises(asynkit.SyncDriveRequiredError) as err:
+        await blocking_read()
+    assert err.match("synchronously driven")
+
+
 async def test_sync_function():
     async def async_method():
         return "foo"

@@ -457,6 +457,59 @@ async def sync_client(sync_callback):
 Using this pattern, one can write the middleware completely async, make it also work
 for synchronous code, while avoiding the hybrid function _antipattern._
 
+#### `sync_drive_async()` - Blocking sync callbacks in async code
+
+`asyncfunction()` wraps a synchronous function in a coroutine that returns
+immediately. It is safe to `await` on a real event loop because it never blocks.
+
+Some integrations need the opposite: a **blocking** synchronous implementation
+that is exposed through an async interface, for example when monkeypatching async
+methods with greenlet-backed or otherwise thread-blocking variants. Those
+wrappers must only run while the coroutine is being synchronously pumped.
+
+`sync_drive_async()` provides that guarded lift. It raises `SyncDriveRequiredError`
+if the wrapper is `await`ed outside a sync-drive context:
+
+```python
+@asynkit.sync_drive_async
+def blocking_read(sock) -> bytes:
+    return sock.recv(4096)  # may block the thread
+
+
+async def fetch(sock) -> bytes:
+    return await blocking_read(sock)
+
+
+# OK: driven synchronously via await_sync / syncfunction / syncmethod
+asynkit.await_sync(fetch(sock))
+
+# Raises SyncDriveRequiredError on a real event loop
+await fetch(sock)
+```
+
+`syncfunction()` and `syncmethod()` already establish the sync-drive context
+indirectly, because they call `await_sync()`, which uses `drive_async()`.
+
+#### `drive_async()` and sync-drive context
+
+`coro_drive()` is the low-level coroutine pump and may be implemented in C for
+performance. `drive_async()` is the Python entry point that wraps `coro_drive()`
+and increments a `ContextVar` depth counter for the duration of the drive.
+
+Helpers such as `in_sync_drive()`, `sync_drive_depth()`, and `require_sync_drive()`
+let custom wrappers participate in the same contract. All coroutine code that runs
+between yields executes inside this context, so `sync_drive_async()` checks work
+whether the pump underneath is pure Python or the C extension.
+
+```python
+def my_callback(yielded):
+    asynkit.require_sync_drive()  # OK while drive_async() is active
+    ...
+
+
+asynkit.drive_async(coro, my_callback)
+```
+
 #### `aiter_sync()`
 
 A helper function is provided, which turns an `AsyncIterable` into

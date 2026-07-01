@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Features
+
+- **Sync-drive context**: Added `drive_async()` as the Python entry point that
+  wraps `coro_drive()` and tracks synchronous-drive depth in a `ContextVar`.
+  `await_sync()` now uses `drive_async()` so the context is set from Python even
+  when the pump runs in the C extension.
+- **Guarded blocking callbacks**: Added `sync_drive_async()` for exposing blocking
+  synchronous implementations through an async interface. The wrapper raises
+  `SyncDriveRequiredError` when awaited outside a sync-drive context.
+- **Sync-drive introspection**: Added `in_sync_drive()`, `sync_drive_depth()`, and
+  `require_sync_drive()` for custom wrappers that participate in the same contract.
+
+### Documentation
+
+- **Agent instructions**: Moved coding-agent guidance to root `AGENTS.md` and
+  replaced `.github/copilot-instructions.md` with a redirect.
+
 ## [0.19.2] - 2026-06-26
 
 ### Features
