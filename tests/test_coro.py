@@ -1452,6 +1452,35 @@ async def test_sync_drive_async_outside_await_sync():
     assert err.match("synchronously driven")
 
 
+def test_copied_sync_drive_context_rejected_on_other_thread_during_drive():
+    import threading
+
+    a_context: list[Any] = []
+    result: list[str] = []
+
+    async def on_b() -> None:
+        async def on_a_capture() -> None:
+            a_context.append(copy_context())
+
+        thread_a = threading.Thread(target=lambda: asynkit.await_sync(on_a_capture()))
+        thread_a.start()
+        thread_a.join()
+
+        def probe() -> None:
+            try:
+                a_context[0].run(asynkit.require_sync_drive)
+                result.append("passed")
+            except asynkit.SyncDriveRequiredError:
+                result.append("rejected")
+
+        probe()
+
+    thread_b = threading.Thread(target=lambda: asynkit.await_sync(on_b()))
+    thread_b.start()
+    thread_b.join()
+    assert result == ["rejected"]
+
+
 def test_concurrent_drive_async_isolated_per_thread():
     import threading
 

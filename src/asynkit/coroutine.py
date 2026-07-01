@@ -200,17 +200,27 @@ class SyncDriveRequiredError(RuntimeError):
 
 _sync_drive_session: ContextVar[int] = ContextVar("_sync_drive_session", default=0)
 _sync_drive_thread_state = threading.local()
+_session_id_lock = threading.Lock()
+_next_session_id = 0
 
 
 class _ThreadSyncDriveState:
-    __slots__ = ("session_counter", "active_sessions")
+    __slots__ = ("lock", "active_sessions")
 
-    session_counter: int
+    lock: threading.Lock
     active_sessions: list[int]
 
     def __init__(self) -> None:
-        self.session_counter = 0
+        self.lock = threading.Lock()
         self.active_sessions = []
+
+
+def _allocate_sync_drive_session() -> int:
+    global _next_session_id
+
+    with _session_id_lock:
+        _next_session_id += 1
+        return _next_session_id
 
 
 def _thread_sync_drive_state() -> _ThreadSyncDriveState:
@@ -225,7 +235,9 @@ def _sync_drive_session_active() -> bool:
     session = _sync_drive_session.get()
     if session == 0:
         return False
-    return session in _thread_sync_drive_state().active_sessions
+    state = _thread_sync_drive_state()
+    with state.lock:
+        return session in state.active_sessions
 
 
 def sync_drive_depth() -> int:
@@ -233,11 +245,12 @@ def sync_drive_depth() -> int:
     session = _sync_drive_session.get()
     if session == 0:
         return 0
-    active_sessions = _thread_sync_drive_state().active_sessions
-    try:
-        return active_sessions.index(session) + 1
-    except ValueError:
-        return 0
+    state = _thread_sync_drive_state()
+    with state.lock:
+        try:
+            return state.active_sessions.index(session) + 1
+        except ValueError:
+            return 0
 
 
 def in_sync_drive() -> bool:
@@ -256,16 +269,16 @@ def require_sync_drive() -> None:
 
 @contextlib.contextmanager
 def _sync_drive_context() -> Generator[None, None, None]:
-    state = _thread_sync_drive_state()
-    state.session_counter += 1
-    session = state.session_counter
-
+    session = _allocate_sync_drive_session()
     session_token = _sync_drive_session.set(session)
-    state.active_sessions.append(session)
+    state = _thread_sync_drive_state()
+    with state.lock:
+        state.active_sessions.append(session)
     try:
         yield
     finally:
-        state.active_sessions.remove(session)
+        with state.lock:
+            state.active_sessions.remove(session)
         _sync_drive_session.reset(session_token)
 
 
