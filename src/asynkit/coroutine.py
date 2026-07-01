@@ -198,21 +198,31 @@ class SyncDriveRequiredError(RuntimeError):
 
 
 _sync_drive_depth: ContextVar[int] = ContextVar("_sync_drive_depth", default=0)
+_sync_drive_session: ContextVar[int] = ContextVar("_sync_drive_session", default=0)
+_active_sync_drive_sessions: list[int] = []
+_sync_drive_session_counter = 0
+
+
+def _sync_drive_session_active() -> bool:
+    session = _sync_drive_session.get()
+    return session != 0 and session in _active_sync_drive_sessions
 
 
 def sync_drive_depth() -> int:
     """Return the current synchronous-drive nesting depth."""
+    if not _sync_drive_session_active():
+        return 0
     return _sync_drive_depth.get()
 
 
 def in_sync_drive() -> bool:
-    """Return True when the current context is inside drive_async()."""
-    return _sync_drive_depth.get() > 0
+    """Return True when the current context is inside an active drive_async()."""
+    return _sync_drive_session_active()
 
 
 def require_sync_drive() -> None:
-    """Require that the current context is inside drive_async()."""
-    if _sync_drive_depth.get() == 0:
+    """Require that the current context is inside an active drive_async()."""
+    if not _sync_drive_session_active():
         raise SyncDriveRequiredError(
             "operation requires a coroutine being synchronously driven "
             "(e.g. via await_sync())"
@@ -221,11 +231,20 @@ def require_sync_drive() -> None:
 
 @contextlib.contextmanager
 def _sync_drive_context() -> Generator[None, None, None]:
-    token = _sync_drive_depth.set(_sync_drive_depth.get() + 1)
+    global _sync_drive_session_counter
+
+    _sync_drive_session_counter += 1
+    session = _sync_drive_session_counter
+
+    depth_token = _sync_drive_depth.set(_sync_drive_depth.get() + 1)
+    session_token = _sync_drive_session.set(session)
+    _active_sync_drive_sessions.append(session)
     try:
         yield
     finally:
-        _sync_drive_depth.reset(token)
+        _active_sync_drive_sessions.pop()
+        _sync_drive_session.reset(session_token)
+        _sync_drive_depth.reset(depth_token)
 
 
 # Helpers to find if a coroutine (or a generator as created by types.coroutine)

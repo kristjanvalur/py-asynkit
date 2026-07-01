@@ -1343,6 +1343,41 @@ def test_sync_drive_context_outside_drive():
     assert asynkit.sync_drive_depth() == 0
 
 
+def test_require_sync_drive_outside_drive():
+    with pytest.raises(asynkit.SyncDriveRequiredError) as err:
+        asynkit.require_sync_drive()
+    assert err.match("synchronously driven")
+
+
+@pytest.mark.parametrize("_name,drive", coro_drive_implementations())
+def test_drive_async_sets_sync_drive_context(_name, drive, monkeypatch):
+    monkeypatch.setattr(asynkit.coroutine, "coro_drive", drive)
+    observations: dict[str, tuple[bool, int] | None] = {
+        "callback": None,
+        "coro": None,
+    }
+
+    async def coro() -> str:
+        observations["coro"] = (
+            asynkit.in_sync_drive(),
+            asynkit.sync_drive_depth(),
+        )
+        await drive_yield(None)
+        return "done"
+
+    def callback(yielded: object) -> None:
+        assert yielded is None
+        observations["callback"] = (
+            asynkit.in_sync_drive(),
+            asynkit.sync_drive_depth(),
+        )
+        asynkit.require_sync_drive()
+
+    assert asynkit.drive_async(coro(), callback) == "done"
+    assert observations["callback"] == (True, 1)
+    assert observations["coro"] == (True, 1)
+
+
 def test_sync_drive_context_inside_await_sync():
     depths: list[int] = []
 
@@ -1415,6 +1450,32 @@ async def test_sync_drive_async_outside_await_sync():
     with pytest.raises(asynkit.SyncDriveRequiredError) as err:
         await blocking_read()
     assert err.match("synchronously driven")
+
+
+class TestSyncDriveStaleContext:
+    @pytest.fixture
+    def anyio_backend(self):
+        return "asyncio"
+
+    async def test_sync_drive_async_rejects_stale_copied_context(self):
+        ran: list[bool] = []
+
+        @asynkit.sync_drive_async
+        def blocking_read() -> str:
+            ran.append(True)
+            return "payload"
+
+        async def deferred() -> str:
+            return await blocking_read()
+
+        async def coro_with_task():
+            return asyncio.create_task(deferred())
+
+        task = asynkit.await_sync(coro_with_task())
+        with pytest.raises(asynkit.SyncDriveRequiredError) as err:
+            await task
+        assert err.match("synchronously driven")
+        assert ran == []
 
 
 async def test_sync_function():
