@@ -493,8 +493,10 @@ indirectly, because they call `await_sync()`, which uses `drive_async()`.
 #### `drive_async()` and sync-drive context
 
 `coro_drive()` is the low-level coroutine pump and may be implemented in C for
-performance. `drive_async()` is the Python entry point that wraps `coro_drive()`
-and increments a `ContextVar` depth counter for the duration of the drive.
+performance. `drive_async()` is the Python entry point that wraps `coro_drive()` and assigns a
+per-drive session id for the duration of the pump. Active sessions are tracked in
+a module-level stack; contexts copied into `asyncio` tasks keep a stale session id
+after the drive ends.
 
 Helpers such as `in_sync_drive()`, `sync_drive_depth()`, and `require_sync_drive()`
 let custom wrappers participate in the same contract. All coroutine code that runs

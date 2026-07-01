@@ -296,8 +296,9 @@ On Python < 3.12, use `asynkit.enable_eager_tasks()` from `compat.py` to monkeyp
 
 `drive_async()` wraps `coro_drive()` in Python and owns the sync-drive `ContextVar`.
 `await_sync()` uses it internally; `syncfunction()` and `syncmethod()` reach it via
-`await_sync()`. Use `in_sync_drive()`, `sync_drive_depth()`, or `require_sync_drive()`
-in custom wrappers that must only run during synchronous pumping.
+`await_sync()`. Each drive gets a session id on an active stack; copied task contexts
+keep a stale id after the pump ends. Use `in_sync_drive()`, `sync_drive_depth()`, or
+`require_sync_drive()` in custom wrappers that must only run during synchronous pumping.
 
 ### sync_drive_async() - Guarded Blocking Callbacks
 

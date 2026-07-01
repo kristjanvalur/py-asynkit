@@ -197,7 +197,6 @@ class SyncDriveRequiredError(RuntimeError):
     """Raised when a sync-drive-only async wrapper is awaited outside drive_async."""
 
 
-_sync_drive_depth: ContextVar[int] = ContextVar("_sync_drive_depth", default=0)
 _sync_drive_session: ContextVar[int] = ContextVar("_sync_drive_session", default=0)
 _active_sync_drive_sessions: list[int] = []
 _sync_drive_session_counter = 0
@@ -212,7 +211,7 @@ def sync_drive_depth() -> int:
     """Return the current synchronous-drive nesting depth."""
     if not _sync_drive_session_active():
         return 0
-    return _sync_drive_depth.get()
+    return len(_active_sync_drive_sessions)
 
 
 def in_sync_drive() -> bool:
@@ -236,7 +235,6 @@ def _sync_drive_context() -> Generator[None, None, None]:
     _sync_drive_session_counter += 1
     session = _sync_drive_session_counter
 
-    depth_token = _sync_drive_depth.set(_sync_drive_depth.get() + 1)
     session_token = _sync_drive_session.set(session)
     _active_sync_drive_sessions.append(session)
     try:
@@ -244,7 +242,6 @@ def _sync_drive_context() -> Generator[None, None, None]:
     finally:
         _active_sync_drive_sessions.pop()
         _sync_drive_session.reset(session_token)
-        _sync_drive_depth.reset(depth_token)
 
 
 # Helpers to find if a coroutine (or a generator as created by types.coroutine)
