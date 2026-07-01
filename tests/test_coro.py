@@ -1378,6 +1378,30 @@ def test_drive_async_sets_sync_drive_context(_name, drive, monkeypatch):
     assert observations["coro"] == (True, 1)
 
 
+@pytest.mark.parametrize("_name,drive", coro_drive_implementations())
+def test_coro_drive_does_not_set_sync_drive_context(_name, drive):
+    async def coro() -> str:
+        asynkit.require_sync_drive()
+        return "done"
+
+    with pytest.raises(asynkit.SyncDriveRequiredError) as err:
+        drive(coro(), lambda _yielded: None)
+    assert err.match("synchronously driven")
+
+
+def test_copied_sync_drive_context_rejected_after_drive_ends():
+    captured: list[Any] = []
+
+    async def coro() -> str:
+        captured.append(copy_context())
+        return "done"
+
+    asynkit.drive_async(coro(), lambda _yielded: None)
+
+    with pytest.raises(asynkit.SyncDriveRequiredError):
+        captured[0].run(asynkit.require_sync_drive)
+
+
 def test_sync_drive_context_inside_await_sync():
     depths: list[int] = []
 
