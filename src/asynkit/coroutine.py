@@ -134,7 +134,6 @@ __all__ = [
     "drive_async",
     "in_sync_drive",
     "require_sync_drive",
-    "sync_drive_depth",
     "SynchronousError",
     "SynchronousAbort",
     "SyncDriveRequiredError",
@@ -238,19 +237,6 @@ def _sync_drive_session_active() -> bool:
     state = _thread_sync_drive_state()
     with state.lock:
         return session in state.active_sessions
-
-
-def sync_drive_depth() -> int:
-    """Return the current synchronous-drive nesting depth on this thread."""
-    session = _sync_drive_session.get()
-    if session == 0:
-        return 0
-    state = _thread_sync_drive_state()
-    with state.lock:
-        try:
-            return state.active_sessions.index(session) + 1
-        except ValueError:
-            return 0
 
 
 def in_sync_drive() -> bool:

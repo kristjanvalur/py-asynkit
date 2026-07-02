@@ -1340,7 +1340,6 @@ async def test_async_function():
 
 def test_sync_drive_context_outside_drive():
     assert not asynkit.in_sync_drive()
-    assert asynkit.sync_drive_depth() == 0
 
 
 def test_require_sync_drive_outside_drive():
@@ -1352,30 +1351,24 @@ def test_require_sync_drive_outside_drive():
 @pytest.mark.parametrize("_name,drive", coro_drive_implementations())
 def test_drive_async_sets_sync_drive_context(_name, drive, monkeypatch):
     monkeypatch.setattr(asynkit.coroutine, "coro_drive", drive)
-    observations: dict[str, tuple[bool, int] | None] = {
+    observations: dict[str, bool | None] = {
         "callback": None,
         "coro": None,
     }
 
     async def coro() -> str:
-        observations["coro"] = (
-            asynkit.in_sync_drive(),
-            asynkit.sync_drive_depth(),
-        )
+        observations["coro"] = asynkit.in_sync_drive()
         await drive_yield(None)
         return "done"
 
     def callback(yielded: object) -> None:
         assert yielded is None
-        observations["callback"] = (
-            asynkit.in_sync_drive(),
-            asynkit.sync_drive_depth(),
-        )
+        observations["callback"] = asynkit.in_sync_drive()
         asynkit.require_sync_drive()
 
     assert asynkit.drive_async(coro(), callback) == "done"
-    assert observations["callback"] == (True, 1)
-    assert observations["coro"] == (True, 1)
+    assert observations["callback"] is True
+    assert observations["coro"] is True
 
 
 @pytest.mark.parametrize("_name,drive", coro_drive_implementations())
@@ -1403,29 +1396,25 @@ def test_copied_sync_drive_context_rejected_after_drive_ends():
 
 
 def test_sync_drive_context_inside_await_sync():
-    depths: list[int] = []
-
-    async def record_depth() -> None:
-        depths.append(asynkit.sync_drive_depth())
+    async def record_context() -> None:
         assert asynkit.in_sync_drive()
 
-    asynkit.await_sync(record_depth())
-    assert depths == [1]
+    asynkit.await_sync(record_context())
     assert not asynkit.in_sync_drive()
 
 
 def test_sync_drive_context_nested():
-    depths: list[int] = []
+    flags: list[bool] = []
 
     async def inner() -> None:
-        depths.append(asynkit.sync_drive_depth())
+        flags.append(asynkit.in_sync_drive())
 
     async def outer() -> None:
-        depths.append(asynkit.sync_drive_depth())
+        flags.append(asynkit.in_sync_drive())
         asynkit.await_sync(inner())
 
     asynkit.await_sync(outer())
-    assert depths == [1, 2]
+    assert flags == [True, True]
     assert not asynkit.in_sync_drive()
 
 
@@ -1508,20 +1497,14 @@ def test_copied_sync_drive_context_rejected_on_other_thread_during_drive():
 def test_concurrent_drive_async_isolated_per_thread():
     import threading
 
-    observations: list[tuple[str, bool, int]] = []
+    observations: list[tuple[str, bool]] = []
     lock = threading.Lock()
     start = threading.Barrier(2)
 
     async def work(label: str) -> None:
         start.wait(timeout=5)
         with lock:
-            observations.append(
-                (
-                    label,
-                    asynkit.in_sync_drive(),
-                    asynkit.sync_drive_depth(),
-                )
-            )
+            observations.append((label, asynkit.in_sync_drive()))
 
     def run(label: str) -> None:
         asynkit.await_sync(work(label))
@@ -1532,7 +1515,7 @@ def test_concurrent_drive_async_isolated_per_thread():
     for thread in threads:
         thread.join()
 
-    assert sorted(observations) == [("a", True, 1), ("b", True, 1)]
+    assert sorted(observations) == [("a", True), ("b", True)]
 
 
 class TestSyncDriveStaleContext:

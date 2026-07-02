@@ -13,8 +13,8 @@ All notable changes to this project will be documented in this file.
 - **Guarded blocking callbacks**: Added `sync_drive_async()` for exposing blocking
   synchronous implementations through an async interface. The wrapper raises
   `SyncDriveRequiredError` when awaited outside a sync-drive context.
-- **Sync-drive introspection**: Added `in_sync_drive()`, `sync_drive_depth()`, and
-  `require_sync_drive()` for custom wrappers that participate in the same contract.
+- **Sync-drive introspection**: Added `in_sync_drive()` and `require_sync_drive()`
+  for custom wrappers that participate in the same contract.
 
 ### Documentation
 

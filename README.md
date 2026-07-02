@@ -498,7 +498,7 @@ establishes sync-drive context for the duration of the pump. Use `drive_async()`
 rather than `coro_drive()` alone when `sync_drive_async()` or `require_sync_drive()`
 must work.
 
-Helpers such as `in_sync_drive()`, `sync_drive_depth()`, and `require_sync_drive()`
+Helpers such as `in_sync_drive()` and `require_sync_drive()`
 let custom wrappers participate in the same contract. All coroutine code that runs
 between yields executes inside this context, so `sync_drive_async()` checks work
 whether the pump underneath is pure Python or the C extension.
