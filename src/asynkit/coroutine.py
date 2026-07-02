@@ -137,12 +137,12 @@ __all__ = [
     "SynchronousError",
     "SynchronousAbort",
     "SyncDriveRequiredError",
-    "asyncfunction",
-    "asyncmethod",
-    "AsyncMethod",
-    "syncfunction",
-    "syncmethod",
-    "SyncMethod",
+    "enterasync",
+    "enterasyncmethod",
+    "EnterAsyncMethod",
+    "leavesync",
+    "leavesyncmethod",
+    "LeaveSyncMethod",
 ]
 
 
@@ -1159,7 +1159,7 @@ def coro_drive(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
     """Drive a coroutine by passing each yielded value to a callback.
 
     This is the low-level pump. Use `drive_async()` instead when
-    `asyncfunction()` or `require_sync_drive()` must work.
+    `leavesync()` or `require_sync_drive()` must work.
     """
     send_value = None
     pending_error: BaseException | None = None
@@ -1196,7 +1196,7 @@ def drive_async(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T
     """Drive a coroutine synchronously and mark the context as sync-driven.
 
     Custom synchronous pumps must use this rather than `coro_drive()` alone
-    when participating in the sync-drive contract used by `asyncfunction()`
+    when participating in the sync-drive contract used by `leavesync()`
     and `require_sync_drive()`. Session tracking is per-thread.
     """
     with _sync_drive_context():
@@ -1260,10 +1260,10 @@ def await_sync(coro: Coroutine[Any, Any, T], *, ignore_nullsleep: bool = True) -
         raise SynchronousError("coroutine failed to complete synchronously") from err
 
 
-def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
+def enterasync(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
     """Let synchronous callers enter non-blocking async code.
 
-    Runs the coroutine via `await_sync()`. Pair with `asyncfunction()` when
+    Runs the coroutine via `await_sync()`. Pair with `leavesync()` when
     sync-driven async code must leave back into blocking sync implementations.
     """
 
@@ -1274,11 +1274,11 @@ def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
     return helper
 
 
-class SyncMethod(Generic[SelfT, P, T]):
-    """Descriptor which makes an async method synchronous.
+class EnterAsyncMethod(Generic[SelfT, P, T]):
+    """Descriptor for entering non-blocking async methods from synchronous callers.
 
-    Unlike `syncfunction()`, this preserves method binding semantics when used
-    for class-body aliases such as `run = syncmethod(arun)`.
+    Unlike `enterasync()`, this preserves method binding semantics when used
+    for class-body aliases such as `run = enterasyncmethod(arun)`.
     """
 
     def __init__(
@@ -1320,20 +1320,21 @@ class SyncMethod(Generic[SelfT, P, T]):
         return await_sync(self._func(instance, *args, **kwargs))
 
 
-def syncmethod(
+def enterasyncmethod(
     func: Callable[Concatenate[SelfT, P], Coroutine[Any, Any, T]],
-) -> SyncMethod[SelfT, P, T]:
-    """Synchronous entry point into non-blocking async methods.
+) -> EnterAsyncMethod[SelfT, P, T]:
+    """Enter non-blocking async methods from synchronous callers.
 
-    Preserves descriptor typing for class-body aliases such as `run = syncmethod(arun)`.
+    Preserves descriptor typing for class-body aliases such as
+    `run = enterasyncmethod(arun)`.
     """
-    return SyncMethod(func)
+    return EnterAsyncMethod(func)
 
 
-def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
+def leavesync(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
     """Let sync-driven async code leave back into blocking sync implementations.
 
-    Pair with `syncfunction()`: after entering async from sync, a coroutine may
+    Pair with `enterasync()`: after entering async from sync, a coroutine may
     step out into blocking sync callbacks such as patched stand-ins for formerly-
     async APIs. Raises `SyncDriveRequiredError` when awaited outside `drive_async()`.
     """
@@ -1346,11 +1347,11 @@ def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
     return helper
 
 
-class AsyncMethod(Generic[SelfT, P, T]):
-    """Descriptor which makes a synchronous method appear async for sync-driven code.
+class LeaveSyncMethod(Generic[SelfT, P, T]):
+    """Descriptor for leaving sync-driven async code back into blocking sync methods.
 
-    Unlike `asyncfunction()`, this preserves method binding semantics when used
-    for class-body aliases such as `adata_getter = asyncmethod(data_getter)`.
+    Unlike `leavesync()`, this preserves method binding semantics when used
+    for class-body aliases such as `ablocking_read = leavesyncmethod(blocking_read)`.
     """
 
     def __init__(
@@ -1394,15 +1395,15 @@ class AsyncMethod(Generic[SelfT, P, T]):
         return self._func(instance, *args, **kwargs)
 
 
-def asyncmethod(
+def leavesyncmethod(
     func: Callable[Concatenate[SelfT, P], T],
-) -> AsyncMethod[SelfT, P, T]:
-    """Blocking sync method callback inside sync-driven coroutines.
+) -> LeaveSyncMethod[SelfT, P, T]:
+    """Leave sync-driven async code back into blocking sync methods.
 
     Preserves descriptor typing for class-body aliases such as
-    `ablocking_read = asyncmethod(blocking_read)`.
+    `ablocking_read = leavesyncmethod(blocking_read)`.
     """
-    return AsyncMethod(func)
+    return LeaveSyncMethod(func)
 
 
 def aiter_sync(async_iterable: AsyncIterable[T]) -> Generator[T, None, None]:

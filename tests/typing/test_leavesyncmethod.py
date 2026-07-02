@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from asynkit import asyncmethod
+from asynkit import leavesyncmethod
 
 
 class Base:
     def blocking_read(self, value: int) -> str:
         return f"payload:{value}"
 
-    ablocking_read = asyncmethod(blocking_read)
+    ablocking_read = leavesyncmethod(blocking_read)
 
 
 class Derived(Base):

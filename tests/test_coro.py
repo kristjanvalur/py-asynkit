@@ -829,20 +829,20 @@ class TestCoroRun:
     async def blocks(self):
         await drive_yield("blocked")
 
-    @asynkit.syncfunction
+    @asynkit.enterasync
     async def sync_simple(self):
         return await self.simple()
 
-    @asynkit.syncfunction
+    @asynkit.enterasync
     async def sync_cleanup(self):
         return await self.cleanupper()
 
-    @asynkit.syncfunction
+    @asynkit.enterasync
     async def sync_genexit(self):
         return await self.genexit()
 
-    method_simple = asynkit.syncmethod(simple)
-    method_blocks = asynkit.syncmethod(blocks)
+    method_simple = asynkit.enterasyncmethod(simple)
+    method_blocks = asynkit.enterasyncmethod(blocks)
 
     def test_simple(self):
         assert asynkit.await_sync(self.simple()) == "simple"
@@ -858,19 +858,19 @@ class TestCoroRun:
     def test_sync_simple(self):
         assert self.sync_simple() == "simple"
 
-    def test_syncmethod_bound(self):
+    def test_enterasyncmethod_bound(self):
         assert self.method_simple() == "simple"
 
-    def test_syncmethod_unbound(self):
+    def test_enterasyncmethod_unbound(self):
         assert type(self).method_simple(self) == "simple"
 
-    def test_syncmethod_descriptor(self):
+    def test_enterasyncmethod_descriptor(self):
         descriptor = type(self).__dict__["method_simple"]
-        assert isinstance(descriptor, asynkit.SyncMethod)
+        assert isinstance(descriptor, asynkit.EnterAsyncMethod)
         assert type(self).method_simple.__name__ == "simple"
         assert self.method_simple.__name__ == "simple"
 
-    def test_syncmethod_blocks(self):
+    def test_enterasyncmethod_blocks(self):
         with pytest.raises(asynkit.SynchronousError) as err:
             self.method_blocks()
         assert err.match("failed to complete synchronously")
@@ -1326,31 +1326,31 @@ class TestCoroIter:
             assert await a == "Awaiter5"
 
 
-def test_asyncfunction_inside_await_sync():
+def test_leavesync_inside_await_sync():
     def sync_method():
         return "foo"
 
-    @asynkit.asyncfunction
+    @asynkit.leavesync
     def sync_method2():
         return "bar"
 
     async def wrapper() -> str:
-        return await asynkit.asyncfunction(sync_method)()
+        return await asynkit.leavesync(sync_method)()
 
     assert asynkit.await_sync(wrapper()) == "foo"
     assert asynkit.await_sync(sync_method2()) == "bar"
 
 
-async def test_asyncfunction_outside_sync_drive():
+async def test_leavesync_outside_sync_drive():
     def sync_method():
         return "foo"
 
-    @asynkit.asyncfunction
+    @asynkit.leavesync
     def sync_method2():
         return "bar"
 
     with pytest.raises(asynkit.SyncDriveRequiredError) as err:
-        await asynkit.asyncfunction(sync_method)()
+        await asynkit.leavesync(sync_method)()
     assert err.match("synchronously driven")
 
     with pytest.raises(asynkit.SyncDriveRequiredError) as err:
@@ -1438,29 +1438,29 @@ def test_sync_drive_context_nested():
     assert not asynkit.in_sync_drive()
 
 
-def test_syncfunction_uses_drive_async_via_await_sync():
-    @asynkit.asyncfunction
+def test_enterasync_uses_drive_async_via_await_sync():
+    @asynkit.leavesync
     def blocking_read() -> str:
         return "payload"
 
-    @asynkit.syncfunction
+    @asynkit.enterasync
     async def fetch() -> str:
         return await blocking_read()
 
     assert fetch() == "payload"
 
 
-def test_syncmethod_uses_drive_async_via_await_sync():
+def test_enterasyncmethod_uses_drive_async_via_await_sync():
     class Client:
         def blocking_read(self) -> str:
             return "payload"
 
-        ablocking_read = asynkit.asyncmethod(blocking_read)
+        ablocking_read = asynkit.leavesyncmethod(blocking_read)
 
         async def afetch(self) -> str:
             return await self.ablocking_read()
 
-        fetch = asynkit.syncmethod(afetch)
+        fetch = asynkit.enterasyncmethod(afetch)
 
     assert Client().fetch() == "payload"
 
@@ -1523,10 +1523,10 @@ class TestSyncDriveStaleContext:
     def anyio_backend(self):
         return "asyncio"
 
-    async def test_asyncfunction_rejects_stale_copied_context(self):
+    async def test_leavesync_rejects_stale_copied_context(self):
         ran: list[bool] = []
 
-        @asynkit.asyncfunction
+        @asynkit.leavesync
         def blocking_read() -> str:
             ran.append(True)
             return "payload"
@@ -1544,15 +1544,15 @@ class TestSyncDriveStaleContext:
         assert ran == []
 
 
-async def test_sync_function():
+def test_enterasync_function():
     async def async_method():
         return "foo"
 
-    @asynkit.syncfunction
+    @asynkit.enterasync
     async def async_method2():
         return "bar"
 
-    assert asynkit.syncfunction(async_method)() == "foo"
+    assert asynkit.enterasync(async_method)() == "foo"
     assert async_method2() == "bar"
 
 

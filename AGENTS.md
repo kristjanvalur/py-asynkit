@@ -23,7 +23,7 @@ Address the user as "boss" (they are the DI - Detective Chief Inspector). Style 
 - Utility classes like `GeneratorObject`
 - Coroutine helpers including `coro_drive()`, `coro_iter()`, and the `awaitmethod()` decorator
 - Running async code from non-async code (`await_sync()`, `aiter_sync()`, `drive_async()`)
-- `syncfunction()` / `syncmethod()` and `asyncfunction()` / `asyncmethod()` for crossing the sync/async boundary in opposite directions
+- `enterasync()` / `enterasyncmethod()` and `leavesync()` / `leavesyncmethod()` for crossing the sync/async boundary in opposite directions
 - Scheduling helpers and custom event-loop implementations
 - Eager execution via `@eager` decorator and `eager_task_factory` / `create_eager_task_factory()` (Python 3.12 API, backward compatible)
 - `enable_eager_tasks()` compatibility layer for older Python versions
@@ -295,7 +295,7 @@ On Python < 3.12, use `asynkit.enable_eager_tasks()` from `compat.py` to monkeyp
 ### drive_async() - Sync-Drive Context Owner
 
 `drive_async()` wraps `coro_drive()` in Python and owns the sync-drive `ContextVar`.
-`await_sync()` uses it internally; `syncfunction()` and `syncmethod()` reach it via
+`await_sync()` uses it internally; `enterasync()` and `enterasyncmethod()` reach it via
 `await_sync()`. Custom pumps must use `drive_async()`, not `coro_drive()` alone, when
 participating in this contract.
 
@@ -306,13 +306,13 @@ callers:
 
 | Step | Function | Method |
 | --- | --- | --- |
-| **Enter** async from sync | `syncfunction()` | `syncmethod()` |
-| **Leave** back to blocking sync | `asyncfunction()` | `asyncmethod()` |
+| **Enter** async from sync | `enterasync()` | `enterasyncmethod()` |
+| **Leave** back to blocking sync | `leavesync()` | `leavesyncmethod()` |
 
-**Entering**: `syncfunction()` / `syncmethod()` let synchronous callers enter
+**Entering**: `enterasync()` / `enterasyncmethod()` let synchronous callers enter
 non-blocking async code via `await_sync()`. The coroutine must not suspend on real I/O.
 
-**Leaving**: `asyncfunction()` / `asyncmethod()` let sync-driven async code step back
+**Leaving**: `leavesync()` / `leavesyncmethod()` let sync-driven async code step back
 out into blocking sync implementations (e.g. patched stand-ins for formerly-async APIs).
 They raise `SyncDriveRequiredError` when awaited outside `drive_async()`, so the
 patched code cannot run under a normal asyncio loop.
@@ -329,8 +329,8 @@ patched code cannot run under a normal asyncio loop.
 - `drive_async(coro, callback)` - Pump a coroutine and set sync-drive context
 - `await_sync(coro)` - Run coroutine synchronously (must not block)
 - `aiter_sync(aiterable)` - Iterate async iterator synchronously
-- `syncfunction(func)` / `syncmethod(func)` - Enter async from sync
-- `asyncfunction(func)` / `asyncmethod(func)` - Leave back to blocking sync inside
+- `enterasync(func)` / `enterasyncmethod(func)` - Enter async from sync
+- `leavesync(func)` / `leavesyncmethod(func)` - Leave back to blocking sync inside
   sync-driven async; use the method variant for class-body aliases
 
 ## Testing Guidelines
@@ -501,7 +501,7 @@ Current experimental features:
 
 1. **Forgetting to await Monitor operations**: `aawait()`, `athrow()`, `aclose()` must be awaited
 2. **Mixing sync and async incorrectly**: `await_sync()` only works if coroutine doesn't actually suspend
-3. **Using `asyncfunction` on a real event loop**: raises `SyncDriveRequiredError`; only for blocking sync callbacks inside sync-driven coroutines, not as a generic async lift
+3. **Using `leavesync` on a real event loop**: raises `SyncDriveRequiredError`; only for blocking sync callbacks inside sync-driven coroutines, not as a generic async lift
 4. **Not handling OOBData**: Monitor coroutines must catch and handle `OOBData` exceptions
 5. **Event loop assumptions**: Custom loops may not support all asyncio features
 6. **Generator vs Coroutine**: Use `@types.coroutine` when needed for generator-based coroutines
