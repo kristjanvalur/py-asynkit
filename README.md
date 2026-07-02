@@ -417,8 +417,22 @@ stop signal and return instead; in that case it has intentionally decided not to
 block after all, and `await_sync()` returns its result. If the code tries to
 access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
 
-The `syncfunction()` decorator can be used to automatically wrap an async function
-so that it is executed using `await_sync()`:
+#### Bridging sync and async code
+
+asynkit provides two complementary decorator pairs that cross the sync/async
+boundary in **opposite directions**:
+
+| Direction | Function | Method |
+| --- | --- | --- |
+| sync entry point → async logic | `syncfunction()` | `syncmethod()` |
+| sync-driven async → blocking sync callback | `asyncfunction()` | `asyncmethod()` |
+
+**`syncfunction()` / `syncmethod()`** create a **synchronous entry point** into
+non-blocking async code. Write the logic once as `async def`; the decorator runs it
+via `await_sync()`. The coroutine must complete without suspending on real I/O — if
+it blocks, `SynchronousError` is raised. This is how synchronous callers invoke
+code written in async style, without hybrid functions that sometimes return
+awaitables.
 
 ```pycon
 >>> @asynkit.syncfunction
@@ -432,9 +446,9 @@ so that it is executed using `await_sync()`:
 >>>
 ```
 
-For methods, use `syncmethod()` when creating a class-body alias. It behaves
-like `syncfunction()` at runtime, but exposes descriptor typing so type checkers
-can distinguish bound and unbound method access:
+For methods, use `syncmethod()` when creating a class-body alias. It behaves like
+`syncfunction()` at runtime, but exposes descriptor typing so type checkers can
+distinguish bound and unbound method access:
 
 ```python
 class Runner:
@@ -443,10 +457,17 @@ class Runner:
     run = asynkit.syncmethod(arun)
 ```
 
-`asyncfunction()` can expose a synchronous callback through an async interface.
-The wrapper may invoke blocking code and raises `SyncDriveRequiredError` when
-`await`ed outside a sync-drive context. Together with `syncfunction()` and
-`await_sync()`, this integrates synchronous code with async middleware:
+**`asyncfunction()` / `asyncmethod()`** are the **opposite direction**: async code
+being synchronously pumped needs to call back into a **blocking sync** implementation.
+A common case is monkeypatching an async API with a blocking variant — for example
+greenlet-backed I/O or a thread-blocking socket `recv()` standing in for an async
+read. The wrapper presents that sync code as `async def` so it fits the async call
+chain, but raises `SyncDriveRequiredError` if `await`ed on a normal event loop.
+That guard assures the patched function is only reachable while the coroutine is
+being sync-driven, not from regular asyncio scheduling.
+
+Together, the two pairs integrate synchronous callers with async middleware without
+the hybrid-function _antipattern_:
 
 ```python
 @asynkit.syncfunction
@@ -455,9 +476,6 @@ async def sync_client(sync_callback):
     return await middleware.run()
 ```
 
-Using this pattern, one can write the middleware completely async, make it also work
-for synchronous code, while avoiding the hybrid function _antipattern._
-
 For methods, use `asyncmethod()` when creating a class-body alias. It behaves like
 `asyncfunction()` at runtime, but exposes descriptor typing so type checkers can
 distinguish bound and unbound method access:
@@ -465,7 +483,7 @@ distinguish bound and unbound method access:
 ```python
 class Client:
     def blocking_read(self, sock) -> bytes:
-        return sock.recv(4096)
+        return sock.recv(4096)  # blocking stand-in for an async read
 
     ablocking_read = asynkit.asyncmethod(blocking_read)
 

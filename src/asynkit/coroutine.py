@@ -1261,8 +1261,10 @@ def await_sync(coro: Coroutine[Any, Any, T], *, ignore_nullsleep: bool = True) -
 
 
 def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
-    """Make an async function synchronous, by invoking
-    `await_sync()` on its coroutine.  Useful as a decorator.
+    """Create a synchronous entry point into non-blocking async code.
+
+    Runs the coroutine via `await_sync()`. Pair with `asyncfunction()` for the
+    opposite direction: blocking sync callbacks inside sync-driven coroutines.
     """
 
     @functools.wraps(func)
@@ -1321,16 +1323,20 @@ class SyncMethod(Generic[SelfT, P, T]):
 def syncmethod(
     func: Callable[Concatenate[SelfT, P], Coroutine[Any, Any, T]],
 ) -> SyncMethod[SelfT, P, T]:
-    """Make an async method synchronous while preserving descriptor typing."""
+    """Synchronous entry point into non-blocking async methods.
+
+    Preserves descriptor typing for class-body aliases such as `run = syncmethod(arun)`.
+    """
     return SyncMethod(func)
 
 
 def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
-    """Make a synchronous function appear async for sync-driven coroutines.
+    """Expose blocking sync code as async inside sync-driven coroutines.
 
-    The returned coroutine function may invoke blocking code and is only valid
-    when awaited inside a context established by drive_async(), such as via
-    await_sync().
+    Opposite of `syncfunction()`: for async code being pumped via `await_sync()`
+    that must call back into blocking sync implementations, such as patched
+    stand-ins for formerly-async APIs. Raises `SyncDriveRequiredError` when
+    awaited outside `drive_async()`.
     """
 
     @functools.wraps(func)
@@ -1392,7 +1398,11 @@ class AsyncMethod(Generic[SelfT, P, T]):
 def asyncmethod(
     func: Callable[Concatenate[SelfT, P], T],
 ) -> AsyncMethod[SelfT, P, T]:
-    """Make a synchronous method appear async while preserving descriptor typing."""
+    """Blocking sync method callback inside sync-driven coroutines.
+
+    Preserves descriptor typing for class-body aliases such as
+    `ablocking_read = asyncmethod(blocking_read)`.
+    """
     return AsyncMethod(func)
 
 

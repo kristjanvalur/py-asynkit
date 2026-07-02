@@ -8,9 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - **`asyncfunction()` requires sync-drive context**: The decorator now calls
   `require_sync_drive()` and raises `SyncDriveRequiredError` when awaited outside
-  `drive_async()` (for example on a real event loop). Use it only for synchronous
-  callbacks lifted into coroutines being synchronously pumped via `await_sync()`,
-  `syncfunction()`, or `syncmethod()`.
+  `drive_async()` (for example on a real event loop). It is the opposite of
+  `syncfunction()`: not a generic async lift, but a guarded hook for blocking sync
+  callbacks inside sync-driven coroutines (e.g. patched stand-ins for formerly-async
+  APIs that must not run under a normal asyncio loop).
 
 ### Features
 
