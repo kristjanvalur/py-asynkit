@@ -27,6 +27,8 @@ def test_package_star_exports_public_api_only():
     assert "leavesyncmethod" in exports
     assert "LeaveSyncMethod" in exports
     assert "drive_async" in exports
+    assert "in_sync_drive" in exports
+    assert "require_sync_drive" in exports
     assert "SyncDriveRequiredError" in exports
     assert "cancelling" in exports
     assert "coroutine" not in exports

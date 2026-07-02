@@ -23,6 +23,6 @@ def accepts_bound(client: Base) -> None:
     _ = result
 
 
-async def accepts_unbound(client: Base) -> None:
-    result: str = await Base.ablocking_read(client, 3)
+def accepts_unbound(client: Base) -> None:
+    result: str = await_sync(Base.ablocking_read(client, 3))
     _ = result

@@ -11,8 +11,9 @@ All notable changes to this project will be documented in this file.
   - `syncfunction()` → `enterasync()`
   - `syncmethod()` → `enterasyncmethod()`
   - `asyncfunction()` → `leavesync()`
-  - `asyncmethod()` → `leavesyncmethod()`
-  - `SyncMethod` → `EnterAsyncMethod`, `AsyncMethod` → `LeaveSyncMethod`
+  - `SyncMethod` → `EnterAsyncMethod`
+- **New leave-side method descriptor**: Added `leavesyncmethod()` and
+  `LeaveSyncMethod` (there was no released `asyncmethod()` to migrate from).
 - **`leavesync()` requires sync-drive context**: The leave-side decorators call
   `require_sync_drive()` and raise `SyncDriveRequiredError` when awaited outside
   `drive_async()` (for example on a real event loop). Together with `enterasync()`,
