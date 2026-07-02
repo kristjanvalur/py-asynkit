@@ -417,22 +417,23 @@ stop signal and return instead; in that case it has intentionally decided not to
 block after all, and `await_sync()` returns its result. If the code tries to
 access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
 
-#### Bridging sync and async code
+#### Entering and leaving async code from synchronous code
 
-asynkit provides two complementary decorator pairs that cross the sync/async
-boundary in **opposite directions**:
+Sometimes you want to write logic once as `async def` but call it from synchronous
+code — and along the way, have that coroutine step back out into blocking synchronous
+implementations. asynkit supports this round trip with two complementary decorator
+pairs:
 
-| Direction | Function | Method |
+| Step | Function | Method |
 | --- | --- | --- |
-| sync entry point → async logic | `syncfunction()` | `syncmethod()` |
-| sync-driven async → blocking sync callback | `asyncfunction()` | `asyncmethod()` |
+| **Enter** async from sync | `syncfunction()` | `syncmethod()` |
+| **Leave** back to blocking sync | `asyncfunction()` | `asyncmethod()` |
 
-**`syncfunction()` / `syncmethod()`** create a **synchronous entry point** into
-non-blocking async code. Write the logic once as `async def`; the decorator runs it
-via `await_sync()`. The coroutine must complete without suspending on real I/O — if
-it blocks, `SynchronousError` is raised. This is how synchronous callers invoke
-code written in async style, without hybrid functions that sometimes return
-awaitables.
+**Entering async from sync** — `syncfunction()` / `syncmethod()` let a synchronous
+caller enter non-blocking async code. Write the logic once as `async def`; the
+decorator runs it via `await_sync()`. The coroutine must complete without suspending
+on real I/O — if it blocks, `SynchronousError` is raised. This replaces hybrid
+functions that sometimes return awaitables.
 
 ```pycon
 >>> @asynkit.syncfunction
@@ -457,17 +458,17 @@ class Runner:
     run = asynkit.syncmethod(arun)
 ```
 
-**`asyncfunction()` / `asyncmethod()`** are the **opposite direction**: async code
-being synchronously pumped needs to call back into a **blocking sync** implementation.
-A common case is monkeypatching an async API with a blocking variant — for example
-greenlet-backed I/O or a thread-blocking socket `recv()` standing in for an async
-read. The wrapper presents that sync code as `async def` so it fits the async call
-chain, but raises `SyncDriveRequiredError` if `await`ed on a normal event loop.
-That guard assures the patched function is only reachable while the coroutine is
-being sync-driven, not from regular asyncio scheduling.
+**Leaving async back to sync** — `asyncfunction()` / `asyncmethod()` let sync-driven
+async code call back into a **blocking sync** implementation before returning to the
+synchronous caller. A common case is monkeypatching an async API with a blocking
+variant — for example greenlet-backed I/O or a thread-blocking socket `recv()`
+standing in for an async read. The wrapper presents that sync code as `async def` so
+it fits the async call chain, but raises `SyncDriveRequiredError` if `await`ed on a
+normal event loop. That guard assures the patched function is only reachable while
+the coroutine is being sync-driven — not from regular asyncio scheduling.
 
-Together, the two pairs integrate synchronous callers with async middleware without
-the hybrid-function _antipattern_:
+The middleware pattern below shows the full round trip: the synchronous client
+**enters** async middleware; the middleware **leaves** back into a sync callback:
 
 ```python
 @asynkit.syncfunction

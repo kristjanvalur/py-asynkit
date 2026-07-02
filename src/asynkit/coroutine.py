@@ -1261,10 +1261,10 @@ def await_sync(coro: Coroutine[Any, Any, T], *, ignore_nullsleep: bool = True) -
 
 
 def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
-    """Create a synchronous entry point into non-blocking async code.
+    """Let synchronous callers enter non-blocking async code.
 
-    Runs the coroutine via `await_sync()`. Pair with `asyncfunction()` for the
-    opposite direction: blocking sync callbacks inside sync-driven coroutines.
+    Runs the coroutine via `await_sync()`. Pair with `asyncfunction()` when
+    sync-driven async code must leave back into blocking sync implementations.
     """
 
     @functools.wraps(func)
@@ -1331,12 +1331,11 @@ def syncmethod(
 
 
 def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
-    """Expose blocking sync code as async inside sync-driven coroutines.
+    """Let sync-driven async code leave back into blocking sync implementations.
 
-    Opposite of `syncfunction()`: for async code being pumped via `await_sync()`
-    that must call back into blocking sync implementations, such as patched
-    stand-ins for formerly-async APIs. Raises `SyncDriveRequiredError` when
-    awaited outside `drive_async()`.
+    Pair with `syncfunction()`: after entering async from sync, a coroutine may
+    step out into blocking sync callbacks such as patched stand-ins for formerly-
+    async APIs. Raises `SyncDriveRequiredError` when awaited outside `drive_async()`.
     """
 
     @functools.wraps(func)

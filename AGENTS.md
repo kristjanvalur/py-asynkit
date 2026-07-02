@@ -299,22 +299,23 @@ On Python < 3.12, use `asynkit.enable_eager_tasks()` from `compat.py` to monkeyp
 `await_sync()`. Custom pumps must use `drive_async()`, not `coro_drive()` alone, when
 participating in this contract.
 
-### syncfunction() / syncmethod() and asyncfunction() / asyncmethod()
+### Entering and leaving async code from synchronous code
 
-Two complementary decorator pairs cross the sync/async boundary in opposite directions:
+Two complementary decorator pairs support a round trip initiated from synchronous
+callers:
 
-| Direction | Function | Method |
+| Step | Function | Method |
 | --- | --- | --- |
-| sync entry point → async logic | `syncfunction()` | `syncmethod()` |
-| sync-driven async → blocking sync callback | `asyncfunction()` | `asyncmethod()` |
+| **Enter** async from sync | `syncfunction()` | `syncmethod()` |
+| **Leave** back to blocking sync | `asyncfunction()` | `asyncmethod()` |
 
-`syncfunction()` / `syncmethod()` create a synchronous entry point into non-blocking
-async code via `await_sync()`. The coroutine must not suspend on real I/O.
+**Entering**: `syncfunction()` / `syncmethod()` let synchronous callers enter
+non-blocking async code via `await_sync()`. The coroutine must not suspend on real I/O.
 
-`asyncfunction()` / `asyncmethod()` are the opposite: sync-driven async code calling
-back into blocking sync implementations (e.g. patched stand-ins for formerly-async
-APIs). They raise `SyncDriveRequiredError` when awaited outside `drive_async()`, so
-the patched code cannot run under a normal asyncio loop.
+**Leaving**: `asyncfunction()` / `asyncmethod()` let sync-driven async code step back
+out into blocking sync implementations (e.g. patched stand-ins for formerly-async APIs).
+They raise `SyncDriveRequiredError` when awaited outside `drive_async()`, so the
+patched code cannot run under a normal asyncio loop.
 
 ### Scheduling Helpers
 
@@ -328,8 +329,8 @@ the patched code cannot run under a normal asyncio loop.
 - `drive_async(coro, callback)` - Pump a coroutine and set sync-drive context
 - `await_sync(coro)` - Run coroutine synchronously (must not block)
 - `aiter_sync(aiterable)` - Iterate async iterator synchronously
-- `syncfunction(func)` / `syncmethod(func)` - Sync entry point into non-blocking async
-- `asyncfunction(func)` / `asyncmethod(func)` - Blocking sync callback inside
+- `syncfunction(func)` / `syncmethod(func)` - Enter async from sync
+- `asyncfunction(func)` / `asyncmethod(func)` - Leave back to blocking sync inside
   sync-driven async; use the method variant for class-body aliases
 
 ## Testing Guidelines
