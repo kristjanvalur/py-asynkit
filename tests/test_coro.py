@@ -1326,7 +1326,7 @@ class TestCoroIter:
             assert await a == "Awaiter5"
 
 
-async def test_async_function():
+def test_asyncfunction_inside_await_sync():
     def sync_method():
         return "foo"
 
@@ -1334,8 +1334,28 @@ async def test_async_function():
     def sync_method2():
         return "bar"
 
-    assert await asynkit.asyncfunction(sync_method)() == "foo"
-    assert await sync_method2() == "bar"
+    async def wrapper() -> str:
+        return await asynkit.asyncfunction(sync_method)()
+
+    assert asynkit.await_sync(wrapper()) == "foo"
+    assert asynkit.await_sync(sync_method2()) == "bar"
+
+
+async def test_asyncfunction_outside_sync_drive():
+    def sync_method():
+        return "foo"
+
+    @asynkit.asyncfunction
+    def sync_method2():
+        return "bar"
+
+    with pytest.raises(asynkit.SyncDriveRequiredError) as err:
+        await asynkit.asyncfunction(sync_method)()
+    assert err.match("synchronously driven")
+
+    with pytest.raises(asynkit.SyncDriveRequiredError) as err:
+        await sync_method2()
+    assert err.match("synchronously driven")
 
 
 def test_sync_drive_context_outside_drive():
@@ -1418,19 +1438,8 @@ def test_sync_drive_context_nested():
     assert not asynkit.in_sync_drive()
 
 
-def test_sync_drive_async_inside_await_sync():
-    @asynkit.sync_drive_async
-    def blocking_read() -> str:
-        return "payload"
-
-    async def fetch() -> str:
-        return await blocking_read()
-
-    assert asynkit.await_sync(fetch()) == "payload"
-
-
 def test_syncfunction_uses_drive_async_via_await_sync():
-    @asynkit.sync_drive_async
+    @asynkit.asyncfunction
     def blocking_read() -> str:
         return "payload"
 
@@ -1446,7 +1455,7 @@ def test_syncmethod_uses_drive_async_via_await_sync():
         def blocking_read(self) -> str:
             return "payload"
 
-        ablocking_read = asynkit.sync_drive_asyncmethod(blocking_read)
+        ablocking_read = asynkit.asyncmethod(blocking_read)
 
         async def afetch(self) -> str:
             return await self.ablocking_read()
@@ -1454,16 +1463,6 @@ def test_syncmethod_uses_drive_async_via_await_sync():
         fetch = asynkit.syncmethod(afetch)
 
     assert Client().fetch() == "payload"
-
-
-async def test_sync_drive_async_outside_await_sync():
-    @asynkit.sync_drive_async
-    def blocking_read() -> str:
-        return "payload"
-
-    with pytest.raises(asynkit.SyncDriveRequiredError) as err:
-        await blocking_read()
-    assert err.match("synchronously driven")
 
 
 def test_copied_sync_drive_context_rejected_on_other_thread_during_drive():
@@ -1524,10 +1523,10 @@ class TestSyncDriveStaleContext:
     def anyio_backend(self):
         return "asyncio"
 
-    async def test_sync_drive_async_rejects_stale_copied_context(self):
+    async def test_asyncfunction_rejects_stale_copied_context(self):
         ran: list[bool] = []
 
-        @asynkit.sync_drive_async
+        @asynkit.asyncfunction
         def blocking_read() -> str:
             ran.append(True)
             return "payload"

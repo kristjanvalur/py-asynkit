@@ -443,9 +443,10 @@ class Runner:
     run = asynkit.syncmethod(arun)
 ```
 
-the `asyncfunction()` utility can be used when passing synchronous callbacks to async
-code, to make them async. This, along with `syncfunction()` and `await_sync()`,
-can be used to integrate synchronous code with async middleware:
+`asyncfunction()` can expose a synchronous callback through an async interface.
+The wrapper may invoke blocking code and raises `SyncDriveRequiredError` when
+`await`ed outside a sync-drive context. Together with `syncfunction()` and
+`await_sync()`, this integrates synchronous code with async middleware:
 
 ```python
 @asynkit.syncfunction
@@ -457,65 +458,42 @@ async def sync_client(sync_callback):
 Using this pattern, one can write the middleware completely async, make it also work
 for synchronous code, while avoiding the hybrid function _antipattern._
 
-#### `sync_drive_async()` - Blocking sync callbacks in async code
-
-`asyncfunction()` wraps a synchronous function in a coroutine that returns
-immediately. It is safe to `await` on a real event loop because it never blocks.
-
-Some integrations need the opposite: a **blocking** synchronous implementation
-that is exposed through an async interface, for example when monkeypatching async
-methods with greenlet-backed or otherwise thread-blocking variants. Those
-wrappers must only run while the coroutine is being synchronously pumped.
-
-`sync_drive_async()` provides that guarded lift. It raises `SyncDriveRequiredError`
-if the wrapper is `await`ed outside a sync-drive context:
-
-```python
-@asynkit.sync_drive_async
-def blocking_read(sock) -> bytes:
-    return sock.recv(4096)  # may block the thread
-
-
-async def fetch(sock) -> bytes:
-    return await blocking_read(sock)
-
-
-# OK: driven synchronously via await_sync / syncfunction / syncmethod
-asynkit.await_sync(fetch(sock))
-
-# Raises SyncDriveRequiredError on a real event loop
-await fetch(sock)
-```
-
-For methods, use `sync_drive_asyncmethod()` when creating a class-body alias. It
-behaves like `sync_drive_async()` at runtime, but exposes descriptor typing so type
-checkers can distinguish bound and unbound method access:
+For methods, use `asyncmethod()` when creating a class-body alias. It behaves like
+`asyncfunction()` at runtime, but exposes descriptor typing so type checkers can
+distinguish bound and unbound method access:
 
 ```python
 class Client:
     def blocking_read(self, sock) -> bytes:
         return sock.recv(4096)
 
-    ablocking_read = asynkit.sync_drive_asyncmethod(blocking_read)
+    ablocking_read = asynkit.asyncmethod(blocking_read)
 
     async def afetch(self, sock) -> bytes:
         return await self.ablocking_read(sock)
+
+
+# OK: driven synchronously via await_sync / syncfunction / syncmethod
+asynkit.await_sync(Client().afetch(sock))
+
+# Raises SyncDriveRequiredError on a real event loop
+await Client().afetch(sock)
 ```
 
-`syncfunction()` and `syncmethod()` already establish the sync-drive context
-indirectly, because they call `await_sync()`, which uses `drive_async()`.
+`syncfunction()` and `syncmethod()` establish the sync-drive context indirectly,
+because they call `await_sync()`, which uses `drive_async()`.
 
 #### `drive_async()` and sync-drive context
 
 `coro_drive()` is the low-level coroutine pump and may be implemented in C for
 performance. `drive_async()` is the Python entry point that wraps `coro_drive()` and
 establishes sync-drive context for the duration of the pump. Use `drive_async()`
-rather than `coro_drive()` alone when `sync_drive_async()` or `require_sync_drive()`
+rather than `coro_drive()` alone when `asyncfunction()` or `require_sync_drive()`
 must work.
 
 Helpers such as `in_sync_drive()` and `require_sync_drive()`
 let custom wrappers participate in the same contract. All coroutine code that runs
-between yields executes inside this context, so `sync_drive_async()` checks work
+between yields executes inside this context, so `asyncfunction()` checks work
 whether the pump underneath is pure Python or the C extension.
 
 ```python

@@ -138,9 +138,8 @@ __all__ = [
     "SynchronousAbort",
     "SyncDriveRequiredError",
     "asyncfunction",
-    "sync_drive_async",
-    "sync_drive_asyncmethod",
-    "SyncDriveAsyncMethod",
+    "asyncmethod",
+    "AsyncMethod",
     "syncfunction",
     "syncmethod",
     "SyncMethod",
@@ -1160,7 +1159,7 @@ def coro_drive(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
     """Drive a coroutine by passing each yielded value to a callback.
 
     This is the low-level pump. Use `drive_async()` instead when
-    `sync_drive_async()` or `require_sync_drive()` must work.
+    `asyncfunction()` or `require_sync_drive()` must work.
     """
     send_value = None
     pending_error: BaseException | None = None
@@ -1197,7 +1196,7 @@ def drive_async(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T
     """Drive a coroutine synchronously and mark the context as sync-driven.
 
     Custom synchronous pumps must use this rather than `coro_drive()` alone
-    when participating in the sync-drive contract used by `sync_drive_async()`
+    when participating in the sync-drive contract used by `asyncfunction()`
     and `require_sync_drive()`. Session tracking is per-thread.
     """
     with _sync_drive_context():
@@ -1327,18 +1326,6 @@ def syncmethod(
 
 
 def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
-    """Make a regular function async, so that its result needs to be awaited.
-    Useful when providing synchronous callbacks to async code.
-    """
-
-    @functools.wraps(func)
-    async def helper(*args: P.args, **kwargs: P.kwargs) -> T:
-        return func(*args, **kwargs)
-
-    return helper
-
-
-def sync_drive_async(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
     """Make a synchronous function appear async for sync-driven coroutines.
 
     The returned coroutine function may invoke blocking code and is only valid
@@ -1354,11 +1341,11 @@ def sync_drive_async(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]
     return helper
 
 
-class SyncDriveAsyncMethod(Generic[SelfT, P, T]):
+class AsyncMethod(Generic[SelfT, P, T]):
     """Descriptor which makes a synchronous method appear async for sync-driven code.
 
-    Unlike `sync_drive_async()`, this preserves method binding semantics when used
-    for class-body aliases such as `ablocking_read = sync_drive_asyncmethod(blocking_read)`.
+    Unlike `asyncfunction()`, this preserves method binding semantics when used
+    for class-body aliases such as `adata_getter = asyncmethod(data_getter)`.
     """
 
     def __init__(
@@ -1402,11 +1389,11 @@ class SyncDriveAsyncMethod(Generic[SelfT, P, T]):
         return self._func(instance, *args, **kwargs)
 
 
-def sync_drive_asyncmethod(
+def asyncmethod(
     func: Callable[Concatenate[SelfT, P], T],
-) -> SyncDriveAsyncMethod[SelfT, P, T]:
+) -> AsyncMethod[SelfT, P, T]:
     """Make a synchronous method appear async while preserving descriptor typing."""
-    return SyncDriveAsyncMethod(func)
+    return AsyncMethod(func)
 
 
 def aiter_sync(async_iterable: AsyncIterable[T]) -> Generator[T, None, None]:

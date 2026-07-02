@@ -4,16 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **`asyncfunction()` requires sync-drive context**: The decorator now calls
+  `require_sync_drive()` and raises `SyncDriveRequiredError` when awaited outside
+  `drive_async()` (for example on a real event loop). Use it only for synchronous
+  callbacks lifted into coroutines being synchronously pumped via `await_sync()`,
+  `syncfunction()`, or `syncmethod()`.
+
 ### Features
 
 - **Sync-drive context**: Added `drive_async()` as the Python entry point that
   wraps `coro_drive()` and establishes sync-drive context for the duration of the
   pump. `await_sync()` now uses `drive_async()` so the context is set from Python
   even when the pump runs in the C extension.
-- **Guarded blocking callbacks**: Added `sync_drive_async()` and
-  `sync_drive_asyncmethod()` for exposing blocking synchronous implementations
-  through an async interface. The wrappers raise `SyncDriveRequiredError` when
-  awaited outside a sync-drive context.
+- **Async method lift**: Added `asyncmethod()` and `AsyncMethod` for exposing
+  blocking synchronous methods through an async interface with descriptor typing,
+  mirroring `syncmethod()`.
 - **Sync-drive introspection**: Added `in_sync_drive()` and `require_sync_drive()`
   for custom wrappers that participate in the same contract.
 

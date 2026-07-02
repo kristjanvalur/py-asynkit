@@ -23,7 +23,7 @@ Address the user as "boss" (they are the DI - Detective Chief Inspector). Style 
 - Utility classes like `GeneratorObject`
 - Coroutine helpers including `coro_drive()`, `coro_iter()`, and the `awaitmethod()` decorator
 - Running async code from non-async code (`await_sync()`, `aiter_sync()`, `drive_async()`)
-- `sync_drive_async()` for blocking sync callbacks guarded by sync-drive context
+- `asyncfunction()` / `asyncmethod()` for blocking sync callbacks guarded by sync-drive context
 - Scheduling helpers and custom event-loop implementations
 - Eager execution via `@eager` decorator and `eager_task_factory` / `create_eager_task_factory()` (Python 3.12 API, backward compatible)
 - `enable_eager_tasks()` compatibility layer for older Python versions
@@ -299,11 +299,10 @@ On Python < 3.12, use `asynkit.enable_eager_tasks()` from `compat.py` to monkeyp
 `await_sync()`. Custom pumps must use `drive_async()`, not `coro_drive()` alone, when
 participating in this contract.
 
-### sync_drive_async() - Guarded Blocking Callbacks
+### asyncfunction() / asyncmethod() - Guarded Sync Callbacks
 
-Unlike `asyncfunction()` (trivial lift, safe on a real event loop),
-`sync_drive_async()` wraps blocking sync code as `async def` and raises
-`SyncDriveRequiredError` when awaited outside `drive_async()`.
+`asyncfunction()` and `asyncmethod()` wrap blocking sync code as `async def` and
+raise `SyncDriveRequiredError` when awaited outside `drive_async()`.
 
 ### Scheduling Helpers
 
@@ -317,9 +316,8 @@ Unlike `asyncfunction()` (trivial lift, safe on a real event loop),
 - `drive_async(coro, callback)` - Pump a coroutine and set sync-drive context
 - `await_sync(coro)` - Run coroutine synchronously (must not block)
 - `aiter_sync(aiterable)` - Iterate async iterator synchronously
-- `sync_drive_async(func)` / `sync_drive_asyncmethod(func)` - Expose blocking sync
-  code as async (sync-drive only); use the method variant for class-body aliases
-- `asyncfunction(func)` - Expose sync code as async (safe on real event loops)
+- `asyncfunction(func)` / `asyncmethod(func)` - Expose blocking sync code as async
+  (sync-drive only); use the method variant for class-body aliases
 
 ## Testing Guidelines
 
@@ -489,7 +487,7 @@ Current experimental features:
 
 1. **Forgetting to await Monitor operations**: `aawait()`, `athrow()`, `aclose()` must be awaited
 2. **Mixing sync and async incorrectly**: `await_sync()` only works if coroutine doesn't actually suspend
-3. **Using `sync_drive_async` on a real event loop**: raises `SyncDriveRequiredError`; use `asyncfunction()` for non-blocking lifts
+3. **Using `asyncfunction` on a real event loop**: raises `SyncDriveRequiredError`; only use inside sync-drive contexts
 4. **Not handling OOBData**: Monitor coroutines must catch and handle `OOBData` exceptions
 5. **Event loop assumptions**: Custom loops may not support all asyncio features
 6. **Generator vs Coroutine**: Use `@types.coroutine` when needed for generator-based coroutines
