@@ -487,6 +487,21 @@ asynkit.await_sync(fetch(sock))
 await fetch(sock)
 ```
 
+For methods, use `sync_drive_asyncmethod()` when creating a class-body alias. It
+behaves like `sync_drive_async()` at runtime, but exposes descriptor typing so type
+checkers can distinguish bound and unbound method access:
+
+```python
+class Client:
+    def blocking_read(self, sock) -> bytes:
+        return sock.recv(4096)
+
+    ablocking_read = asynkit.sync_drive_asyncmethod(blocking_read)
+
+    async def afetch(self, sock) -> bytes:
+        return await self.ablocking_read(sock)
+```
+
 `syncfunction()` and `syncmethod()` already establish the sync-drive context
 indirectly, because they call `await_sync()`, which uses `drive_async()`.
 

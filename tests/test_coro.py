@@ -1443,12 +1443,13 @@ def test_syncfunction_uses_drive_async_via_await_sync():
 
 def test_syncmethod_uses_drive_async_via_await_sync():
     class Client:
-        @asynkit.sync_drive_async
         def blocking_read(self) -> str:
             return "payload"
 
+        ablocking_read = asynkit.sync_drive_asyncmethod(blocking_read)
+
         async def afetch(self) -> str:
-            return await self.blocking_read()
+            return await self.ablocking_read()
 
         fetch = asynkit.syncmethod(afetch)
 

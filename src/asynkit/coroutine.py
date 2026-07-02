@@ -139,6 +139,8 @@ __all__ = [
     "SyncDriveRequiredError",
     "asyncfunction",
     "sync_drive_async",
+    "sync_drive_asyncmethod",
+    "SyncDriveAsyncMethod",
     "syncfunction",
     "syncmethod",
     "SyncMethod",
@@ -1350,6 +1352,61 @@ def sync_drive_async(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]
         return func(*args, **kwargs)
 
     return helper
+
+
+class SyncDriveAsyncMethod(Generic[SelfT, P, T]):
+    """Descriptor which makes a synchronous method appear async for sync-driven code.
+
+    Unlike `sync_drive_async()`, this preserves method binding semantics when used
+    for class-body aliases such as `ablocking_read = sync_drive_asyncmethod(blocking_read)`.
+    """
+
+    def __init__(
+        self,
+        func: Callable[Concatenate[SelfT, P], T],
+    ) -> None:
+        self._func = func
+        functools.update_wrapper(self, func)
+
+    @overload
+    def __get__(
+        self,
+        instance: None,
+        owner: type[SelfT],
+    ) -> Callable[Concatenate[SelfT, P], Coroutine[Any, Any, T]]: ...
+
+    @overload
+    def __get__(
+        self,
+        instance: SelfT,
+        owner: type[SelfT] | None = None,
+    ) -> Callable[P, Coroutine[Any, Any, T]]: ...
+
+    def __get__(
+        self,
+        instance: SelfT | None,
+        owner: type[SelfT] | None = None,
+    ) -> Callable[..., Coroutine[Any, Any, T]]:
+        if instance is None:
+            return self
+
+        @functools.wraps(self._func)
+        async def helper(*args: P.args, **kwargs: P.kwargs) -> T:
+            require_sync_drive()
+            return self._func(instance, *args, **kwargs)
+
+        return helper
+
+    async def __call__(self, instance: SelfT, *args: P.args, **kwargs: P.kwargs) -> T:
+        require_sync_drive()
+        return self._func(instance, *args, **kwargs)
+
+
+def sync_drive_asyncmethod(
+    func: Callable[Concatenate[SelfT, P], T],
+) -> SyncDriveAsyncMethod[SelfT, P, T]:
+    """Make a synchronous method appear async while preserving descriptor typing."""
+    return SyncDriveAsyncMethod(func)
 
 
 def aiter_sync(async_iterable: AsyncIterable[T]) -> Generator[T, None, None]:

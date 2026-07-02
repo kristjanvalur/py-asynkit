@@ -317,7 +317,8 @@ Unlike `asyncfunction()` (trivial lift, safe on a real event loop),
 - `drive_async(coro, callback)` - Pump a coroutine and set sync-drive context
 - `await_sync(coro)` - Run coroutine synchronously (must not block)
 - `aiter_sync(aiterable)` - Iterate async iterator synchronously
-- `sync_drive_async(func)` - Expose blocking sync code as async (sync-drive only)
+- `sync_drive_async(func)` / `sync_drive_asyncmethod(func)` - Expose blocking sync
+  code as async (sync-drive only); use the method variant for class-body aliases
 - `asyncfunction(func)` - Expose sync code as async (safe on real event loops)
 
 ## Testing Guidelines
