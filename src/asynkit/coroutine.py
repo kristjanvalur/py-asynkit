@@ -277,9 +277,12 @@ def _sync_drive_context() -> Generator[None, None, None]:
     try:
         yield
     finally:
-        with state.lock:
-            state.active_sessions.remove(session)
-        _sync_drive_session.reset(session_token)
+        try:
+            with state.lock:
+                if session in state.active_sessions:
+                    state.active_sessions.remove(session)
+        finally:
+            _sync_drive_session.reset(session_token)
 
 
 # Helpers to find if a coroutine (or a generator as created by types.coroutine)

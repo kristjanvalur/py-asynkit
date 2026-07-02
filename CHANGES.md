@@ -7,11 +7,9 @@ All notable changes to this project will be documented in this file.
 ### Features
 
 - **Sync-drive context**: Added `drive_async()` as the Python entry point that
-  wraps `coro_drive()` and marks each synchronous drive with a session id.
-  `await_sync()` now uses `drive_async()` so the context is set from Python even
-  when the pump runs in the C extension. Active drives use globally unique
-  session ids on a locked per-thread stack so copied contexts cannot satisfy
-  `require_sync_drive()` after the pump ends or on another thread.
+  wraps `coro_drive()` and establishes sync-drive context for the duration of the
+  pump. `await_sync()` now uses `drive_async()` so the context is set from Python
+  even when the pump runs in the C extension.
 - **Guarded blocking callbacks**: Added `sync_drive_async()` for exposing blocking
   synchronous implementations through an async interface. The wrapper raises
   `SyncDriveRequiredError` when awaited outside a sync-drive context.
