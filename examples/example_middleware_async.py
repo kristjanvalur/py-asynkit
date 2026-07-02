@@ -36,7 +36,7 @@ def sync_client():
     def data_getter():
         return "hello"
 
-    middleware = AsyncMiddleWare(data_getter=asynkit.asyncfunction(data_getter))
+    middleware = AsyncMiddleWare(data_getter=asynkit.leavesync(data_getter))
     assert asynkit.await_sync(middleware.get_processed_data()) == "hellohello"
 
 

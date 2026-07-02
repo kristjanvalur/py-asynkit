@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **Bridge decorator rename**: Renamed the sync/async bridge decorators to reflect
+  entering and leaving async from synchronous code:
+  - `syncfunction()` → `enterasync()`
+  - `syncmethod()` → `enterasyncmethod()`
+  - `asyncfunction()` → `leavesync()`
+  - `SyncMethod` → `EnterAsyncMethod`
+- **New leave-side method descriptor**: Added `leavesyncmethod()` and
+  `LeaveSyncMethod` (there was no released `asyncmethod()` to migrate from).
+- **`leavesync()` requires sync-drive context**: The leave-side decorators call
+  `require_sync_drive()` and raise `SyncDriveRequiredError` when awaited outside
+  `drive_async()` (for example on a real event loop). Together with `enterasync()`,
+  this completes the round trip of entering async from sync and leaving back into
+  blocking sync callbacks (e.g. patched stand-ins for formerly-async APIs that must
+  not run under a normal asyncio loop).
+
+### Features
+
+- **Sync-drive context**: Added `drive_async()` as the Python entry point that
+  wraps `coro_drive()` and establishes sync-drive context for the duration of the
+  pump. `await_sync()` now uses `drive_async()` so the context is set from Python
+  even when the pump runs in the C extension.
+- **Sync-drive introspection**: Added `in_sync_drive()` and `require_sync_drive()`
+  for custom wrappers that participate in the same contract.
+
+### Documentation
+
+- **Agent instructions**: Moved coding-agent guidance to root `AGENTS.md` and
+  replaced `.github/copilot-instructions.md` with a redirect.
+
 ## [0.19.2] - 2026-06-26
 
 ### Features

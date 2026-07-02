@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from asynkit import syncmethod
+from asynkit import enterasyncmethod
 
 
 class Base:
     async def arun(self, *, yield_every: int | None = None) -> None:
         pass
 
-    run = syncmethod(arun)
+    run = enterasyncmethod(arun)
 
 
 class Derived(Base):
@@ -15,6 +15,6 @@ class Derived(Base):
         raise NotImplementedError
 
 
-def accepts_sync_runner(runner: Base) -> None:
+def accepts_enterasync_runner(runner: Base) -> None:
     runner.run(yield_every=1)
     Base.run(runner, yield_every=1)

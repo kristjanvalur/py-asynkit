@@ -6,6 +6,7 @@ import functools
 import importlib
 import inspect
 import sys
+import threading
 import types
 from asyncio import Future, Task
 from collections.abc import (
@@ -17,7 +18,7 @@ from collections.abc import (
     Generator,
     Iterator,
 )
-from contextvars import Context, copy_context
+from contextvars import Context, ContextVar, copy_context
 from types import FrameType
 from typing import (
     TYPE_CHECKING,
@@ -130,12 +131,18 @@ __all__ = [
     "coro_iter",
     "aiter_sync",
     "await_sync",
+    "drive_async",
+    "in_sync_drive",
+    "require_sync_drive",
     "SynchronousError",
     "SynchronousAbort",
-    "asyncfunction",
-    "syncfunction",
-    "syncmethod",
-    "SyncMethod",
+    "SyncDriveRequiredError",
+    "enterasync",
+    "enterasyncmethod",
+    "EnterAsyncMethod",
+    "leavesync",
+    "leavesyncmethod",
+    "LeaveSyncMethod",
 ]
 
 
@@ -185,6 +192,84 @@ class SynchronousAbort(BaseException):
     """
     Exception thrown into coroutine to abort it.
     """
+
+
+class SyncDriveRequiredError(RuntimeError):
+    """Raised when a sync-drive-only async wrapper is awaited outside drive_async."""
+
+
+_sync_drive_session: ContextVar[int] = ContextVar("_sync_drive_session", default=0)
+_sync_drive_thread_state = threading.local()
+_session_id_lock = threading.Lock()
+_next_session_id = 0
+
+
+class _ThreadSyncDriveState:
+    __slots__ = ("lock", "active_sessions")
+
+    lock: threading.Lock
+    active_sessions: list[int]
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.active_sessions = []
+
+
+def _allocate_sync_drive_session() -> int:
+    global _next_session_id
+
+    with _session_id_lock:
+        _next_session_id += 1
+        return _next_session_id
+
+
+def _thread_sync_drive_state() -> _ThreadSyncDriveState:
+    state = getattr(_sync_drive_thread_state, "state", None)
+    if state is None:
+        state = _ThreadSyncDriveState()
+        _sync_drive_thread_state.state = state
+    return state
+
+
+def _sync_drive_session_active() -> bool:
+    session = _sync_drive_session.get()
+    if session == 0:
+        return False
+    state = _thread_sync_drive_state()
+    with state.lock:
+        return session in state.active_sessions
+
+
+def in_sync_drive() -> bool:
+    """Return True when the current context is inside an active drive_async()."""
+    return _sync_drive_session_active()
+
+
+def require_sync_drive() -> None:
+    """Require that the current context is inside an active drive_async()."""
+    if not _sync_drive_session_active():
+        raise SyncDriveRequiredError(
+            "operation requires a coroutine being synchronously driven "
+            "(e.g. via await_sync())"
+        )
+
+
+@contextlib.contextmanager
+def _sync_drive_context() -> Generator[None, None, None]:
+    session = _allocate_sync_drive_session()
+    session_token = _sync_drive_session.set(session)
+    state = _thread_sync_drive_state()
+    with state.lock:
+        state.active_sessions.append(session)
+    try:
+        yield
+    finally:
+        try:
+            with state.lock:
+                if session in state.active_sessions:
+                    state.active_sessions.remove(session)
+        finally:
+            _sync_drive_session.reset(session_token)
 
 
 # Helpers to find if a coroutine (or a generator as created by types.coroutine)
@@ -1071,7 +1156,11 @@ def coro_iter(coro: Coroutine[Any, Any, T]) -> Generator[Any, Any, T]:
 
 
 def coro_drive(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
-    """Drive a coroutine by passing each yielded value to a callback."""
+    """Drive a coroutine by passing each yielded value to a callback.
+
+    This is the low-level pump. Use `drive_async()` instead when
+    `leavesync()` or `require_sync_drive()` must work.
+    """
     send_value = None
     pending_error: BaseException | None = None
 
@@ -1101,6 +1190,17 @@ def coro_drive(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
 _py_coro_drive = coro_drive
 if not TYPE_CHECKING and _HAVE_C_EXTENSION and _c_coro_drive is not None:
     coro_drive = _c_coro_drive
+
+
+def drive_async(coro: Coroutine[Any, Any, T], callback: _CoroYieldCallback) -> T:
+    """Drive a coroutine synchronously and mark the context as sync-driven.
+
+    Custom synchronous pumps must use this rather than `coro_drive()` alone
+    when participating in the sync-drive contract used by `leavesync()`
+    and `require_sync_drive()`. Session tracking is per-thread.
+    """
+    with _sync_drive_context():
+        return coro_drive(coro, callback)
 
 
 def awaitmethod(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, Iterator[T]]:
@@ -1155,14 +1255,16 @@ def await_sync(coro: Coroutine[Any, Any, T], *, ignore_nullsleep: bool = True) -
         raise GeneratorExit()
 
     try:
-        return coro_drive(coro, callback)
+        return drive_async(coro, callback)
     except (GeneratorExit, SynchronousAbort) as err:
         raise SynchronousError("coroutine failed to complete synchronously") from err
 
 
-def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
-    """Make an async function synchronous, by invoking
-    `await_sync()` on its coroutine.  Useful as a decorator.
+def enterasync(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
+    """Let synchronous callers enter non-blocking async code.
+
+    Runs the coroutine via `await_sync()`. Pair with `leavesync()` when
+    sync-driven async code must leave back into blocking sync implementations.
     """
 
     @functools.wraps(func)
@@ -1172,11 +1274,11 @@ def syncfunction(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, T]:
     return helper
 
 
-class SyncMethod(Generic[SelfT, P, T]):
-    """Descriptor which makes an async method synchronous.
+class EnterAsyncMethod(Generic[SelfT, P, T]):
+    """Descriptor for entering non-blocking async methods from synchronous callers.
 
-    Unlike `syncfunction()`, this preserves method binding semantics when used
-    for class-body aliases such as `run = syncmethod(arun)`.
+    Unlike `enterasync()`, this preserves method binding semantics when used
+    for class-body aliases such as `run = enterasyncmethod(arun)`.
     """
 
     def __init__(
@@ -1218,23 +1320,90 @@ class SyncMethod(Generic[SelfT, P, T]):
         return await_sync(self._func(instance, *args, **kwargs))
 
 
-def syncmethod(
+def enterasyncmethod(
     func: Callable[Concatenate[SelfT, P], Coroutine[Any, Any, T]],
-) -> SyncMethod[SelfT, P, T]:
-    """Make an async method synchronous while preserving descriptor typing."""
-    return SyncMethod(func)
+) -> EnterAsyncMethod[SelfT, P, T]:
+    """Enter non-blocking async methods from synchronous callers.
+
+    Preserves descriptor typing for class-body aliases such as
+    `run = enterasyncmethod(arun)`.
+    """
+    return EnterAsyncMethod(func)
 
 
-def asyncfunction(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
-    """Make a regular function async, so that its result needs to be awaited.
-    Useful when providing synchronous callbacks to async code.
+def leavesync(func: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
+    """Let sync-driven async code leave back into blocking sync implementations.
+
+    Pair with `enterasync()`: after entering async from sync, a coroutine may
+    step out into blocking sync callbacks such as patched stand-ins for formerly-
+    async APIs. Raises `SyncDriveRequiredError` when awaited outside `drive_async()`.
     """
 
     @functools.wraps(func)
     async def helper(*args: P.args, **kwargs: P.kwargs) -> T:
+        require_sync_drive()
         return func(*args, **kwargs)
 
     return helper
+
+
+class LeaveSyncMethod(Generic[SelfT, P, T]):
+    """Descriptor for leaving sync-driven async code back into blocking sync methods.
+
+    Unlike `leavesync()`, this preserves method binding semantics when used
+    for class-body aliases such as `ablocking_read = leavesyncmethod(blocking_read)`.
+    """
+
+    def __init__(
+        self,
+        func: Callable[Concatenate[SelfT, P], T],
+    ) -> None:
+        self._func = func
+        functools.update_wrapper(self, func)
+
+    @overload
+    def __get__(
+        self,
+        instance: None,
+        owner: type[SelfT],
+    ) -> Callable[Concatenate[SelfT, P], Coroutine[Any, Any, T]]: ...
+
+    @overload
+    def __get__(
+        self,
+        instance: SelfT,
+        owner: type[SelfT] | None = None,
+    ) -> Callable[P, Coroutine[Any, Any, T]]: ...
+
+    def __get__(
+        self,
+        instance: SelfT | None,
+        owner: type[SelfT] | None = None,
+    ) -> Callable[..., Coroutine[Any, Any, T]]:
+        if instance is None:
+            return self
+
+        @functools.wraps(self._func)
+        async def helper(*args: P.args, **kwargs: P.kwargs) -> T:
+            require_sync_drive()
+            return self._func(instance, *args, **kwargs)
+
+        return helper
+
+    async def __call__(self, instance: SelfT, *args: P.args, **kwargs: P.kwargs) -> T:
+        require_sync_drive()
+        return self._func(instance, *args, **kwargs)
+
+
+def leavesyncmethod(
+    func: Callable[Concatenate[SelfT, P], T],
+) -> LeaveSyncMethod[SelfT, P, T]:
+    """Leave sync-driven async code back into blocking sync methods.
+
+    Preserves descriptor typing for class-body aliases such as
+    `ablocking_read = leavesyncmethod(blocking_read)`.
+    """
+    return LeaveSyncMethod(func)
 
 
 def aiter_sync(async_iterable: AsyncIterable[T]) -> Generator[T, None, None]:

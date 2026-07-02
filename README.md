@@ -417,11 +417,26 @@ stop signal and return instead; in that case it has intentionally decided not to
 block after all, and `await_sync()` returns its result. If the code tries to
 access the event loop, e.g. by creating a `Task`, a `RuntimeError` will be raised.
 
-The `syncfunction()` decorator can be used to automatically wrap an async function
-so that it is executed using `await_sync()`:
+#### Entering and leaving async code from synchronous code
+
+Sometimes you want to write logic once as `async def` but call it from synchronous
+code — and along the way, have that coroutine step back out into blocking synchronous
+implementations. asynkit supports this round trip with two complementary decorator
+pairs:
+
+| Step | Function | Method |
+| --- | --- | --- |
+| **Enter** async from sync | `enterasync()` | `enterasyncmethod()` |
+| **Leave** back to blocking sync | `leavesync()` | `leavesyncmethod()` |
+
+**Entering async from sync** — `enterasync()` / `enterasyncmethod()` let a synchronous
+caller enter non-blocking async code. Write the logic once as `async def`; the
+decorator runs it via `await_sync()`. The coroutine must complete without suspending
+on real I/O — if it blocks, `SynchronousError` is raised. This replaces hybrid
+functions that sometimes return awaitables.
 
 ```pycon
->>> @asynkit.syncfunction
+>>> @asynkit.enterasync
 ... async def sync_function():
 ...     async def async_function():
 ...         return "look, no async!"
@@ -432,30 +447,82 @@ so that it is executed using `await_sync()`:
 >>>
 ```
 
-For methods, use `syncmethod()` when creating a class-body alias. It behaves
-like `syncfunction()` at runtime, but exposes descriptor typing so type checkers
-can distinguish bound and unbound method access:
+For methods, use `enterasyncmethod()` when creating a class-body alias. It behaves like
+`enterasync()` at runtime, but exposes descriptor typing so type checkers can
+distinguish bound and unbound method access:
 
 ```python
 class Runner:
     async def arun(self, *, yield_every: int | None = None) -> None: ...
 
-    run = asynkit.syncmethod(arun)
+    run = asynkit.enterasyncmethod(arun)
 ```
 
-the `asyncfunction()` utility can be used when passing synchronous callbacks to async
-code, to make them async. This, along with `syncfunction()` and `await_sync()`,
-can be used to integrate synchronous code with async middleware:
+**Leaving async back to sync** — `leavesync()` / `leavesyncmethod()` let sync-driven
+async code call back into a **blocking sync** implementation before returning to the
+synchronous caller. A common case is monkeypatching an async API with a blocking
+variant — for example greenlet-backed I/O or a thread-blocking socket `recv()`
+standing in for an async read. The wrapper presents that sync code as `async def` so
+it fits the async call chain, but raises `SyncDriveRequiredError` if `await`ed on a
+normal event loop. That guard assures the patched function is only reachable while
+the coroutine is being sync-driven — not from regular asyncio scheduling.
+
+The middleware pattern below shows the full round trip: the synchronous client
+**enters** async middleware; the middleware **leaves** back into a sync callback:
 
 ```python
-@asynkit.syncfunction
+@asynkit.enterasync
 async def sync_client(sync_callback):
-    middleware = AsyncMiddleware(asynkit.asyncfunction(sync_callback))
+    middleware = AsyncMiddleware(asynkit.leavesync(sync_callback))
     return await middleware.run()
 ```
 
-Using this pattern, one can write the middleware completely async, make it also work
-for synchronous code, while avoiding the hybrid function _antipattern._
+For methods, use `leavesyncmethod()` when creating a class-body alias. It behaves like
+`leavesync()` at runtime, but exposes descriptor typing so type checkers can
+distinguish bound and unbound method access:
+
+```python
+class Client:
+    def blocking_read(self, sock) -> bytes:
+        return sock.recv(4096)  # blocking stand-in for an async read
+
+    ablocking_read = asynkit.leavesyncmethod(blocking_read)
+
+    async def afetch(self, sock) -> bytes:
+        return await self.ablocking_read(sock)
+
+
+# OK: driven synchronously via await_sync / enterasync / enterasyncmethod
+asynkit.await_sync(Client().afetch(sock))
+
+# Raises SyncDriveRequiredError on a real event loop
+await Client().afetch(sock)
+```
+
+`enterasync()` and `enterasyncmethod()` establish the sync-drive context indirectly,
+because they call `await_sync()`, which uses `drive_async()`.
+
+#### `drive_async()` and sync-drive context
+
+`coro_drive()` is the low-level coroutine pump and may be implemented in C for
+performance. `drive_async()` is the Python entry point that wraps `coro_drive()` and
+establishes sync-drive context for the duration of the pump. Use `drive_async()`
+rather than `coro_drive()` alone when `leavesync()` or `require_sync_drive()`
+must work.
+
+Helpers such as `in_sync_drive()` and `require_sync_drive()`
+let custom wrappers participate in the same contract. All coroutine code that runs
+between yields executes inside this context, so `leavesync()` checks work
+whether the pump underneath is pure Python or the C extension.
+
+```python
+def my_callback(yielded):
+    asynkit.require_sync_drive()  # OK while drive_async() is active
+    ...
+
+
+asynkit.drive_async(coro, my_callback)
+```
 
 #### `aiter_sync()`
 

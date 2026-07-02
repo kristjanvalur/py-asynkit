@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from asynkit import syncfunction
+from asynkit import enterasync
 
 
-@syncfunction
+@enterasync
 async def sync_label(value: int, *, prefix: str = "item") -> str:
     return f"{prefix}:{value}"
 
@@ -12,10 +12,10 @@ async def async_count(value: str) -> int:
     return len(value)
 
 
-sync_count = syncfunction(async_count)
+sync_count = enterasync(async_count)
 
 
-def accepts_sync_functions() -> None:
+def accepts_enterasync() -> None:
     label: str = sync_label(3, prefix="id")
     count: int = sync_count("abc")
 
