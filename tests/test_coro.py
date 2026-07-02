@@ -1358,6 +1358,91 @@ async def test_leavesync_outside_sync_drive():
     assert err.match("synchronously driven")
 
 
+async def test_leavesyncmethod_outside_sync_drive():
+    class Client:
+        def blocking_read(self) -> str:
+            return "payload"
+
+        ablocking_read = asynkit.leavesyncmethod(blocking_read)
+
+    client = Client()
+
+    with pytest.raises(asynkit.SyncDriveRequiredError) as err:
+        await client.ablocking_read()
+    assert err.match("synchronously driven")
+
+    with pytest.raises(asynkit.SyncDriveRequiredError) as err:
+        await Client.ablocking_read(client)
+    assert err.match("synchronously driven")
+
+
+def test_leavesyncmethod_descriptor():
+    class Client:
+        def blocking_read(self) -> str:
+            return "payload"
+
+        ablocking_read = asynkit.leavesyncmethod(blocking_read)
+
+    descriptor = Client.__dict__["ablocking_read"]
+    assert isinstance(descriptor, asynkit.LeaveSyncMethod)
+    assert Client.ablocking_read.__name__ == "blocking_read"
+    assert Client().ablocking_read.__name__ == "blocking_read"
+
+
+def test_leavesyncmethod_bound_inside_await_sync():
+    class Client:
+        def blocking_read(self) -> str:
+            return "payload"
+
+        ablocking_read = asynkit.leavesyncmethod(blocking_read)
+
+    async def fetch() -> str:
+        return await Client().ablocking_read()
+
+    assert asynkit.await_sync(fetch()) == "payload"
+
+
+def test_leavesyncmethod_unbound_inside_await_sync():
+    class Client:
+        def blocking_read(self) -> str:
+            return "payload"
+
+        ablocking_read = asynkit.leavesyncmethod(blocking_read)
+
+    async def fetch(client: Client) -> str:
+        return await Client.ablocking_read(client)
+
+    assert asynkit.await_sync(fetch(Client())) == "payload"
+
+
+def test_sync_drive_context_cleared_after_await_sync_raises():
+    async def fails() -> None:
+        raise ValueError("boom")
+
+    with pytest.raises(ValueError, match="boom"):
+        asynkit.await_sync(fails())
+
+    assert not asynkit.in_sync_drive()
+    with pytest.raises(asynkit.SyncDriveRequiredError):
+        asynkit.require_sync_drive()
+
+
+def test_sync_drive_context_cleared_after_drive_async_raises():
+    async def coro() -> str:
+        await drive_yield(None)
+        return "done"
+
+    def callback(_yielded: object) -> None:
+        raise ValueError("callback boom")
+
+    with pytest.raises(ValueError, match="callback boom"):
+        asynkit.drive_async(coro(), callback)
+
+    assert not asynkit.in_sync_drive()
+    with pytest.raises(asynkit.SyncDriveRequiredError):
+        asynkit.require_sync_drive()
+
+
 def test_sync_drive_context_outside_drive():
     assert not asynkit.in_sync_drive()
 

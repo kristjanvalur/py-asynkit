@@ -20,8 +20,14 @@ def test_package_star_exports_public_api_only():
     assert exports == set(asynkit.__all__)
     assert "coro_start" in exports
     assert "coro_drive" in exports
+    assert "enterasync" in exports
     assert "enterasyncmethod" in exports
     assert "EnterAsyncMethod" in exports
+    assert "leavesync" in exports
+    assert "leavesyncmethod" in exports
+    assert "LeaveSyncMethod" in exports
+    assert "drive_async" in exports
+    assert "SyncDriveRequiredError" in exports
     assert "cancelling" in exports
     assert "coroutine" not in exports
     assert "loop" not in exports

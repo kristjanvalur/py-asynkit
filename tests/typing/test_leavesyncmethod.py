@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from asynkit import leavesyncmethod
+from asynkit import await_sync, leavesyncmethod
 
 
 class Base:
@@ -15,8 +15,11 @@ class Derived(Base):
         raise NotImplementedError
 
 
-async def accepts_bound(client: Base) -> None:
-    result: str = await client.ablocking_read(3)
+def accepts_bound(client: Base) -> None:
+    async def fetch() -> str:
+        return await client.ablocking_read(3)
+
+    result: str = await_sync(fetch())
     _ = result
 
 
