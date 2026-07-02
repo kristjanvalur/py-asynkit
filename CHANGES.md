@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-07-02
+
 ### Breaking Changes
 
 - **Bridge decorator rename**: Renamed the sync/async bridge decorators to reflect
