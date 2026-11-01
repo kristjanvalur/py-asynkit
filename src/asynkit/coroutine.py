@@ -650,7 +650,7 @@ class CoroStartMixin(Generic[T_co]):
         finally:
             self.context = old_context
 
-    def as_future(self) -> Future[T_co]:
+    def as_future(self) -> Future[Any]:
         """
         if `done()` convert the result of the coroutine into a `Future`
         and return it.  Otherwise raise a `RuntimeError`

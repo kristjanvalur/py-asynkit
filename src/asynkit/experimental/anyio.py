@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import contextlib
-from collections.abc import AsyncIterator, Callable, Coroutine
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from types import TracebackType
 from typing import Any
 
@@ -171,6 +171,6 @@ class EagerTaskGroup(TaskGroup):
 
 
 @contextlib.asynccontextmanager
-async def create_eager_task_group() -> AsyncIterator[EagerTaskGroup]:
+async def create_eager_task_group() -> AsyncGenerator[EagerTaskGroup, None]:
     async with create_task_group() as tg:
         yield EagerTaskGroup(tg)

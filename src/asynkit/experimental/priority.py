@@ -7,7 +7,7 @@ import sys
 import weakref
 from abc import ABC, abstractmethod
 from asyncio import Handle, Lock, Task
-from collections.abc import AsyncIterator, Callable, Iterable, Iterator
+from collections.abc import AsyncGenerator, Callable, Generator, Iterable, Iterator
 from contextvars import Context
 from dataclasses import dataclass
 from enum import Enum
@@ -79,7 +79,7 @@ class BasePriorityObject(ABC):
 
 
 @contextlib.contextmanager
-def _waiting_on(task: TaskAny, target: Any) -> Iterator[None]:
+def _waiting_on(task: TaskAny, target: Any) -> Generator[None, None, None]:
     """Context manager to maintain a task's waiting_on attribute"""
     try:
         task.set_waiting_on(target)  # type: ignore[attr-defined]
@@ -94,7 +94,7 @@ def _waiting_on(task: TaskAny, target: Any) -> Iterator[None]:
 
 
 @contextlib.asynccontextmanager
-async def _released(lock: Lock) -> AsyncIterator[None]:
+async def _released(lock: Lock) -> AsyncGenerator[None, None]:
     """Context manager to release a lock and reacquire it on exit"""
     lock.release()
     try:
@@ -124,7 +124,7 @@ class PriorityLock(Lock, BasePriorityObject):
     """
 
     # Override base class _waiters to use priority queue instead of deque
-    _waiters: PriorityQueue[float, tuple[FutureBool, ReferenceTypeTaskAny]] | None  # type: ignore[assignment]
+    _waiters: PriorityQueue[float, tuple[FutureBool, ReferenceTypeTaskAny]] | None  # type: ignore[assignment]  # ty: ignore[invalid-attribute-override]
 
     def __init__(self) -> None:
         # we use weakrefs to avoid reference cycles.  Tasks _own_ locks,
@@ -265,7 +265,7 @@ class PriorityCondition(asyncio.Condition):
         lock = lock or self.LockType()
         super().__init__(lock=lock)
         # Override base class _waiters to use priority queue instead of deque
-        self._waiters: PriorityQueue[float, FutureBool] = PriorityQueue()  # type: ignore[assignment]
+        self._waiters: PriorityQueue[float, FutureBool] = PriorityQueue()  # type: ignore[assignment]  # ty: ignore[invalid-attribute-override]
 
     async def wait(self) -> Literal[True]:
         if not self.locked():  # pragma: no cover
