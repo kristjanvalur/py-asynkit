@@ -216,17 +216,11 @@ class TestEagerTasksCompat:
         ctx.run(var.set, "modified")
 
         # Test with eager_start=True
-        if sys.version_info >= (3, 11):
-            # Context parameter should be supported
-            task = asyncio.create_task(context_coro(), eager_start=True, context=ctx)
-            result = await task
-            # Behavior depends on implementation - just ensure it doesn't crash
-            assert result in ["original", "modified"]
-        else:
-            # Context parameter not supported
-            task = asyncio.create_task(context_coro(), eager_start=True)
-            result = await task
-            assert result == "original"
+        # Context parameter should be supported
+        task = asyncio.create_task(context_coro(), eager_start=True, context=ctx)
+        result = await task
+        # Behavior depends on implementation - just ensure it doesn't crash
+        assert result in ["original", "modified"]
 
     async def test_error_handling_with_eager_start(self):
         """Test that errors are properly handled with eager_start."""
@@ -262,7 +256,6 @@ class TestEagerTasksCompat:
 @pytest.mark.parametrize(
     "python_version,expected_eager_start,expected_factory",
     [
-        ((3, 10), False, False),  # Python 3.10
         ((3, 11), False, False),  # Python 3.11
         ((3, 12), False, True),  # Python 3.12
         ((3, 13), False, True),  # Python 3.13

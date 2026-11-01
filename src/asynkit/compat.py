@@ -16,14 +16,13 @@ __all__ = [
 ]
 
 # Python version checks
-PY_311 = sys.version_info >= (3, 11)
 PY_312 = sys.version_info >= (3, 12)
 PY_314 = sys.version_info >= (3, 14)
 
 T = TypeVar("T")
 
 # The following is needed because some generic types (like asyncio.Task and
-# weakref.ReferenceType) cannot be subscripted at runtime, even in Python 3.10+.
+# weakref.ReferenceType) cannot be subscripted at runtime, even in Python 3.11+.
 # We use TYPE_CHECKING to provide subscripted types for type checkers while using
 # unsubscripted types at runtime to avoid TypeError.
 if TYPE_CHECKING:

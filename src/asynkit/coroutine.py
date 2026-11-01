@@ -5,7 +5,6 @@ import contextlib
 import functools
 import importlib
 import inspect
-import sys
 import threading
 import types
 from asyncio import Future, Task
@@ -25,14 +24,14 @@ from typing import (
     Any,
     Concatenate,
     Generic,
+    ParamSpec,
+    Protocol,
     TypeVar,
     cast,
     overload,
 )
 
-from typing_extensions import ParamSpec, Protocol
-
-from .compat import PY_311, swap_current_task
+from .compat import swap_current_task
 from .tools import Cancellable, cancelling
 from .tools import create_task as _create_task
 
@@ -1006,10 +1005,7 @@ def create_task(
     """
 
     def real_task_factory(coro_arg: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
-        if PY_311:
-            return _create_task(coro_arg, name=name, context=context, **kwargs)  # type: ignore[call-arg]
-        else:
-            return _create_task(coro_arg, name=name, **kwargs)
+        return _create_task(coro_arg, name=name, context=context, **kwargs)  # type: ignore[call-arg]
 
     if eager_start:
         return coro_eager_task_helper(
@@ -1086,11 +1082,6 @@ def coro_eager_task_helper(
         no_eager = True  # no running loop yet
     if no_eager:
         return real_task_factory(coro)
-
-    # In Python < 3.11, context parameter doesn't exist for create_task()
-    # so we ignore any provided context and let CoroStart manage its own
-    if sys.version_info < (3, 11):
-        context = None
 
     cs: CoroStart[T]
     current_task = asyncio.current_task(loop)

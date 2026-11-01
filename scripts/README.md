@@ -57,5 +57,5 @@ C code formatting uses `.clang-format` in the project root with:
 
 - All scripts gracefully handle missing clang-format
 - Windows batch files use native Windows commands
-- Python script works on all platforms with Python 3.10+
+- Python script works on all platforms with Python 3.11+
 - Exit codes: 0 = success, 1 = formatting needed/error

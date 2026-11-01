@@ -64,7 +64,7 @@ py-asynkit/
 
 ### Prerequisites
 
-- Python 3.10+ (CI tests CPython 3.10 through 3.15, including free-threaded `t` builds, plus PyPy and GraalPy)
+- Python 3.11+ (CI tests CPython 3.11 through 3.15, including free-threaded `t` builds, plus PyPy and GraalPy)
 - uv for dependency management
 
 ### Installation
@@ -145,7 +145,7 @@ When a new CPython version is released:
 
 - All public APIs must have complete type annotations
 - Use `TypeVar`, `Generic`, `Protocol` for flexible typing
-- Use `typing_extensions` for compatibility (ParamSpec, TypeAlias)
+- Import typing helpers (`ParamSpec`, `Protocol`, ...) from `typing`; the library has no runtime dependencies
 - Covariant/contravariant type vars where appropriate (`T_co`, `T_contra`)
 
 ### Naming Conventions
@@ -159,7 +159,7 @@ When a new CPython version is released:
 ### Import Organization
 
 1. Standard library imports
-2. Third-party imports (asyncio, typing_extensions)
+2. Third-party imports
 3. Local imports (relative from `.`)
 
 ## Prose Style Guidelines
@@ -415,10 +415,10 @@ Use `@types.coroutine` decorator for generator-based coroutines that can be awai
 
 ### Python Version Support
 
-- Minimum: Python 3.10
-- CI tested on: 3.10, 3.11, 3.12, 3.13 (free-threaded), 3.14 (free-threaded), PyPy 3.11, GraalPy 3.12
+- Minimum: Python 3.11
+- CI tested on: 3.11, 3.12, 3.13 (free-threaded), 3.14 (free-threaded), 3.15 (incl. free-threaded), PyPy 3.11, GraalPy 3.12
 - Type hints: Use built-in generics (`list[int]`, `dict[str, int]`)
-- Union syntax: Can use `X | Y` and `X | None` (Python 3.10+ feature)
+- Union syntax: Can use `X | Y` and `X | None`
 - Generic syntax: Use old-style `Generic[T]` base class, not PEP 695 syntax (requires 3.12+)
 
 ### Platform Support
@@ -426,7 +426,7 @@ Use `@types.coroutine` decorator for generator-based coroutines that can be awai
 - Primary: Linux (Ubuntu)
 - Tested: Windows (limited matrix)
 - Event loops: Selector loop (all platforms), Proactor loop (Windows)
-- Wheels built for Windows, macOS, Linux (Python 3.10–3.14, including free-threaded)
+- Wheels built for Windows, macOS, Linux (Python 3.11–3.14, including free-threaded)
 
 ### Backend Support
 
@@ -532,7 +532,7 @@ When adding new features:
 3. Add tests mirroring the module structure
 4. Update README.md with examples
 5. Run full check: `uv run poe check`
-6. Consider backward compatibility (Python 3.10+)
+6. Consider backward compatibility (Python 3.11+)
 7. Mark experimental features clearly
 
 ## Related Documentation

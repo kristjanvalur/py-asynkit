@@ -175,7 +175,7 @@ def scheduling_loop_factory() -> AbstractEventLoop:
 
         asyncio.run(main(), loop_factory=asynkit.scheduling_loop_factory)
 
-    For Python 3.10-3.11 compatibility, use the SchedulingEventLoopPolicy
+    For Python 3.11 compatibility, use the SchedulingEventLoopPolicy
     instead:
 
         asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy())
@@ -192,7 +192,7 @@ class SchedulingEventLoopPolicy(_DefaultEventLoopPolicy):
     removed in Python 3.16. For Python 3.12+, use scheduling_loop_factory
     with asyncio.run() or asyncio.Runner instead.
 
-    This policy is provided for compatibility with Python 3.10-3.11 and for
+    This policy is provided for compatibility with Python 3.11 and for
     code that hasn't migrated away from the policy system.
     """
 

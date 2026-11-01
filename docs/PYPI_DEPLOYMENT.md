@@ -34,8 +34,8 @@ build-n-publish:
       uses: astral-sh/setup-uv@v4
       with:
         enable-cache: true
-    - name: Set up Python 3.10
-      run: uv python install 3.10
+    - name: Set up Python 3.11
+      run: uv python install 3.11
     - name: Build a binary wheel and a source tarball
       run: uv build
     - name: Extract release notes

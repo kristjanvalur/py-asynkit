@@ -573,7 +573,6 @@ class TestCreateTask:
     async def test_create_task_with_context(self):
         """Test create_task properly handles context parameter."""
         import contextvars
-        import sys
 
         var = contextvars.ContextVar("test_var")
         var.set("original")
@@ -590,20 +589,13 @@ class TestCreateTask:
             context_coro(), eager_start=True, name="eager_ctx_task", context=ctx
         )
 
-        if sys.version_info >= (3, 11):
-            # Python 3.11+ supports context parameter
-            # For sync completion, TaskLikeFuture should have context set
-            if isinstance(task1, asynkit.TaskLikeFuture):
-                assert task1.get_context() is ctx
+        # For sync completion, TaskLikeFuture should have context set
+        if isinstance(task1, asynkit.TaskLikeFuture):
+            assert task1.get_context() is ctx
 
-            # Should run in the modified context
-            result1 = await task1
-            assert result1 == "modified"
-        else:
-            # Python 3.10 - context parameter not supported
-            # Task runs in current context copy, so should see "original"
-            result1 = await task1
-            assert result1 == "original"
+        # Should run in the modified context
+        result1 = await task1
+        assert result1 == "modified"
 
         # Current context should still be original
         assert var.get() == "original"
@@ -611,7 +603,6 @@ class TestCreateTask:
     async def test_create_task_eager_context_comprehensive(self):
         """Test create_task with eager_start=True handles context across suspension."""
         import contextvars
-        import sys
 
         var = contextvars.ContextVar("comprehensive_test_var")
         var.set("original")
@@ -666,76 +657,47 @@ class TestCreateTask:
         # Verify the task saw the correct context values
         assert len(context_values_seen) == 4
 
-        # Context behavior depends on Python version
-        if sys.version_info >= (3, 11):
-            # Python 3.11+ supports context parameter - test full context behavior
+        # Test full context behavior
 
-            # Check initial inheritance (before suspension)
-            initial_label, initial_value = context_values_seen[0]
-            assert initial_label == "initial"
-            assert initial_value == "modified_context", (
-                f"Task should inherit context value. "
-                f"Expected 'modified_context', got '{initial_value}'"
-            )
+        # Check initial inheritance (before suspension)
+        initial_label, initial_value = context_values_seen[0]
+        assert initial_label == "initial"
+        assert initial_value == "modified_context", (
+            f"Task should inherit context value. "
+            f"Expected 'modified_context', got '{initial_value}'"
+        )
 
-            # Check modification before suspension
-            before_label, before_value = context_values_seen[1]
-            assert before_label == "before_suspend"
-            assert before_value == "before_suspend", (
-                f"Task should be able to modify context before suspension. "
-                f"Expected 'before_suspend', got '{before_value}'"
-            )
+        # Check modification before suspension
+        before_label, before_value = context_values_seen[1]
+        assert before_label == "before_suspend"
+        assert before_value == "before_suspend", (
+            f"Task should be able to modify context before suspension. "
+            f"Expected 'before_suspend', got '{before_value}'"
+        )
 
-            # Check persistence after resumption
-            resume_label, resume_value = context_values_seen[2]
-            assert resume_label == "after_resume"
-            assert resume_value == "before_suspend", (
-                f"Context should persist across suspension. "
-                f"Expected 'before_suspend', got '{resume_value}'"
-            )
+        # Check persistence after resumption
+        resume_label, resume_value = context_values_seen[2]
+        assert resume_label == "after_resume"
+        assert resume_value == "before_suspend", (
+            f"Context should persist across suspension. "
+            f"Expected 'before_suspend', got '{resume_value}'"
+        )
 
-            # Check modification after resumption
-            final_label, final_value = context_values_seen[3]
-            assert final_label == "final"
-            assert final_value == "after_resume", (
-                f"Task should be able to modify context after resumption. "
-                f"Expected 'after_resume', got '{final_value}'"
-            )
+        # Check modification after resumption
+        final_label, final_value = context_values_seen[3]
+        assert final_label == "final"
+        assert final_value == "after_resume", (
+            f"Task should be able to modify context after resumption. "
+            f"Expected 'after_resume', got '{final_value}'"
+        )
 
-            # The context we passed to create_task should show final changes
-            # This is correct behavior - the task runs in the context we provided
-            ctx_final_value = ctx.run(var.get)
-            assert ctx_final_value == "after_resume", (
-                f"Passed context should show final task modifications. "
-                f"Expected 'after_resume', got '{ctx_final_value}'"
-            )
-        else:
-            # Python 3.10 - context parameter not supported, but test context isolation
-
-            # Task should run in its own context copy (not the custom context)
-            initial_label, initial_value = context_values_seen[0]
-            assert initial_label == "initial"
-            # In Python 3.10, task gets current context copy, so should see "original"
-            assert initial_value == "original", (
-                f"Task should run in current context copy. "
-                f"Expected 'original', got '{initial_value}'"
-            )
-
-            # Task should be able to modify its own context
-            before_label, before_value = context_values_seen[1]
-            assert before_label == "before_suspend"
-            assert before_value == "before_suspend", (
-                f"Task should be able to modify its own context. "
-                f"Expected 'before_suspend', got '{before_value}'"
-            )
-
-            # Context should persist in task across suspension
-            resume_label, resume_value = context_values_seen[2]
-            assert resume_label == "after_resume"
-            assert resume_value == "before_suspend", (
-                f"Task context should persist across suspension. "
-                f"Expected 'before_suspend', got '{resume_value}'"
-            )
+        # The context we passed to create_task should show final changes
+        # This is correct behavior - the task runs in the context we provided
+        ctx_final_value = ctx.run(var.get)
+        assert ctx_final_value == "after_resume", (
+            f"Passed context should show final task modifications. "
+            f"Expected 'after_resume', got '{ctx_final_value}'"
+        )
 
         # Verify the original context and outer context are unchanged
         outer_value = var.get()

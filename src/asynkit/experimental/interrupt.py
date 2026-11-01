@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import asyncio.tasks
 import contextlib
-import sys
 from asyncio import AbstractEventLoop
 from collections.abc import AsyncGenerator, Coroutine
 from typing import Any
@@ -23,8 +22,6 @@ __all__ = [
     "TimeoutInterrupt",
     "PyTask",
 ]
-
-_is_310 = sys.version_info >= (3, 10)
 
 # Create a python Task.  We need access to the __step method and this is hidden
 # in the C implementation from _asyncio module
@@ -331,7 +328,7 @@ async def task_timeout(timeout: float | None) -> AsyncGenerator[None, None]:
         if err is not my_interrupt:
             # This is some other timeout triggering
             raise
-        raise asyncio.TimeoutError() from err
+        raise TimeoutError() from err
     finally:
         is_active = False
         timeout_handle.cancel()
