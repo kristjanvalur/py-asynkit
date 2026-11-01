@@ -1222,8 +1222,11 @@ world
 
 The first part of the function `func` is run even before calling `await` on the result from `EagerTaskGroup.start()`
 
-Similarly, `EagerTaskGroup.start_soon()` will run the provided coroutine up to its first blocking point before
-returning.
+Similarly, `EagerTaskGroup.create_task()` (anyio 4.14+) and `EagerTaskGroup.start_soon()` will run the provided
+coroutine up to its first blocking point before returning. `create_task(coro, *, name=None, context=None)` is the
+preferred API: it takes a coroutine object and returns anyio's `TaskHandle`. On anyio 4.14+, `start_soon()` is
+implemented by anyio on top of `create_task()`, so errors raised before the first blocking point are delivered to the
+task group, just as with a normal task group. On older anyio, they are raised directly from `start_soon()`.
 
 ### Why trio has limitations
 

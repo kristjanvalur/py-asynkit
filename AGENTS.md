@@ -503,7 +503,7 @@ Current experimental features:
 - `task_interrupt()` - Interrupt running tasks
 - `task_timeout()` - Timeout with interruption
 - Priority scheduling
-- anyio eager task groups (`EagerTaskGroup`, `create_eager_task_group()`)
+- anyio eager task groups (`EagerTaskGroup`, `create_eager_task_group()`); `EagerTaskGroup.create_task()` is the primary API on anyio 4.14+, where anyio makes `start_soon()` final and routes it through `create_task()`
 
 ## Performance Considerations
 

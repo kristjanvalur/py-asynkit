@@ -12,6 +12,21 @@ All notable changes to this project will be documented in this file.
 - **Removed `typing-extensions` dependency**: `ParamSpec` and `Protocol` are now
   imported from `typing`; asynkit has no runtime dependencies.
 
+### Features
+
+- **anyio 4.14+ support in `EagerTaskGroup`**: Implemented the new abstract
+  `TaskGroup.create_task(coro, *, name=None, context=None)`, which starts the
+  coroutine eagerly and returns the inner task group's `TaskHandle`. It is now the
+  preferred way to start tasks. `start()` passes through new keyword arguments
+  such as `return_handle`.
+
+### Behaviour Changes
+
+- On anyio 4.14+, `EagerTaskGroup.start_soon()` is anyio's final implementation
+  on top of `create_task()`, so an exception raised before the first blocking point
+  goes to the task group instead of being raised from `start_soon()`. The old
+  behaviour is kept on anyio < 4.14.
+
 ## [0.20.0] - 2026-07-02
 
 ### Breaking Changes

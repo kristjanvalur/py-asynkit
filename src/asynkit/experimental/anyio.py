@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import AsyncGenerator, Callable, Coroutine
+from contextvars import Context
 from types import TracebackType
 from typing import Any
 
@@ -35,7 +36,8 @@ The **trio** backend has architectural limitations that make eager execution unr
 
 Features:
 - `create_eager_task_group()`: Create a task group with eager execution
-- `EagerTaskGroup`: Wraps TaskGroup with eager start() and start_soon() methods
+- `EagerTaskGroup`: Wraps TaskGroup with eager create_task(), start() and
+  start_soon() methods (create_task() requires anyio 4.14+)
 
 Example:
     >>> from asynkit.experimental.anyio import create_eager_task_group
@@ -43,12 +45,16 @@ Example:
     >>>
     >>> async def main():
     ...     async with create_eager_task_group() as tg:
-    ...         tg.start_soon(my_coroutine)  # Starts immediately
+    ...         tg.create_task(my_coroutine())  # Starts immediately
     >>>
     >>> run(main, backend="asyncio")  # Use asyncio backend!
 """
 
 pytestmark = pytest.mark.anyio
+
+# anyio 4.14 added the abstract ``TaskGroup.create_task()`` and made
+# ``start_soon()`` final, routing it through ``create_task()``.
+_HAS_CREATE_TASK = hasattr(TaskGroup, "create_task")
 
 
 class TaskStatusForwarder(TaskStatus[Any]):
@@ -101,10 +107,20 @@ class EagerTaskGroup(TaskGroup):
         func: Callable[..., Coroutine[Any, Any, Any]],
         *args: object,
         name: object | None = None,
+        **kwargs: Any,
     ) -> Coroutine[Any, Any, Any]:
+        # kwargs carries e.g. ``return_handle`` (anyio 4.14+) to the inner group
         ts = TaskStatusForwarder()
         cs = CoroStart(func(*args, task_status=ts))
-        if cs.done():
+        if cs.done() and kwargs.get("return_handle"):
+            # A handle needs a real task: replay the outcome in one.
+            async def done_helper(*, task_status: TaskStatus[Any]) -> Any:
+                if ts.done:
+                    task_status.started(ts.get_value())
+                return cs.result()
+
+            result = self._task_group.start(done_helper, name=name, **kwargs)
+        elif cs.done():
             # if started() was called, but there is an exception,
             # we must return the started value, but leave the exception
             # to be raised by a thread.
@@ -140,20 +156,44 @@ class EagerTaskGroup(TaskGroup):
                 ts.set_forward(task_status)
                 return cs.as_coroutine()
 
-            result = self._task_group.start(task_helper, name=name)
+            result = self._task_group.start(task_helper, name=name, **kwargs)
         return result
 
-    def start_soon(  # type: ignore[override]
+    def create_task(  # type: ignore[override]
         self,
-        func: Callable[..., Coroutine[Any, Any, Any]],
-        *args: object,
-        name: object | None = None,
+        coro: Coroutine[Any, Any, Any],
+        *,
+        name: object = None,
+        context: Context | None = None,
     ) -> Any:
-        cs = CoroStart(func(*args))
-        if cs.done():
-            cs.result()
-        else:
-            return self._task_group.start_soon(lambda: cs.as_coroutine(), name=name)
+        """
+        Start ``coro`` eagerly and return the inner task group's ``TaskHandle``.
+
+        The coroutine runs until its first blocking point before this method
+        returns. The remainder (or, if it already finished, its result or
+        exception) is handed to the inner task group's ``create_task()``.
+        Requires anyio 4.14+.
+        """
+        if name is None:
+            name = getattr(coro, "__qualname__", None)
+        cs = CoroStart(coro, context=context)
+        return self._task_group.create_task(  # type: ignore[attr-defined]
+            cs.as_coroutine(), name=name, context=context
+        )
+
+    if not _HAS_CREATE_TASK:  # pragma: no cover - anyio < 4.14
+
+        def start_soon(  # type: ignore[override,misc]  # ty: ignore[override-of-final-method]
+            self,
+            func: Callable[..., Coroutine[Any, Any, Any]],
+            *args: object,
+            name: object | None = None,
+        ) -> Any:
+            cs = CoroStart(func(*args))
+            if cs.done():
+                cs.result()
+            else:
+                return self._task_group.start_soon(lambda: cs.as_coroutine(), name=name)
 
     async def __aenter__(self) -> TaskGroup:
         """Enter the task group context and allow starting new tasks."""

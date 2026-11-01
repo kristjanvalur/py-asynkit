@@ -5,12 +5,18 @@ from anyio import Event, create_task_group, sleep
 
 from asynkit import CoroStart
 from asynkit.experimental.anyio import (
+    _HAS_CREATE_TASK,
     EagerTaskGroup,
     TaskStatusForwarder,
     create_eager_task_group,
 )
 
 pytestmark = pytest.mark.anyio
+
+# On anyio < 4.14 the eager start_soon() raises errors from the eager part
+# directly.  On 4.14+ it routes through create_task(), so errors always go to
+# the task group, as with a normal task group.
+EAGER_RAISES = not _HAS_CREATE_TASK
 
 
 def raises_or_exception_group(exc_type: type[BaseException]):  # type: ignore[no-untyped-def]
@@ -179,7 +185,7 @@ class TestStartSoon:
         return event, coro
 
     async def test_err1(self, group, block):
-        eager = group == create_eager_task_group
+        eager = group == create_eager_task_group and EAGER_RAISES
 
         result = []
         event, coro = self.get_coro_err1(block)
@@ -212,20 +218,21 @@ class TestStartSoon:
         # Skip trio for eager+blocking combinations
         if eager and block and anyio_backend_name == "trio":
             pytest.skip("trio incompatible with eager execution + blocking")
+        raises = eager and EAGER_RAISES
 
         result = []
         event, coro = self.get_coro_err2(block)
 
         ctx_outer = (
             raises_or_exception_group(EOFError)
-            if not (eager and not block)
+            if not (raises and not block)
             else nullcontext()
         )
         with ctx_outer:
             async with group() as tg:
                 ctx_inner = (
                     raises_or_exception_group(EOFError)
-                    if (eager and not block)
+                    if (raises and not block)
                     else nullcontext()
                 )
                 with ctx_inner:
@@ -468,3 +475,82 @@ class TestStart:
             result.append(val)
 
         return event, coro
+
+
+@pytest.mark.skipif(not _HAS_CREATE_TASK, reason="requires anyio 4.14+")
+@pytest.mark.parametrize("anyio_backend", backends_notrio)
+class TestCreateTask:
+    async def test_eager_start(self, anyio_backend):
+        result = []
+        event = Event()
+
+        async def coro():
+            result.append("a")
+            await event.wait()
+            result.append("b")
+            return "done"
+
+        async with create_eager_task_group() as tg:
+            handle = tg.create_task(coro())
+            assert result == ["a"]
+            event.set()
+        assert result == ["a", "b"]
+        assert handle.return_value == "done"
+
+    async def test_done_immediately(self, anyio_backend):
+        async def coro():
+            return 42
+
+        async with create_eager_task_group() as tg:
+            handle = tg.create_task(coro())
+        assert handle.return_value == 42
+
+    async def test_done_immediately_error(self, anyio_backend):
+        async def coro():
+            raise EOFError()
+
+        with raises_or_exception_group(EOFError):
+            async with create_eager_task_group() as tg:
+                tg.create_task(coro())
+
+    async def test_name_and_context(self, anyio_backend):
+        import contextvars
+
+        from anyio import get_current_task
+
+        var = contextvars.ContextVar("var", default="outer")
+        ctx = contextvars.copy_context()
+        ctx.run(var.set, "inner")
+        seen = []
+        event = Event()
+
+        async def coro():
+            seen.append(var.get())
+            await event.wait()
+            seen.append(var.get())
+            seen.append(get_current_task().name)
+
+        async with create_eager_task_group() as tg:
+            tg.create_task(coro(), name="myname", context=ctx)
+            event.set()
+        assert seen == ["inner", "inner", "myname"]
+        assert var.get() == "outer"
+
+    async def test_start_soon_routes_to_create_task(self, anyio_backend):
+        result = []
+
+        async def coro(val):
+            result.append(val)
+
+        async with create_eager_task_group() as tg:
+            handle = tg.start_soon(coro, "x")
+            assert result == ["x"]
+        assert handle is not None
+
+    async def test_start_return_handle(self, anyio_backend):
+        async def coro(*, task_status):
+            task_status.started("v")
+
+        async with create_eager_task_group() as tg:
+            handle = await tg.start(coro, return_handle=True)
+        assert handle.start_value == "v"
