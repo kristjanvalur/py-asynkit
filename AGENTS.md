@@ -64,7 +64,7 @@ py-asynkit/
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.10+ (CI tests CPython 3.10 through 3.15, including free-threaded `t` builds, plus PyPy and GraalPy)
 - uv for dependency management
 
 ### Installation
@@ -113,6 +113,22 @@ uv sync --all-extras
 - Focus on type safety for public APIs; internal implementation may need type bypasses
 
 When adding type ignores for low-level operations, add a comment explaining why the bypass is necessary (e.g., "accessing internal asyncio implementation detail").
+
+**Typing Policy:**
+
+- Typing exists mainly for users of the library. Keep public API annotations accurate and useful.
+- Be lenient internally. Don't be pedantic: when a precise type gets in the way, widen it or use `Any` rather than adding complex machinery.
+- ty runs unpinned via `uvx`, so new ty releases can introduce new diagnostics. Fix them in the simplest way (widen, `Any`, or a targeted `# ty: ignore[rule]`), or add a per-file override in `pyproject.toml`.
+- For `@contextmanager` / `@asynccontextmanager`, annotate returns as `Generator[T, None, None]` / `AsyncGenerator[T, None]` (not `Iterator` / `AsyncIterator`).
+
+## Supporting a New Python Version
+
+When a new CPython version is released:
+
+1. Add it (and its free-threaded `t` variant) to the unit test matrix in `.github/workflows/ci.yml`
+2. Add the `Programming Language :: Python :: 3.x` classifier in `pyproject.toml`
+3. Update the supported version range in this file
+4. Note that CI on push only runs for `master`, `release/**` and `dev/**`; use a PR or `workflow_dispatch` to test other branches
 
 ## Coding Conventions
 
