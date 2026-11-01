@@ -29,7 +29,7 @@ pip install --no-binary=asynkit asynkit
 
 **Wheel selection:**
 
-- **Binary wheels** (Windows, macOS, Linux × Python 3.10-3.14): High-performance C extension provides **8% better throughput** and **near-native latency**
+- **Binary wheels** (Windows, macOS, Linux × Python 3.11-3.14): High-performance C extension provides **8% better throughput** and **near-native latency**
 - **Source distribution**: For platforms without pre-built wheels, or when using `--no-binary` flag
 
 **Build environment variables:**
@@ -189,7 +189,7 @@ For applications that want to apply eager execution globally (similar to Python 
 import asyncio
 import asynkit
 
-# Set up eager execution for all tasks (Python 3.12 API, works with 3.10+)
+# Set up eager execution for all tasks (Python 3.12 API, works with 3.11+)
 loop = asyncio.get_running_loop()
 loop.set_task_factory(asynkit.eager_task_factory)
 
@@ -227,7 +227,7 @@ loop.set_task_factory(eager_factory)
 asynkit also provides a `create_task()` function with the same `eager_start` parameter as Python 3.14+:
 
 ```python
-# Works on all Python versions (3.10+)
+# Works on all Python versions (3.11+)
 task = asynkit.create_task(my_coroutine(), eager_start=True)  # Eager
 task = asynkit.create_task(my_coroutine(), eager_start=False)  # Standard
 ```
@@ -275,7 +275,7 @@ See [docs/asyncio_timeout_incompatibility.md](docs/asyncio_timeout_incompatibili
 | **Legacy code migration** | `eager_task_factory` |
 | **Selective optimization** | `@asynkit.eager` decorator |
 | **Fine-grained control** | `@asynkit.eager` decorator |
-| **Python 3.10/3.11 support** | Either (both work) |
+| **Python 3.11 support** | Either (both work) |
 | **Python 3.13+ migration** | `eager_task_factory` (compatible API) |
 
 ## Cross-Version Compatibility
@@ -291,7 +291,7 @@ import asynkit.compat
 # Enable comprehensive eager task execution across all Python versions
 asynkit.compat.enable_eager_tasks()
 
-# Now these APIs work identically on Python 3.10-3.14+:
+# Now these APIs work identically on Python 3.11-3.14+:
 
 # 1. asyncio.eager_task_factory is available everywhere
 loop = asyncio.get_running_loop()
@@ -322,7 +322,7 @@ The `enable_eager_tasks()` function automatically detects your Python version an
 #### Example: Cross-Version Migration
 
 ```python
-# This code works identically on Python 3.10, 3.11, 3.12, 3.13, and beyond!
+# This code works identically on Python 3.11, 3.12, 3.13, and beyond!
 import asyncio
 import asynkit.compat
 
@@ -348,7 +348,7 @@ async def main():
     return results
 
 
-# Works on any Python 3.10+ installation
+# Works on any Python 3.11+ installation
 asyncio.run(main())
 ```
 
@@ -1034,14 +1034,14 @@ with asyncio.Runner(loop_factory=asynkit.scheduling_loop_factory) as runner:
 
 > ⚠️ **Note:** Event loop policies are deprecated as of Python 3.14 and will be removed in Python 3.16.
 
-For compatibility with Python 3.10-3.11, or for code that hasn't migrated away from the policy system, a policy class is provided:
+For compatibility with Python 3.11, or for code that hasn't migrated away from the policy system, a policy class is provided:
 
 - `SchedulingEventLoopPolicy` is a subclass of `asyncio.DefaultEventLoopPolicy` which instantiates either of the above event loop classes as appropriate.
 
 Use this either directly:
 
 ```python
-# Legacy approach (Python 3.10-3.11)
+# Legacy approach (Python 3.11)
 asyncio.set_event_loop_policy(asynkit.SchedulingEventLoopPolicy())
 asyncio.run(main())
 ```
@@ -1168,7 +1168,7 @@ __async generators__.
 
 ## `anyio` support
 
-The library has been tested to work with `anyio` 4.11.0+ on Python 3.10-3.13, including the `trio` backend (trio 0.31.0+).
+The library has been tested to work with `anyio` 4.11.0+ on Python 3.11-3.13, including the `trio` backend (trio 0.31.0+).
 However, not all features are supported on the `trio` backend.
 **For full asynkit functionality, use the `asyncio` backend.**
 

@@ -1,5 +1,4 @@
 from contextlib import nullcontext
-from sys import version_info
 
 import pytest
 from anyio import Event, create_task_group, sleep
@@ -10,12 +9,6 @@ from asynkit.experimental.anyio import (
     TaskStatusForwarder,
     create_eager_task_group,
 )
-
-# ExceptionGroup is built-in from Python 3.11+
-if version_info >= (3, 11):
-    from builtins import ExceptionGroup  # type: ignore[attr-defined]
-else:
-    from exceptiongroup import ExceptionGroup  # type: ignore[import-not-found]
 
 pytestmark = pytest.mark.anyio
 

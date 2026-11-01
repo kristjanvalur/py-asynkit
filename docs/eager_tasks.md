@@ -133,7 +133,7 @@ Use this for fine-grained control, selectively making specific tasks eager while
 
 asynkit provides eager execution through the `eager()` function, which has been available since the library's initial release in 2022 and originally worked with Python 3.8+. It offers more granular control and additional features beyond Python's built-in support.
 
-**Note**: As of version 0.13.0, asynkit requires Python 3.10+, but the eager execution feature has been available since the beginning with backward compatibility.
+**Note**: asynkit currently requires Python 3.11+, but the eager execution feature has been available since the beginning with backward compatibility.
 
 ### How It Works
 
@@ -174,7 +174,7 @@ async def my_complex_thing():
 2. **Decorator Support**: Use `@asynkit.eager` to make functions always eager
 3. **No Task When Not Needed**: If coroutine completes synchronously, returns a lightweight future instead of a Task
 4. **Context Management**: `eager_ctx()` for automatic cancellation on error
-5. **Python 3.10+ Support**: Works on older Python versions
+5. **Python 3.11+ Support**: Works on older Python versions
 6. **Correct Task Context**: When using `eager_task_factory` or `create_task(..., eager_start=True)`, execution runs in the new task's context from the start, ensuring `asyncio.current_task()` returns consistent values throughout
 
 ## Detailed Comparison
@@ -374,7 +374,7 @@ Notice how both eager approaches (`asynkit.eager` and Python's `eager_task_facto
 
 ### Use asynkit.eager When:
 
-- ✅ You need to support **Python 3.10 or 3.11**
+- ✅ You need to support **Python 3.11**
 - ✅ You want **selective** eager execution for specific operations
 - ✅ You want to **avoid Task creation** for synchronously-completing coroutines
 - ✅ You need **fine-grained control** over execution behavior
@@ -707,7 +707,7 @@ See [docs/asyncio_timeout_incompatibility.md](asyncio_timeout_incompatibility.md
 Python 3.12's `eager_task_factory` and asynkit's `eager()` both provide valuable optimizations for async code, but serve different use cases:
 
 - **Python's eager_task_factory**: Global optimization, best for Python 3.12+ applications with many short-lived tasks. The `eager_start` parameter offers selective control.
-- **asynkit's eager()**: Targeted optimization, originally supported Python 3.8+ (now requires Python 3.10+ as of v0.13.0), provides finer control and avoids Task creation overhead
+- **asynkit's eager()**: Targeted optimization, originally supported Python 3.8+ (now requires Python 3.11+), provides finer control and avoids Task creation overhead
 
 Choose based on your Python version requirements, performance goals, and whether you need global or selective eager execution. In many cases, using both together can provide the best results.
 

@@ -6,7 +6,6 @@ from contextlib import closing
 import pytest
 
 import asynkit.tools
-from asynkit.compat import PY_311
 from asynkit.tools import PriorityQueue
 
 from .conftest import SchedulingEventLoopPolicy, make_loop_factory
@@ -386,8 +385,7 @@ class TestCancelling:
             assert not c.cancelled()
         with pytest.raises(asyncio.CancelledError) as e:
             await t
-        if PY_311:
-            assert e.match("hello")
+        assert e.match("hello")
         assert t.cancelled()
 
         # task is cancelled if an exception is raised

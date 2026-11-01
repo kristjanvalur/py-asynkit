@@ -9,10 +9,9 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Generic,
+    Protocol,
     TypeVar,
 )
-
-from typing_extensions import Protocol
 
 T = TypeVar("T")
 

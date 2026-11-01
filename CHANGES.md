@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **Dropped Python 3.10 support**: Minimum Python version is now 3.11 (3.10 reached
+  end-of-life in October 2026). Removed 3.10-only compatibility code from the C
+  extension and Python sources, and cp310 wheels are no longer built.
+- **Removed `typing-extensions` dependency**: `ParamSpec` and `Protocol` are now
+  imported from `typing`; asynkit has no runtime dependencies.
+
 ## [0.20.0] - 2026-07-02
 
 ### Breaking Changes
