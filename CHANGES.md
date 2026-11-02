@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.21.0] - 2026-11-01
 
 ### Breaking Changes
 
@@ -14,11 +14,19 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 
+- **Python 3.15 support**: Python 3.15 and free-threaded 3.15t are now tested in CI
+  and declared in the package classifiers.
 - **anyio 4.14+ support in `EagerTaskGroup`**: Implemented the new abstract
   `TaskGroup.create_task(coro, *, name=None, context=None)`, which starts the
   coroutine eagerly and returns the inner task group's `TaskHandle`. It is now the
   preferred way to start tasks. `start()` passes through new keyword arguments
   such as `return_handle`.
+
+### Fixes
+
+- Fixed type annotations flagged by newer versions of ty (`CoroStart.as_future()`
+  now returns `Future[Any]`; context managers annotated with `Generator` /
+  `AsyncGenerator`).
 
 ### Behaviour Changes
 
